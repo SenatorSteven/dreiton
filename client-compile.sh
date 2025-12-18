@@ -13,11 +13,19 @@ function main(){
 	[ $true        ] && { cd "${BASH_SOURCE%/*}";                                          } || :;
 	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2; return 1; } || :;
 	[ $true        ] && { rm -rf "$folder";                                                } || :;
+
+echo $(pwd);
+
+return 0;
+
 	[ $true        ] && { parameters+=(header-folder "headers");                           } || :;
 	[ $true        ] && { parameters+=(source-folder "source");                            } || :;
 	[ $true        ] && { parameters+=(debug-folder "$folder/debug");                      } || :;
 	[ $true        ] && { parameters+=(output-folder "$folder/output");                    } || :;
 	[ $true        ] && { parameters+=(record-folder "$folder/record");                    } || :;
+
+	[ $true        ] && { parameters+=(includes "$folder/record");                    } || :;
+
 	[ $true        ] && { parameters+=(systems "systems/client-system");                   } || :;
 	[ $true        ] && { parameters+=(mains "$name");                                     } || :;
 	[ $true        ] && { parameters+=(executables "$name");                               } || :;
