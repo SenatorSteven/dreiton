@@ -23,12 +23,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
+#define MAIN
+
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../../repositories/cold-repository/cold.hold"
-#include "../headers/systems/server-api.hold"
-#include "../headers/systems/server-extension-descriptor-system.hold"
+#include "../headers/cold/cold.hold"
+#include "../headers/server-api.hold"
+#include "../headers/server-extension-api.hold"
+#include "../headers/base-server-extension.hold"
 
 #define PROTOCOL_VERSION /*-------------------*/ (1)
 #define EXTENSION_VERSION /*------------------*/ (1)
@@ -78,9 +81,9 @@ def struct{
 	uint32 /*-*/ magicValue;
 } Database;
 
-local Database /*------------------*/ database;
+local Database /*------------*/ database;
 
-ServerExtensionDescriptorSystem /*-*/ serverExtensionDescriptorSystem = {
+ServerExtensionDescriptor /*-*/ serverExtensionDescriptor = {
 	  PROTOCOL_VERSION
 	, EXTENSION_VERSION
 	, sizeof(ServerExtensionDescriptor)
@@ -93,71 +96,30 @@ ServerExtensionDescriptorSystem /*-*/ serverExtensionDescriptorSystem = {
 };
 
 INITSERVEREXTENSIONDESCRIPTORSYSTEM(){
-	dababase.magicValue = 0;
+	database.magicValue = 0;
 	ret true;
 }
 PARSEEXTENSIONREQUEST(){
-	uint32 token;
 	uint8 requestType;
 	if(!request){
 		ret false;
 	}
-	token = (*request).token;
 	requestType = (*request).requestType;
-
-
-
 	switch(requestType){
-		to NONE_SERVER_REQUEST_TYPE:{
-			fprintf(stdout, "got none request\n");
-			brk;
+		to NONE_BASE_REQUEST_TYPE:{
+			ret false;
 		}
-		to NO_OPERATION_SERVER_REQUEST_TYPE:{
-			brk;
+		to GET_MAGIC_NUMBER_BASE_REQUEST_TYPE:{
+			ret true;
 		}
-		to SYNC_SERVER_REQUEST_TYPE:{
-			brk;
-		}
-		to ENABLE_EXTENSION_SERVER_REQUEST_TYPE:{
-
-
-
-			/*!*/
-
-			const char *const path = "/tmp/base-server-extension/output/base-server-extension.so";
-			if(loadServerExtension(serverSystem, path)){
-				ServerExtension *serverExtension = (*serverSystem).serverExtensionStart;
-				ServerExtensionDescriptor *serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
-				fprintf(stdout, "extensions now at %u\n", (*serverSystem).serverExtensionAllocated);
-				fprintf(stdout, "extension reference count at %u\n", (*serverExtension).serverExtensionReferenceCount);
-				if((*serverExtensionDescriptor).initExtension){
-					(*(*serverExtensionDescriptor).initExtension)();
-				}
-			}
-
-
-
-			brk;
-		}
-		to GET_MAGIC_NUMBER_SERVER_REQUEST_TYPE:{
-			brk;
-		}
-		to SET_MAGIC_NUMBER_SERVER_REQUEST_TYPE:{
-			(*database).magicNumber = (*(SetMagicNumberRequest *)request).magicNumber;
-			brk;
+		to SET_MAGIC_NUMBER_BASE_REQUEST_TYPE:{
+			database.magicNumber = (*(SetMagicNumberBaseRequest *)request).magicNumber;
+			ret true;
 		}
 		off:{
-			fprintf(stdout, "got unknown request with value %u\n", requestType);
-			requestType = NONE_SERVER_REQUEST_TYPE;
-			currentReaderRequest = (currentReaderRequest + 1) % requestSize;
-			inc current;
-			jmp parseServerClientRequestLoop;
+			ret false;
 		}
 	}
-
-
-
-	ret true;
 }
 PARSEEXTENSIONREPLY(){
 
@@ -170,7 +132,7 @@ PARSEEXTENSIONREPLY(){
 	ret true;
 }
 FINISERVEREXTENSIONDESCRIPTORSYSTEM(){
-	dababase.magicValue = 0;
+	database.magicValue = 0;
 	ret true;
 }
 

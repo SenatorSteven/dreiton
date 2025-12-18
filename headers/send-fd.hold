@@ -2,6 +2,8 @@
 #ifndef SEND_HOLD
 #define SEND_HOLD
 
+#define HEADER
+
 #define SENDMSG_FAILURE /*-*/ (-1)
 
 bool sendFd(const int socket, const int *const fd, const uint fdSize){

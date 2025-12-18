@@ -26,9 +26,11 @@ SOFTWARE. */
 #ifndef SERVER_API_HOLD
 #define SERVER_API_HOLD
 
+#define HEADER
+
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
-#include "../../../repositories/cold-repository/cold.hold"
+#include "cold/cold.hold"
 #endif
 
 /*! lower sizes later? all are sized 8 * sizeof(uint64) */
@@ -54,7 +56,8 @@ def struct{
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED
-#include "../../../repositories/cold-repository/hot.hold"
+#include "cold/hot.hold"
 #endif
 
 #endif
+

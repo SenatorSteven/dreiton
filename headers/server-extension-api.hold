@@ -26,9 +26,11 @@ SOFTWARE. */
 #ifndef SERVER_EXTENSION_API_HOLD
 #define SERVER_EXTENSION_API_HOLD
 
+#define HEADER
+
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
-#include "../../../repositories/cold-repository/cold.hold"
+#include "headers/cold/cold.hold"
 #endif
 
 def struct{
@@ -45,7 +47,7 @@ def struct{
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED
-#include "../../../repositories/cold-repository/hot.hold"
+#include "headers/cold/hot.hold"
 #endif
 
 #endif

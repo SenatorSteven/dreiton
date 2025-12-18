@@ -1,7 +1,7 @@
 
 #!/bin/bash
 
-NAME="base-server-extension.sh";
+NAME="base-server-extension-compile.sh";
 true=1;
 false=0;
 

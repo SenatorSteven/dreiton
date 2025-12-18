@@ -55,6 +55,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
+#define SYSTEM
+
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -70,12 +72,12 @@ SOFTWARE. */
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include "../../../repositories/cold-repository/cold.hold"
+#include "../../headers/cold/cold.hold"
 #include "../../headers/return-values.hold" /*! remove later */
 #include "../../headers/send-fd.hold" /*! replace later */
 #include "../../headers/receive-fd.hold" /*! replace later */
-#include "../../headers/systems/server-api.hold"
-#include "../../headers/systems/server-extension-descriptor-system.hold"
+#include "../../headers/server-api.hold"
+#include "../../headers/server-extension-api.hold"
 #include "../../headers/systems/server-system.hold"
 
 INITSERVERSYSTEM(){
@@ -594,11 +596,18 @@ PARSESERVERCLIENTREQUESTS(){
 
 					uint extensionIndex = 0;
 					ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extensionIndex;
-					if(serverClient < (*serverSystem).serverExtensionStart or serverClient >= (*serverSystem).serverExtensionStart + (*serverSystem).serverExtensionAllocated or !(*serverExtension).serverExtensionHandle){
+					if(serverExtension < (*serverSystem).serverExtensionStart or serverExtension >= (*serverSystem).serverExtensionStart + (*serverSystem).serverExtensionAllocated or !(*serverExtension).serverExtensionHandle){
 						fprintf(stdout, "extension not in\n");
+						currentReaderRequest = (currentReaderRequest + 1) % requestSize;
+						inc current;
+						jmp parseServerClientRequestLoop;
 					}else{
 						fprintf(stdout, "delegating request to extension\n");
-						(*(*(*serverExtension).serverExtensionDescriptor).parseExtensionRequest)(request);
+						if(!(*(*(*serverExtension).serverExtensionDescriptor).parseExtensionRequest)(request)){
+							currentReaderRequest = (currentReaderRequest + 1) % requestSize;
+							inc current;
+							jmp parseServerClientRequestLoop;
+						}
 					}
 
 
@@ -629,8 +638,8 @@ PARSESERVERCLIENTREQUESTS(){
 								ServerExtensionDescriptor *serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
 								fprintf(stdout, "extensions now at %u\n", (*serverSystem).serverExtensionAllocated);
 								fprintf(stdout, "extension reference count at %u\n", (*serverExtension).serverExtensionReferenceCount);
-								if((*serverExtensionDescriptor).initExtension){
-									(*(*serverExtensionDescriptor).initExtension)();
+								if((*serverExtensionDescriptor).initServerExtensionDescriptorSystem){
+									(*(*serverExtensionDescriptor).initServerExtensionDescriptorSystem)();
 								}
 							}
 
@@ -638,16 +647,8 @@ PARSESERVERCLIENTREQUESTS(){
 
 							brk;
 						}
-						to GET_MAGIC_NUMBER_SERVER_REQUEST_TYPE:{
-							brk;
-						}
-						to SET_MAGIC_NUMBER_SERVER_REQUEST_TYPE:{
-							(*database).magicNumber = (*(SetMagicNumberRequest *)request).magicNumber;
-							brk;
-						}
 						off:{
 							fprintf(stdout, "got unknown request with value %u\n", requestType);
-							requestType = NONE_SERVER_REQUEST_TYPE;
 							currentReaderRequest = (currentReaderRequest + 1) % requestSize;
 							inc current;
 							jmp parseServerClientRequestLoop;
@@ -690,17 +691,6 @@ PARSESERVERCLIENTREQUESTS(){
 							to ENABLE_EXTENSION_SERVER_REPLY_TYPE:{
 								(*(EnableExtensionReply *)reply).token = token;
 								(*(EnableExtensionReply *)reply).replyType = requestType;
-								brk;
-							}
-							to GET_MAGIC_NUMBER_SERVER_REPLY_TYPE:{
-								(*(GetMagicNumberReply *)reply).token = token;
-								(*(GetMagicNumberReply *)reply).replyType = requestType;
-								(*(GetMagicNumberReply *)reply).magicNumber = (*database).magicNumber;
-								brk;
-							}
-							to SET_MAGIC_NUMBER_SERVER_REPLY_TYPE:{
-								(*(SetMagicNumberReply *)reply).token = token;
-								(*(SetMagicNumberReply *)reply).replyType = requestType;
 								brk;
 							}
 							off:{
@@ -773,7 +763,7 @@ LOADSERVEREXTENSION(){
 	if(!serverExtensionHandle){
 		jmp emergencyExit;
 	}
-	serverExtensionDescriptor = dlsym(serverExtensionHandle, "serverExtensionDescriptorSystem");
+	serverExtensionDescriptor = dlsym(serverExtensionHandle, "serverExtensionDescriptor");
 	if(!serverExtensionDescriptor){
 		jmp emergencyExit;
 	}

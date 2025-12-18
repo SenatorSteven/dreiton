@@ -61,6 +61,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
+#define SYSTEM
+
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h> /*! remove later */
@@ -72,9 +74,11 @@ SOFTWARE. */
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include "../../../repositories/cold-repository/cold.hold"
+#include "../../headers/cold/cold.hold"
 #include "../../headers/return-values.hold" /*! remove later */
 #include "../../headers/send-fd.hold" /*! replace later */
+#include "../../headers/server-api.hold"
+#include "../../headers/server-extension-api.hold"
 #include "../../headers/systems/server-system.hold"
 #include "../../headers/systems/client-system.hold"
 
@@ -273,7 +277,10 @@ SENDSERVERREQUEST(){
 	if((*serverConnectionSystem).hasError){
 		ret false;
 	}
-	if(!tokenReturn){
+
+	/*! validate extension number */
+
+	if(requestSize > sizeof(GenericRequest) or !tokenReturn){
 		ret false;
 	}
 	header = (*serverConnectionSystem).shmStart;
@@ -307,14 +314,11 @@ SENDSERVERREQUEST(){
 		}
 
 		if(request){
-			if(requestSize > sizeof(GenericRequest)){
-				requestSize = sizeof(GenericRequest);
-			}
 			memcpy(requestCurrent, request, requestSize);
 		}
 		(*requestCurrent).token = currentToken;
 		(*requestCurrent).requestType = requestType;
-		(*requestCurrent).extension = 0; /*! maybe pass value on the parameters of the function? we can return that in the reply */
+		(*requestCurrent).extension = extension;
 		(*requestCurrent).sendReply = !!sendReply;
 
 

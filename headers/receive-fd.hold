@@ -2,6 +2,8 @@
 #ifndef RECEIVE_Fd_HOLD
 #define RECEIVE_Fd_HOLD
 
+#define HEADER
+
 bool receiveFd(const int socket, const uint fdSize, int *const fdReturn){
 	uint controlMessageBufferSize;
 	char *controlMessageBuffer;

@@ -26,9 +26,11 @@ SOFTWARE. */
 #ifndef SERVER_SYSTEM_HOLD
 #define SERVER_SYSTEM_HOLD
 
+#define HEADER
+
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
-#include "../../../repositories/cold-repository/cold.hold"
+#include "../../headers/cold/cold.hold"
 #endif
 
 #define ServerSystem /*------------------------------*/ ServerSystem
@@ -266,7 +268,7 @@ FINISERVERSYSTEM();
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED
-#include "../../../repositories/cold-repository/hot.hold"
+#include "../../headers/cold/hot.hold"
 #endif
 
 #endif

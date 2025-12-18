@@ -25,13 +25,18 @@ SOFTWARE. */
 
 #define _POSIX_C_SOURCE /*-*/ (200809L)
 
+#define MAIN
+
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../../repositories/cold-repository/cold.hold"
+#include "../headers/cold/cold.hold"
+#include "../headers/server-api.hold"
+#include "../headers/server-extension-api.hold"
 #include "../headers/systems/server-system.hold"
+#include "../headers/base-server-extension.hold"
 
 local ServerSystem /*-*/ serverSystem;
 local Database /*-----*/ database;

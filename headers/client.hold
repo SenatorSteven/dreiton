@@ -26,6 +26,8 @@ SOFTWARE. */
 #ifndef CLIENT_HOLD
 #define CLIENT_HOLD
 
+#define HEADER
+
 /*!*/
 
 #endif
