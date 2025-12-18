@@ -1,0 +1,176 @@
+
+/*! base-server-extension.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#include <stdint.h>
+#include <stdio.h>
+
+#include "../../repositories/cold-repository/cold.hold"
+#include "../headers/systems/server-api.hold"
+#include "../headers/systems/server-extension-descriptor-system.hold"
+
+#define PROTOCOL_VERSION /*-------------------*/ (1)
+#define EXTENSION_VERSION /*------------------*/ (1)
+#define EXTENSION_NAME /*---------------------*/ ("base")
+
+#define NONE_BASE_REQUEST_TYPE /*-------------*/ (0)
+#define GET_MAGIC_NUMBER_BASE_REQUEST_TYPE /*-*/ (1)
+#define SET_MAGIC_NUMBER_BASE_REQUEST_TYPE /*-*/ (2)
+
+#define NONE_BASE_REPLY_TYPE /*---------------*/ (0)
+#define GET_MAGIC_NUMBER_BASE_REPLY_TYPE /*---*/ (1)
+#define SET_MAGIC_NUMBER_BASE_REPLY_TYPE /*---*/ (2)
+
+#define NONE_BASE_EVENT_TYPE /*---------------*/ (0)
+
+#define NONE_BASE_EVENT_TYPE_MASK /*----------*/ (b(0))
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ requestType;
+	uint8 /*--*/ extension;
+	bool /*---*/ sendReply;
+} GetMagicNumberBaseRequest;
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ requestType;
+	uint8 /*--*/ extension;
+	bool /*---*/ sendReply;
+	uint8 /*--*/ pad0[1];
+	uint32 /*-*/ magicNumber;
+} SetMagicNumberBaseRequest;
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ replyType;
+	uint8 /*--*/ pad0[3];
+	uint32 /*-*/ magicNumber;
+} GetMagicNumberBaseReply;
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ replyType;
+} SetMagicNumberBaseReply;
+
+def struct{
+	uint32 /*-*/ magicValue;
+} Database;
+
+local Database /*------------------*/ database;
+
+ServerExtensionDescriptorSystem /*-*/ serverExtensionDescriptorSystem = {
+	  PROTOCOL_VERSION
+	, EXTENSION_VERSION
+	, sizeof(ServerExtensionDescriptor)
+	, lengthof(EXTENSION_NAME)
+	, EXTENSION_NAME
+	, &initServerExtensionDescriptorSystem
+	, &parseExtensionRequest
+	, &parseExtensionReply
+	, &finiServerExtensionDescriptorSystem
+};
+
+INITSERVEREXTENSIONDESCRIPTORSYSTEM(){
+	dababase.magicValue = 0;
+	ret true;
+}
+PARSEEXTENSIONREQUEST(){
+	uint32 token;
+	uint8 requestType;
+	if(!request){
+		ret false;
+	}
+	token = (*request).token;
+	requestType = (*request).requestType;
+
+
+
+	switch(requestType){
+		to NONE_SERVER_REQUEST_TYPE:{
+			fprintf(stdout, "got none request\n");
+			brk;
+		}
+		to NO_OPERATION_SERVER_REQUEST_TYPE:{
+			brk;
+		}
+		to SYNC_SERVER_REQUEST_TYPE:{
+			brk;
+		}
+		to ENABLE_EXTENSION_SERVER_REQUEST_TYPE:{
+
+
+
+			/*!*/
+
+			const char *const path = "/tmp/base-server-extension/output/base-server-extension.so";
+			if(loadServerExtension(serverSystem, path)){
+				ServerExtension *serverExtension = (*serverSystem).serverExtensionStart;
+				ServerExtensionDescriptor *serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
+				fprintf(stdout, "extensions now at %u\n", (*serverSystem).serverExtensionAllocated);
+				fprintf(stdout, "extension reference count at %u\n", (*serverExtension).serverExtensionReferenceCount);
+				if((*serverExtensionDescriptor).initExtension){
+					(*(*serverExtensionDescriptor).initExtension)();
+				}
+			}
+
+
+
+			brk;
+		}
+		to GET_MAGIC_NUMBER_SERVER_REQUEST_TYPE:{
+			brk;
+		}
+		to SET_MAGIC_NUMBER_SERVER_REQUEST_TYPE:{
+			(*database).magicNumber = (*(SetMagicNumberRequest *)request).magicNumber;
+			brk;
+		}
+		off:{
+			fprintf(stdout, "got unknown request with value %u\n", requestType);
+			requestType = NONE_SERVER_REQUEST_TYPE;
+			currentReaderRequest = (currentReaderRequest + 1) % requestSize;
+			inc current;
+			jmp parseServerClientRequestLoop;
+		}
+	}
+
+
+
+	ret true;
+}
+PARSEEXTENSIONREPLY(){
+
+
+
+	fprintf(stdout, "hello from parse extension reply\n");
+
+
+
+	ret true;
+}
+FINISERVEREXTENSIONDESCRIPTORSYSTEM(){
+	dababase.magicValue = 0;
+	ret true;
+}
+

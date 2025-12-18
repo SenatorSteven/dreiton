@@ -1,0 +1,273 @@
+
+/*! server-system.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef SERVER_SYSTEM_HOLD
+#define SERVER_SYSTEM_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "../../../repositories/cold-repository/cold.hold"
+#endif
+
+#define ServerSystem /*------------------------------*/ ServerSystem
+
+
+
+
+
+
+
+
+
+/*! common between server and client for now */
+
+#define NONE_SERVER_REQUEST_TYPE /*-------------*/ (0)
+#define NO_OPERATION_SERVER_REQUEST_TYPE /*-----*/ (1)
+#define SYNC_SERVER_REQUEST_TYPE /*-------------*/ (2)
+#define ENABLE_EXTENSION_SERVER_REQUEST_TYPE /*-*/ (3)
+
+#define NONE_SERVER_REPLY_TYPE /*---------------*/ (0)
+#define NO_OPERATION_SERVER_REPLY_TYPE /*-------*/ (1)
+#define SYNC_SERVER_REPLY_TYPE /*---------------*/ (2)
+#define ENABLE_EXTENSION_SERVER_REPLY_TYPE /*---*/ (3)
+
+#define NONE_SERVER_EVENT_TYPE /*---------------*/ (0)
+#define TIME_SERVER_EVENT_TYPE /*---------------*/ (1)
+
+#define NONE_SERVER_EVENT_TYPE_MASK /*----------*/ (b(0))
+#define TIME_SERVER_EVENT_TYPE_MASK /*----------*/ (b(1))
+
+
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ requestType;
+	uint8 /*--*/ extension;
+	bool /*---*/ sendReply;
+} NoOperationRequest;
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ requestType;
+	uint8 /*--*/ extension;
+	bool /*---*/ sendReply;
+} SyncRequest;
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ requestType;
+	uint8 /*--*/ extension;
+	bool /*---*/ sendReply;
+} EnableExtensionRequest; /*! TBD */
+
+
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ replyType;
+} NoOperationReply;
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ replyType;
+} SyncReply;
+
+def struct{
+	uint32 /*-*/ token;
+	uint8 /*--*/ replyType;
+} EnableExtensionReply; /*!*/
+
+
+
+def struct{
+	uint8 /*--*/ eventType;
+} TimeEvent;
+
+
+
+
+
+
+
+
+
+def struct{
+	uint32 /*-*/ requestStartOffset;
+	uint32 /*-*/ requestSize;
+	uint32 /*-*/ currentWriterRequest;
+	uint32 /*-*/ currentReaderRequest;
+
+	uint32 /*-*/ replyStartOffset;
+	uint32 /*-*/ replySize;
+	uint32 /*-*/ currentWriterReply;
+	uint32 /*-*/ currentReaderReply;
+
+	uint32 /*-*/ eventStartOffset;
+	uint32 /*-*/ eventSize;
+
+
+
+	/*! what can be removed from the event's simplex segment? */
+	uint32 /*-*/ currentWriterEvent;
+	uint32 /*-*/ currentReaderEvent;
+
+
+
+} Header;
+
+
+
+
+
+
+
+
+
+/*! add a way to block adding modules, thus turning a boolean on, thus performing on checks on mod loading */
+
+/*! allow closing on 0 clients. */
+
+#define INITSERVERSYSTEM() /*------------------------*/ bool           initServerSystem(ServerSystem *const serverSystem)
+#define SETSERVERSERVERCHANNELPATH() /*--------------*/ bool           setServerServerChannelPath(ServerSystem *const serverSystem, const char *const serverChannelPath)
+#define SETSERVERCLIENTCHANNELPATH() /*--------------*/ bool           setServerClientChannelPath(ServerSystem *const serverSystem, const char *const clientChannelPath)
+#define SETSERVERDATABASE() /*-----------------------*/ bool           setServerDatabase(ServerSystem *const serverSystem, Database *const database)
+#define SETSERVEREXTENSIONBLOCKSIZE() /*-------------*/ bool           setServerExtensionBlockSize(ServerSystem *const serverSystem, const uint serverExtensionBlockSize)
+#define SETSERVERCLIENTBLOCKSIZE() /*----------------*/ bool           setServerClientBlockSize(ServerSystem *const serverSystem, const uint serverClientBlockSize)
+#define BOOTSERVERREPLYLOOPTHREAD() /*---------------*/ bool           bootServerReplyLoopThread(ServerSystem *const serverSystem)
+#define BOOTSERVEREVENTLOOPTHREAD() /*---------------*/ bool           bootServerEventLoopThread(ServerSystem *const serverSystem)
+#define BOOTSERVERCLIENTREGISTRATIONTHREAD() /*------*/ bool           bootServerClientRegistrationThread(ServerSystem *const serverSystem)
+#define SERVERREPLYLOOP() /*-------------------------*/ void *         serverReplyLoop(void *const arg)
+#define SERVEREVENTLOOP() /*-------------------------*/ void *         serverEventLoop(void *const arg)
+#define SERVERCLIENTREGISTRATIONLOOP() /*------------*/ void *         serverClientRegistrationLoop(void *const arg)
+#define PARSESERVERCLIENTREQUESTS() /*---------------*/ bool           parseServerClientRequests(ServerSystem *const serverSystem, ServerClient *const serverClient, const uint32 requestAmount)
+#define LOADSERVEREXTENSION() /*---------------------*/ bool           loadServerExtension(ServerSystem *const serverSystem, const char *const path)
+#define QUITSERVERCLIENTREGISTRATIONTHREAD() /*------*/ bool           quitServerClientRegistrationThread(ServerSystem *const serverSystem)
+#define QUITSERVEREVENTLOOPTHREAD() /*---------------*/ bool           quitServerEventLoopThread(ServerSystem *const serverSystem)
+#define QUITSERVERREPLYLOOPTHREAD() /*---------------*/ bool           quitServerReplyLoopThread(ServerSystem *const serverSystem)
+#define AWAITSERVERCLIENTREGISTRATIONTHREADEXIT() /*-*/ bool           awaitServerClientRegistrationThreadExit(ServerSystem *const serverSystem)
+#define AWAITSERVEREVENTLOOPTHREADEXIT() /*----------*/ bool           awaitServerEventLoopThreadExit(ServerSystem *const serverSystem)
+#define AWAITSERVERREPLYLOOPTHREADEXIT() /*----------*/ bool           awaitServerReplyLoopThreadExit(ServerSystem *const serverSystem)
+#define REMOVEALLSERVEREXTENSIONS() /*---------------*/ bool           removeAllServerExtensions(ServerSystem *const serverSystem)
+#define REMOVEALLSERVERCLIENTS() /*------------------*/ bool           removeAllServerClients(ServerSystem *const serverSystem)
+#define FINDSERVERCLIENTFD() /*----------------------*/ ServerClient * findServerClientFd(ServerSystem *const serverSystem, const int fd)
+#define FINISERVERSYSTEM() /*------------------------*/ bool           finiServerSystem(ServerSystem *const serverSystem)
+
+def struct{
+	uint32 /*----------------------*/ magicNumber;
+	uint8 /*-----------------------*/ pad0[4];
+} Database;
+
+def struct{
+	void * /*----------------------*/ serverExtensionHandle;
+	ServerExtensionDescriptor * /*-*/ serverExtensionDescriptor;
+	uint32 /*----------------------*/ serverExtensionReferenceCount;
+	uint8 /*-----------------------*/ pad0[4];
+} ServerExtension;
+
+def struct{
+	Header * /*--------------------*/ shmStart;
+	GenericRequest * /*------------*/ requestStart;
+	GenericReply * /*--------------*/ replyStart;
+	GenericEvent * /*--------------*/ eventStart;
+	int32 /*-----------------------*/ shmId;
+	int32 /*-----------------------*/ serverRequestReadFd;
+	int32 /*-----------------------*/ serverClientReplyWriteFd;
+	int32 /*-----------------------*/ serverClientEventWriteFd;
+	uint32 /*----------------------*/ serverClientId;
+	uint8 /*-----------------------*/ pad0[4];
+} ServerClient;
+
+def struct{
+	const char * /*----------------*/ serverChannelPath;
+	const char * /*----------------*/ clientChannelPath;
+	Database * /*------------------*/ database;
+	ServerExtension * /*-----------*/ serverExtensionStart;
+	ServerClient * /*--------------*/ serverClientStart;
+	uint32 /*----------------------*/ serverExtensionSize;
+	uint32 /*----------------------*/ serverExtensionAllocated;
+	uint32 /*----------------------*/ serverExtensionBlockSize;
+	uint32 /*----------------------*/ serverClientSize;
+	uint32 /*----------------------*/ serverClientAllocated;
+	uint32 /*----------------------*/ serverClientBlockSize;
+	int32 /*-----------------------*/ replyEpollFd;
+	int32 /*-----------------------*/ eventEpollFd;
+	int32 /*-----------------------*/ signalFd;
+	uint32 /*----------------------*/ serverClientId; /*! shit solution, use instead the position in the soon-to-be-added stack holding the clients */
+	bool /*------------------------*/ replyLoopRunning;
+	bool /*------------------------*/ eventLoopRunning;
+	bool /*------------------------*/ clientRegistrationRunning;
+	bool /*------------------------*/ replyLoopThreadCreated;
+	bool /*------------------------*/ eventLoopThreadCreated;
+	bool /*------------------------*/ clientRegistrationThreadCreated;
+	uint8 /*-----------------------*/ pad0[2];
+	pthread_t /*-------------------*/ replyLoopThread;
+	pthread_t /*-------------------*/ eventLoopThread;
+	pthread_t /*-------------------*/ clientRegistrationThread;
+} ServerSystem;
+
+#ifdef a
+
+/*! server.cold */
+
+def struct{
+	const char * /*-----------*/ path;
+	uint32 /*-----------------*/ extensionId;
+	uint32 /*-----------------*/ baseEvent;
+} ServerExtension;
+
+#endif
+
+INITSERVERSYSTEM();
+SETSERVERSERVERCHANNELPATH();
+SETSERVERCLIENTCHANNELPATH();
+SETSERVERDATABASE();
+SETSERVEREXTENSIONBLOCKSIZE();
+SETSERVERCLIENTBLOCKSIZE();
+BOOTSERVERREPLYLOOPTHREAD();
+BOOTSERVEREVENTLOOPTHREAD();
+BOOTSERVERCLIENTREGISTRATIONTHREAD();
+SERVERREPLYLOOP();
+SERVEREVENTLOOP();
+SERVERCLIENTREGISTRATIONLOOP();
+PARSESERVERCLIENTREQUESTS();
+LOADSERVEREXTENSION();
+QUITSERVERCLIENTREGISTRATIONTHREAD();
+QUITSERVEREVENTLOOPTHREAD();
+QUITSERVERREPLYLOOPTHREAD();
+AWAITSERVERCLIENTREGISTRATIONTHREADEXIT();
+AWAITSERVEREVENTLOOPTHREADEXIT();
+AWAITSERVERREPLYLOOPTHREADEXIT();
+REMOVEALLSERVEREXTENSIONS();
+REMOVEALLSERVERCLIENTS();
+FINDSERVERCLIENTFD();
+FINISERVERSYSTEM();
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "../../../repositories/cold-repository/hot.hold"
+#endif
+
+#endif
+

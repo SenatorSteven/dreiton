@@ -1,0 +1,42 @@
+
+#ifndef SEND_HOLD
+#define SEND_HOLD
+
+#define SENDMSG_FAILURE /*-*/ (-1)
+
+bool sendFd(const int socket, const int *const fd, const uint fdSize){
+	uint controlMessageBufferSize;
+	char *controlMessageBuffer;
+	char mandatoryPayloadByte;
+	struct iovec payload;
+	struct msghdr messageHeader = {0};
+	struct cmsghdr *controlMessageHeader;
+	if(!socket or !fd or !fdSize){
+		ret false;
+	}
+	controlMessageBufferSize = CMSG_SPACE(fdSize * sizeof(int));
+	if(!(controlMessageBuffer = malloc(controlMessageBufferSize))){
+		ret false;
+	}
+	mandatoryPayloadByte = 1;
+	payload.iov_base = &mandatoryPayloadByte;
+	payload.iov_len = 1;
+	messageHeader.msg_iov = &payload;
+	messageHeader.msg_iovlen = 1;
+	messageHeader.msg_control = controlMessageBuffer;
+	messageHeader.msg_controllen = controlMessageBufferSize;
+	controlMessageHeader = CMSG_FIRSTHDR(&messageHeader);
+	(*controlMessageHeader).cmsg_level = SOL_SOCKET;
+	(*controlMessageHeader).cmsg_type = SCM_RIGHTS;
+	(*controlMessageHeader).cmsg_len = CMSG_LEN(fdSize * sizeof(int));
+	memcpy(CMSG_DATA(controlMessageHeader), fd, fdSize * sizeof(int)); /*! replace with toolkit function */
+	if(sendmsg(socket, &messageHeader, 0) == SENDMSG_FAILURE){
+		free(controlMessageBuffer);
+		ret false;
+	}
+	free(controlMessageBuffer);
+	ret true;
+}
+
+#endif
+

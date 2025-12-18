@@ -1,0 +1,22 @@
+
+#ifndef RETURN_VALUES_HOLD
+#define RETURN_VALUES_HOLD
+
+#define SHM_NONE /*--------------------*/ (0)
+#define NONE_EPOLL_FLAG /*-------------*/ (0)
+#define NONE_SOCKET_PROTOCOL /*--------*/ (0)
+#define EPOLL_CREATE1_FAILURE /*-------*/ (-1)
+#define INFINITE_EPOLL_WAIT_TIMEOUT /*-*/ (-1)
+#define READ_FAILURE /*----------------*/ (-1)
+#define PTHREAD_CREATE_SUCCESS /*------*/ (0)
+#define SOCKET_FAILURE /*--------------*/ (-1)
+#define CONNECT_FAILURE /*-------------*/ (-1)
+#define EVENTFD_FAILURE /*-------------*/ (-1)
+#define PIPE_FAILURE /*----------------*/ (-1)
+#define SHMGET_FAILURE /*--------------*/ (-1)
+#define SHMAT_FAILURE /*---------------*/ ((void *)-1)
+#define EPOLL_CTL_FAILURE /*-----------*/ (-1)
+#define RECV_FAILURE /*----------------*/ (-1)
+
+#endif
+

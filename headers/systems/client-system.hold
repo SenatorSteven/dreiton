@@ -1,0 +1,84 @@
+
+/*! client-system.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef CLIENT_SYSTEM_HOLD
+#define CLIENT_SYSTEM_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "../../../repositories/cold-repository/cold.hold"
+#endif
+
+#define ServerConnectionSystem /*-----------------*/ ServerConnectionSystem
+
+#include <pthread.h> /*! remove later */
+#include "server-system.hold" /*! remove later */
+
+#define INITSERVERCONNECTION() /*-----------------*/ bool  initServerConnection(ServerConnectionSystem *const serverConnectionSystem)
+#define SETSERVERCONNECTIONSERVERCHANNELPATH() /*-*/ bool  setServerConnectionServerChannelPath(ServerConnectionSystem *const serverConnectionSystem, const char *serverChannelPath)
+#define CONNECTTOSERVER() /*----------------------*/ bool  connectToServer(ServerConnectionSystem *const serverConnectionSystem)
+#define SENDSERVERREQUEST() /*--------------------*/ bool  sendServerRequest(ServerConnectionSystem *const serverConnectionSystem, const uint8 requestType, const uint8 extension, void *const request, uint requestSize, bool sendReply, uint32 *const tokenReturn)
+#define WAITFORSERVERREPLY() /*-------------------*/ bool  waitForServerReply(ServerConnectionSystem *const serverConnectionSystem, const uint32 token, void *const replyReturn)
+#define WAITFORSERVEREVENT() /*-------------------*/ bool  waitForServerEvent(ServerConnectionSystem *const serverConnectionSystem, GenericEvent *const eventReturn)
+#define FLUSHSERVERBUFFER() /*--------------------*/ bool  flushServerBuffer(ServerConnectionSystem *const serverConnectionSystem)
+#define DISCONNECTFROMSERVER() /*-----------------*/ bool  disconnectFromServer(ServerConnectionSystem *const serverConnectionSystem)
+#define FINISERVERCONNECTION() /*-----------------*/ bool  finiServerConnection(ServerConnectionSystem *const serverConnectionSystem)
+
+def struct{
+	const char * /*-----*/ serverChannelPath;
+	Header * /*---------*/ shmStart;
+	GenericRequest * /*-*/ requestStart;
+	GenericReply * /*---*/ replyStart;
+	GenericEvent * /*---*/ eventStart;
+	int32 /*------------*/ replyEpollFd;
+	int32 /*------------*/ eventEpollFd;
+	int32 /*------------*/ serverRequestWriteFd;
+	int32 /*------------*/ clientReplyReadFd;
+	int32 /*------------*/ clientEventReadFd;
+	uint32 /*-----------*/ currentToken;
+	uint32 /*-----------*/ lastTokenRead;
+	uint32 /*-----------*/ tokenBacklogSize;
+	uint32 /*-----------*/ requestAmount;
+	bool /*-------------*/ hasError;
+	uint8 /*------------*/ pad0[3];
+} ServerConnectionSystem;
+
+INITSERVERCONNECTION();
+SETSERVERCONNECTIONSERVERCHANNELPATH();
+CONNECTTOSERVER();
+SENDSERVERREQUEST();
+WAITFORSERVERREPLY();
+WAITFORSERVEREVENT();
+FLUSHSERVERBUFFER();
+DISCONNECTFROMSERVER();
+FINISERVERCONNECTION();
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "../../../repositories/cold-repository/hot.hold"
+#endif
+
+#endif
+

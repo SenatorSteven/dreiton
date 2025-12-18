@@ -1,0 +1,186 @@
+
+#ifdef a
+#include <stdio.h>
+#include <stdint.h>
+#include "../../repositories/cold-repository/cold.hold"
+
+int main(void){
+	uint16 reply = 0;
+	uint16 size = 128;
+	uint16 highest = 0;
+	for(;;){
+		inc reply;
+		if(!reply){
+			inc reply;
+		}
+		if(reply >= size){
+			reply = 1;
+		}
+		if(reply > highest or reply + size - 2 <= highest){
+			highest = reply;
+		}
+		fprintf(stdout, "highest: %u\n", highest);
+	}
+	ret 0;
+}
+#endif
+
+/*!
+	consider everything multithreaded later, inluding who is epoll_wait()'ing what.
+*/
+
+/*!
+	when writing the protocol for events/replies, keep replies lossless and events lossy. if the buffer fills up, lose events but do not lose replies.
+*/
+
+/*!
+	facilitate a no-copying style of reply handling where the index is incremented on command after a separate function is called.
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*! client-system.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#define _POSIX_C_SOURCE /*-*/ (200809L)
+
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#include "../../repositories/cold-repository/cold.hold"
+#include "../headers/systems/client-system.hold"
+
+local ServerConnectionSystem /*-*/ serverConnectionSystem;
+
+void signalHandler(const int signal){
+	if(signal == SIGINT){
+		fprintf(stdout, "\n");
+	}
+	if(signal == SIGPIPE){
+		fprintf(stderr, "\tpipe error\n");
+	}
+	ret;
+}
+int main(void){
+	uint32 token[10];
+	/*!setSignals:*/{
+		struct sigaction s;
+		s.sa_handler = signalHandler;
+		s.sa_flags = SA_RESTART;
+		sigemptyset(&s.sa_mask);
+		sigaction(SIGINT , &s, NULL);
+		sigaction(SIGPIPE, &s, NULL);
+	}
+
+
+
+#ifdef a
+	/*!blockAllSignals:*/{
+		sigset_t signalSet;
+		sigfillset(&signalSet);
+		pthread_sigmask(SIG_BLOCK, &signalSet, NULL);
+	}
+#endif
+
+
+
+	initServerConnection(&serverConnectionSystem);
+	setServerConnectionServerChannelPath(&serverConnectionSystem, "/dev/shm/registration-form");
+	if(!connectToServer(&serverConnectionSystem)){
+		fprintf(stdout, "failed serverConnectionSystem\n");
+		ret 0;
+	}
+	{
+		SetMagicNumberRequest setMagicNumberRequest;
+		uint i;
+		setMagicNumberRequest.magicNumber = 123;
+		sendServerRequest(&serverConnectionSystem, ENABLE_EXTENSION_SERVER_REQUEST_TYPE,                   NULL,                             0, false, token + 0);
+		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE,                   NULL,                             0, false, token + 1);
+		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE,                   NULL,                             0, false, token + 2);
+		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE,                   NULL,                             0, false, token + 3);
+		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE,                   NULL,                             0, false, token + 4);
+		sendServerRequest(&serverConnectionSystem, SET_MAGIC_NUMBER_SERVER_REQUEST_TYPE, &setMagicNumberRequest, sizeof(SetMagicNumberRequest),  true, token + 5);
+		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE,                   NULL,                             0, false, token + 6);
+		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE,                   NULL,                             0, false, token + 7);
+		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE,                   NULL,                             0, false, token + 8);
+		sendServerRequest(&serverConnectionSystem, GET_MAGIC_NUMBER_SERVER_REQUEST_TYPE,                   NULL,                             0,  true, token + 9);
+		flushServerBuffer(&serverConnectionSystem);
+		for(i = 0; i < countof(token); inc i){
+			uint ii = i;
+			GenericReply genericReply;
+			waitForServerReply(&serverConnectionSystem, *(token + ii), &genericReply);
+			if(genericReply.replyType == GET_MAGIC_NUMBER_SERVER_REPLY_TYPE){
+				GetMagicNumberReply *const getMagicNumberReply = (void *)&genericReply;
+				fprintf(stdout, "%u: value got: %u\n", ii, (*getMagicNumberReply).magicNumber);
+			}
+		}
+		jmp eventLoop;
+	}
+	eventLoop:{
+		GenericEvent event;
+		fprintf(stdout, "waiting on event\n");
+		waitForServerEvent(&serverConnectionSystem, &event);
+		if(!serverConnectionSystem.hasError){
+			jmp eventLoop;
+		}
+		jmp emergencyExit;
+	}
+	emergencyExit:{
+		uint32 token;
+		fprintf(stdout, "leaving\n");
+		sendServerRequest(&serverConnectionSystem, SYNC_SERVER_REQUEST_TYPE, NULL, 0, true, &token);
+		flushServerBuffer(&serverConnectionSystem);
+		waitForServerReply(&serverConnectionSystem, token, NULL);
+		disconnectFromServer(&serverConnectionSystem);
+		finiServerConnection(&serverConnectionSystem);
+		fprintf(stdout, "done\n");
+		ret 0;
+	}
+}
+

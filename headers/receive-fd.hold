@@ -1,0 +1,61 @@
+
+#ifndef RECEIVE_Fd_HOLD
+#define RECEIVE_Fd_HOLD
+
+bool receiveFd(const int socket, const uint fdSize, int *const fdReturn){
+	uint controlMessageBufferSize;
+	char *controlMessageBuffer;
+
+
+
+
+
+
+
+
+
+	char mandatoryPayloadByte;
+	struct iovec payload;
+	struct msghdr messageHeader = {0};
+	struct cmsghdr *controlMessageHeader;
+	if(!socket or !fdSize or !fdReturn){
+		ret false;
+	}
+	controlMessageBufferSize = CMSG_SPACE(fdSize * sizeof(int));
+	if(!(controlMessageBuffer = malloc(controlMessageBufferSize))){
+		ret false;
+	}
+
+
+
+	payload.iov_base = &mandatoryPayloadByte;
+	payload.iov_len = 1;
+	messageHeader.msg_iov = &payload;
+	messageHeader.msg_iovlen = 1;
+	messageHeader.msg_control = controlMessageBuffer;
+	messageHeader.msg_controllen = controlMessageBufferSize;
+
+
+
+
+
+
+
+
+
+	if(recvmsg(socket, &messageHeader, 0) == -1){
+		free(controlMessageBuffer);
+		ret false;
+	}
+	controlMessageHeader = CMSG_FIRSTHDR(&messageHeader);
+	if(!controlMessageHeader or (*controlMessageHeader).cmsg_level != SOL_SOCKET or (*controlMessageHeader).cmsg_type != SCM_RIGHTS){
+		free(controlMessageBuffer);
+		ret false;
+	}
+	memcpy(fdReturn, CMSG_DATA(controlMessageHeader), fdSize * sizeof(int)); /*! replace with toolkit function */
+	free(controlMessageBuffer);
+	ret true;
+}
+
+#endif
+
