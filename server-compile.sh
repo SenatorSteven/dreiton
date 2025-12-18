@@ -18,6 +18,7 @@ function main(){
 	[ $true        ] && { parameters+=(debug-folder "$folder/debug");                      } || :;
 	[ $true        ] && { parameters+=(output-folder "$folder/output");                    } || :;
 	[ $true        ] && { parameters+=(record-folder "$folder/record");                    } || :;
+	[ $true        ] && { parameters+=(includes "-I$(pwd)");                               } || :;
 	[ $true        ] && { parameters+=(systems "systems/server-system");                   } || :;
 	[ $true        ] && { parameters+=(mains "$name");                                     } || :;
 	[ $true        ] && { parameters+=(executables "$name");                               } || :;

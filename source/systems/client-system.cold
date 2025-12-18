@@ -74,13 +74,13 @@ SOFTWARE. */
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#include "../../headers/cold/cold.hold"
-#include "../../headers/return-values.hold" /*! remove later */
-#include "../../headers/send-fd.hold" /*! replace later */
-#include "../../headers/server-api.hold"
-#include "../../headers/server-extension-api.hold"
-#include "../../headers/systems/server-system.hold"
-#include "../../headers/systems/client-system.hold"
+#include "headers/cold/cold.hold"
+#include "headers/return-values.hold" /*! remove later */
+#include "headers/send-fd.hold" /*! replace later */
+#include "headers/server-api.hold"
+#include "headers/server-extension-api.hold"
+#include "headers/systems/server-system.hold"
+#include "headers/systems/client-system.hold"
 
 INITSERVERCONNECTION(){
 	if(!serverConnectionSystem){
