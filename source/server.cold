@@ -1,5 +1,39 @@
 
-/*! server-system.cold
+#ifdef a
+	/*!blockAllSignals:*/{
+		sigset_t signalSet;
+		sigfillset(&signalSet);
+		pthread_sigmask(SIG_BLOCK, &signalSet, NULL);
+	}
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*! server.cold
 
 MIT License
 
@@ -25,21 +59,17 @@ SOFTWARE. */
 
 #define _POSIX_C_SOURCE /*-*/ (200809L)
 
-#define MAIN
-
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../headers/cold/cold.hold"
-#include "../headers/server-api.hold"
-#include "../headers/server-extension-api.hold"
-#include "../headers/systems/server-system.hold"
-#include "../headers/base-server-extension.hold"
+#include "headers/cold/cold.hold"
+#include "headers/server-api.hold"
+#include "headers/systems/server-system.hold"
+#include "headers/base-server-extension.hold"
 
 local ServerSystem /*-*/ serverSystem;
-local Database /*-----*/ database;
 
 void signalHandler(const int signal){
 	if(signal == SIGINT){
@@ -53,9 +83,6 @@ void signalHandler(const int signal){
 	ret;
 }
 int main(void){
-
-
-
 	/*!setSignals:*/{
 		struct sigaction s;
 		s.sa_handler = signalHandler;
@@ -64,24 +91,9 @@ int main(void){
 		sigaction(SIGINT , &s, NULL);
 		sigaction(SIGPIPE, &s, NULL);
 	}
-
-
-
-#ifdef a
-	/*!blockAllSignals:*/{
-		sigset_t signalSet;
-		sigfillset(&signalSet);
-		pthread_sigmask(SIG_BLOCK, &signalSet, NULL);
-	}
-#endif
-
-
-
 	initServerSystem(&serverSystem);
 	setServerServerChannelPath(&serverSystem, "/dev/shm/registration-form");
 	setServerClientChannelPath(&serverSystem, "/dev/shm/client-writer");
-	database.magicNumber = 0;
-	setServerDatabase(&serverSystem, &database);
 	setServerExtensionBlockSize(&serverSystem, 16);
 	setServerClientBlockSize(&serverSystem, 16);
 	bootServerReplyLoopThread(&serverSystem);

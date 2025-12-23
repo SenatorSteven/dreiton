@@ -26,11 +26,9 @@ SOFTWARE. */
 #ifndef CLIENT_SYSTEM_HOLD
 #define CLIENT_SYSTEM_HOLD
 
-#define HEADER
-
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
-#include "../../headers/cold/cold.hold"
+#include "headers/cold/cold.hold"
 #endif
 
 #define ServerConnectionSystem /*-----------------*/ ServerConnectionSystem
@@ -38,7 +36,7 @@ SOFTWARE. */
 #define INITSERVERCONNECTION() /*-----------------*/ bool  initServerConnection(ServerConnectionSystem *const serverConnectionSystem)
 #define SETSERVERCONNECTIONSERVERCHANNELPATH() /*-*/ bool  setServerConnectionServerChannelPath(ServerConnectionSystem *const serverConnectionSystem, const char *serverChannelPath)
 #define CONNECTTOSERVER() /*----------------------*/ bool  connectToServer(ServerConnectionSystem *const serverConnectionSystem)
-#define SENDSERVERREQUEST() /*--------------------*/ bool  sendServerRequest(ServerConnectionSystem *const serverConnectionSystem, const uint8 requestType, const uint8 extension, void *const request, const uint requestSize, bool sendReply, uint32 *const tokenReturn)
+#define SENDSERVERREQUEST() /*--------------------*/ bool  sendServerRequest(ServerConnectionSystem *const serverConnectionSystem, const uint8 requestType, const uint8 extension, void *const request, const uint itemAmount, uint32 *const tokenReturn)
 #define WAITFORSERVERREPLY() /*-------------------*/ bool  waitForServerReply(ServerConnectionSystem *const serverConnectionSystem, const uint32 token, void *const replyReturn)
 #define WAITFORSERVEREVENT() /*-------------------*/ bool  waitForServerEvent(ServerConnectionSystem *const serverConnectionSystem, GenericEvent *const eventReturn)
 #define FLUSHSERVERBUFFER() /*--------------------*/ bool  flushServerBuffer(ServerConnectionSystem *const serverConnectionSystem)
@@ -48,9 +46,12 @@ SOFTWARE. */
 def struct{
 	const char * /*-----*/ serverChannelPath;
 	Header * /*---------*/ shmStart;
+	RequestSlot * /*----*/ requestSlotStart;
 	GenericRequest * /*-*/ requestStart;
+	GenericRequest * /*-*/ requestCurrent;
 	GenericReply * /*---*/ replyStart;
 	GenericEvent * /*---*/ eventStart;
+	uint32 /*-----------*/ generationClientId;
 	int32 /*------------*/ replyEpollFd;
 	int32 /*------------*/ eventEpollFd;
 	int32 /*------------*/ serverRequestWriteFd;
@@ -59,9 +60,9 @@ def struct{
 	uint32 /*-----------*/ currentToken;
 	uint32 /*-----------*/ lastTokenRead;
 	uint32 /*-----------*/ tokenBacklogSize;
-	uint32 /*-----------*/ requestAmount;
+	uint8 /*------------*/ requestAmount;
 	bool /*-------------*/ hasError;
-	uint8 /*------------*/ pad0[3];
+	uint8 /*------------*/ pad0[6];
 } ServerConnectionSystem;
 
 INITSERVERCONNECTION();
@@ -76,7 +77,7 @@ FINISERVERCONNECTION();
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED
-#include "../../headers/cold/hot.hold"
+#include "headers/cold/hot.hold"
 #endif
 
 #endif

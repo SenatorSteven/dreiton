@@ -26,32 +26,59 @@ SOFTWARE. */
 #ifndef BASE_SERVER_EXTENSION_HOLD
 #define BASE_SERVER_EXTENSION_HOLD
 
-#define HEADER
-
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
-#include "../headers/cold/cold.hold"
+#include "headers/cold/cold.hold"
 #endif
 
+#define BASE_PROTOCOL_VERSION /*---------------------*/ (1)
+#define BASE_EXTENSION_VERSION /*--------------------*/ (1)
+#define BASE_EXTENSION_NAME /*-----------------------*/ ("base")
 
+#define NONE_BASE_REQUEST_TYPE /*--------------------*/ (0)
+#define GET_MAGIC_NUMBER_BASE_REQUEST_TYPE /*--------*/ (1)
+#define SET_MAGIC_NUMBER_BASE_REQUEST_TYPE /*--------*/ (2)
 
-#define ServerExtensionDescriptorSystem /*-------*/ ServerExtensionDescriptorSystem
+#define GET_MAGIC_NUMBER_BASE_REQUEST_ITEM_AMOUNT /*-*/ (0)
+#define SET_MAGIC_NUMBER_BASE_REQUEST_ITEM_AMOUNT /*-*/ (1)
 
-#define INITSERVEREXTENSIONDESCRIPTORSYSTEM() /*-*/ bool  initServerExtensionDescriptorSystem(void)
-#define PARSEEXTENSIONREQUEST() /*---------------*/ bool  parseExtensionRequest(GenericRequest *const request)
-#define PARSEEXTENSIONREPLY() /*-----------------*/ bool  parseExtensionReply(GenericReply *const reply)
-#define FINISERVEREXTENSIONDESCRIPTORSYSTEM() /*-*/ bool  finiServerExtensionDescriptorSystem(void)
+#define NONE_BASE_REPLY_TYPE /*----------------------*/ (0)
+#define GET_MAGIC_NUMBER_BASE_REPLY_TYPE /*----------*/ (1)
+#define SET_MAGIC_NUMBER_BASE_REPLY_TYPE /*----------*/ (2)
 
-INITSERVEREXTENSIONDESCRIPTORSYSTEM();
-PARSEEXTENSIONREQUEST();
-PARSEEXTENSIONREPLY();
-FINISERVEREXTENSIONDESCRIPTORSYSTEM();
+#define NONE_BASE_EVENT_TYPE /*----------------------*/ (0)
 
+#define NONE_BASE_EVENT_TYPE_MASK /*-----------------*/ (b(0))
 
+def struct{
+	uint8 /*----*/ pad0[1];
+} GetMagicNumberBaseRequest;
+
+def struct{
+	uint32 /*---*/ magicNumberSize;
+	uint8 /*----*/ pad0[4];
+	uint32 * /*-*/ magicNumberStart;
+} SetMagicNumberBaseRequest;
+
+def struct{
+	uint32 /*---*/ replySize;
+	uint32 /*---*/ token;
+	uint8 /*----*/ replyType;
+	uint8 /*----*/ status;
+	uint8 /*----*/ pad0[2];
+	uint32 /*---*/ magicNumber;
+} GetMagicNumberBaseReply;
+
+def struct{
+	uint32 /*---*/ replySize;
+	uint32 /*---*/ token;
+	uint8 /*----*/ replyType;
+	uint8 /*----*/ status;
+} SetMagicNumberBaseReply;
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED
-#include "../headers/cold/hot.hold"
+#include "headers/cold/hot.hold"
 #endif
 
 #endif

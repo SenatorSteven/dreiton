@@ -26,11 +26,9 @@ SOFTWARE. */
 #ifndef RETURN_VALUES_HOLD
 #define RETURN_VALUES_HOLD
 
-#define HEADER
-
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
-#include "cold/cold.hold"
+#include "headers/cold/cold.hold"
 #endif
 
 #define SHM_NONE /*--------------------*/ (0)
@@ -48,10 +46,11 @@ SOFTWARE. */
 #define SHMAT_FAILURE /*---------------*/ ((void *)-1)
 #define EPOLL_CTL_FAILURE /*-----------*/ (-1)
 #define RECV_FAILURE /*----------------*/ (-1)
+#define SENDMSG_FAILURE /*-------------*/ (-1)
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED
-#include "cold/hot.hold"
+#include "headers/cold/hot.hold"
 #endif
 
 #endif

@@ -2,7 +2,7 @@
 #ifdef a
 #include <stdio.h>
 #include <stdint.h>
-#include "../../repositories/cold-repository/cold.hold"
+#include "repositories/cold-repository/cold.hold"
 
 int main(void){
 	uint16 reply = 0;
@@ -25,17 +25,13 @@ int main(void){
 }
 #endif
 
-/*!
-	consider everything multithreaded later, inluding who is epoll_wait()'ing what.
-*/
-
-/*!
-	when writing the protocol for events/replies, keep replies lossless and events lossy. if the buffer fills up, lose events but do not lose replies.
-*/
-
-/*!
-	facilitate a no-copying style of reply handling where the index is incremented on command after a separate function is called.
-*/
+#ifdef a
+	/*!blockAllSignals:*/{
+		sigset_t signalSet;
+		sigfillset(&signalSet);
+		pthread_sigmask(SIG_BLOCK, &signalSet, NULL);
+	}
+#endif
 
 
 
@@ -63,7 +59,7 @@ int main(void){
 
 
 
-/*! client-system.cold
+/*! client.cold
 
 MIT License
 
@@ -89,19 +85,48 @@ SOFTWARE. */
 
 #define _POSIX_C_SOURCE /*-*/ (200809L)
 
-#define MAIN
-
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../headers/cold/cold.hold"
-#include "../headers/server-api.hold"
-#include "../headers/server-extension-api.hold"
-#include "../headers/systems/server-system.hold"
-#include "../headers/systems/client-system.hold"
+#include "headers/cold/cold.hold"
+#include "headers/server-api.hold"
+#include "headers/base-server-extension.hold"
+#include "headers/systems/server-system.hold"
+#include "headers/systems/client-system.hold"
 
-local ServerConnectionSystem /*-*/ serverConnectionSystem;
+local ServerConnectionSystem /*---*/ _serverConnectionSystem;
+local ServerConnectionSystem * /*-*/ serverConnectionSystem;
+local GenericEvent /*-------------*/ event;
+
+
+
+bool requestServerNoOperation(ServerConnectionSystem *const serverConnectionSystem, uint32 *const tokenReturn){
+	ret sendServerRequest(serverConnectionSystem, NO_OPERATION_SERVER_REQUEST_TYPE, 0, NULL, NO_OPERATION_SERVER_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+bool requestServerSync(ServerConnectionSystem *const serverConnectionSystem, uint32 *const tokenReturn){
+	ret sendServerRequest(serverConnectionSystem, SYNC_SERVER_REQUEST_TYPE, 0, NULL, SYNC_SERVER_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+bool requestServerEnableExtension(ServerConnectionSystem *const serverConnectionSystem, const uint32 pathSize, const char *const pathStart, uint32 *const tokenReturn){
+	EnableExtensionRequest enableExtensionRequest;
+	enableExtensionRequest.pathSize = pathSize;
+	enableExtensionRequest.pathStart = (void *)pathStart;
+	ret sendServerRequest(serverConnectionSystem, ENABLE_EXTENSION_SERVER_REQUEST_TYPE, NONE_SERVER_EXTENSION, &enableExtensionRequest, ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+
+
+
+bool requestBaseGetMagicNumber(ServerConnectionSystem *const serverConnectionSystem, const uint32 extensionId, uint32 *const tokenReturn){
+	ret sendServerRequest(serverConnectionSystem, GET_MAGIC_NUMBER_BASE_REQUEST_TYPE, extensionId, NULL, GET_MAGIC_NUMBER_BASE_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+bool requestBaseSetMagicNumber(ServerConnectionSystem *const serverConnectionSystem, const uint32 extensionId, uint32 magicNumber, uint32 *const tokenReturn){
+	SetMagicNumberBaseRequest setMagicNumberBaseRequest;
+	setMagicNumberBaseRequest.magicNumberSize = sizeof(uint32);
+	setMagicNumberBaseRequest.magicNumberStart = &magicNumber;
+	ret sendServerRequest(serverConnectionSystem, SET_MAGIC_NUMBER_BASE_REQUEST_TYPE, extensionId, &setMagicNumberBaseRequest, SET_MAGIC_NUMBER_BASE_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+
+
 
 void signalHandler(const int signal){
 	if(signal == SIGINT){
@@ -113,7 +138,6 @@ void signalHandler(const int signal){
 	ret;
 }
 int main(void){
-	uint32 token[10];
 	/*!setSignals:*/{
 		struct sigaction s;
 		s.sa_handler = signalHandler;
@@ -122,75 +146,62 @@ int main(void){
 		sigaction(SIGINT , &s, NULL);
 		sigaction(SIGPIPE, &s, NULL);
 	}
-
-
-
-#ifdef a
-	/*!blockAllSignals:*/{
-		sigset_t signalSet;
-		sigfillset(&signalSet);
-		pthread_sigmask(SIG_BLOCK, &signalSet, NULL);
-	}
-#endif
-
-
-
-	initServerConnection(&serverConnectionSystem);
-	setServerConnectionServerChannelPath(&serverConnectionSystem, "/dev/shm/registration-form");
-	if(!connectToServer(&serverConnectionSystem)){
+	serverConnectionSystem = &_serverConnectionSystem;
+	initServerConnection(serverConnectionSystem);
+	setServerConnectionServerChannelPath(serverConnectionSystem, "/dev/shm/registration-form");
+	if(!connectToServer(serverConnectionSystem)){
 		fprintf(stdout, "failed serverConnectionSystem\n");
 		ret 0;
 	}
 	{
-		uint i;
-/*!
-		SetMagicNumberRequest setMagicNumberRequest;
-		setMagicNumberRequest.magicNumber = 123;
-*/
-		sendServerRequest(&serverConnectionSystem, ENABLE_EXTENSION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 0);
-		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 1);
-		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 2);
-		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 3);
-		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 4);
-		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 5);
-		/*! sendServerRequest(&serverConnectionSystem, SET_MAGIC_NUMBER_SERVER_REQUEST_TYPE, 0, &setMagicNumberRequest, sizeof(SetMagicNumberRequest),  true, token + 5); */
-		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 6);
-		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 7);
-		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 8);
-		/*! sendServerRequest(&serverConnectionSystem, GET_MAGIC_NUMBER_SERVER_REQUEST_TYPE, 0,                   NULL,                             0,  true, token + 9); */
-		sendServerRequest(&serverConnectionSystem,     NO_OPERATION_SERVER_REQUEST_TYPE, 0,                   NULL,                             0, false, token + 9);
-		flushServerBuffer(&serverConnectionSystem);
-		for(i = 0; i < countof(token); inc i){
-			uint ii = i;
-			GenericReply genericReply;
-			waitForServerReply(&serverConnectionSystem, *(token + ii), &genericReply);
-			fprintf(stdout, "got response on %i\n", ii);
-/*!
-			if(genericReply.replyType == GET_MAGIC_NUMBER_SERVER_REPLY_TYPE){
-				GetMagicNumberReply *const getMagicNumberReply = (void *)&genericReply;
-				fprintf(stdout, "%u: value got: %u\n", ii, (*getMagicNumberReply).magicNumber);
-			}
-*/
+		uint32 token;
+		uint32 baseServerExtensionId;
+		{
+			#define PATH /*-*/ "/tmp/base-server-extension/output/base-server-extension.so"
+			EnableExtensionReply enableExtensionReply;
+			requestServerEnableExtension(serverConnectionSystem, lengthof(PATH) + 1, PATH, &token);
+			flushServerBuffer(serverConnectionSystem);
+			waitForServerReply(serverConnectionSystem, token, &enableExtensionReply);
+			baseServerExtensionId = enableExtensionReply.extensionId;
+			#undef  PATH
+		}
+		{
+			const uint32 magicNumber = 123;
+			GetMagicNumberBaseReply getMagicNumberBaseReply;
+			requestBaseSetMagicNumber(serverConnectionSystem, baseServerExtensionId, magicNumber, NULL);
+			requestBaseGetMagicNumber(serverConnectionSystem, baseServerExtensionId, &token);
+			flushServerBuffer(serverConnectionSystem);
+			waitForServerReply(serverConnectionSystem, token, &getMagicNumberBaseReply);
+			fprintf(stdout, "\twe got the %s number back\n", getMagicNumberBaseReply.magicNumber == magicNumber? "right" : "wrong");
 		}
 		jmp eventLoop;
 	}
 	eventLoop:{
-		GenericEvent event;
 		fprintf(stdout, "waiting on event\n");
-		waitForServerEvent(&serverConnectionSystem, &event);
-		if(!serverConnectionSystem.hasError){
+		flushServerBuffer(serverConnectionSystem);
+		if(!waitForServerEvent(serverConnectionSystem, &event)){
+			fprintf(stdout, "wait for server event woke\n");
+			if((*serverConnectionSystem).hasError){
+				jmp emergencyExit;
+			}
 			jmp eventLoop;
 		}
-		jmp emergencyExit;
+		fprintf(stdout, "wait for server event woke\n");
+		jmp switchEvent;
+	}
+	switchEvent:{
+		switch(event.eventType){
+			to NONE_SERVER_EVENT_TYPE: /*-*/ jmp eventLoop;
+			off: /*-----------------------*/ jmp eventLoop;
+		}
 	}
 	emergencyExit:{
 		uint32 token;
-		fprintf(stdout, "leaving\n");
-		sendServerRequest(&serverConnectionSystem, SYNC_SERVER_REQUEST_TYPE, 0, NULL, 0, true, &token);
-		flushServerBuffer(&serverConnectionSystem);
-		waitForServerReply(&serverConnectionSystem, token, NULL);
-		disconnectFromServer(&serverConnectionSystem);
-		finiServerConnection(&serverConnectionSystem);
+		requestServerSync(serverConnectionSystem, &token);
+		flushServerBuffer(serverConnectionSystem);
+		waitForServerReply(serverConnectionSystem, token, NULL);
+		disconnectFromServer(serverConnectionSystem);
+		finiServerConnection(serverConnectionSystem);
 		fprintf(stdout, "done\n");
 		ret 0;
 	}

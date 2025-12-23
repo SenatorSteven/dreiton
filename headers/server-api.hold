@@ -26,37 +26,60 @@ SOFTWARE. */
 #ifndef SERVER_API_HOLD
 #define SERVER_API_HOLD
 
-#define HEADER
-
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
-#include "cold/cold.hold"
+#include "headers/cold/cold.hold"
 #endif
+
+#define SERVER_PROTOCOL_VERSION /*-*/ (1)
+
+#define NONE_SERVER_EXTENSION /*---*/ (0)
+
+#define NONE_REPLY_STATUS /*-------*/ (b(00))
+#define SUCCESS_REPLY_STATUS /*----*/ (b(01))
+#define UPDATED_REPLY_STATUS /*----*/ (b(10))
+
+def struct{
+	uint32 /*-------*/ token;
+	uint8 /*--------*/ requestType;
+	uint8 /*--------*/ extension;
+	bool /*---------*/ sendReply;
+	uint8 /*--------*/ pad0[1];
+	uint32 /*-------*/ payloadStartOffset;
+	uint32 /*-------*/ payloadSize;
+} GenericRequest;
 
 /*! lower sizes later? all are sized 8 * sizeof(uint64) */
 
 def struct{
-	uint32 /*-*/ token;
-	uint8 /*--*/ requestType;
-	uint8 /*--*/ extension;
-	bool /*---*/ sendReply;
-	uint8 /*--*/ pad0[57];
-} GenericRequest;
-
-def struct{
-	uint32 /*-*/ token;
-	uint8 /*--*/ replyType;
-	uint8 /*--*/ pad0[59];
+	uint32 /*-------*/ replySize;
+	uint32 /*-------*/ token;
+	uint8 /*--------*/ replyType;
+	uint8 /*--------*/ status;
+	uint8 /*--------*/ pad0[54];
 } GenericReply;
 
 def struct{
-	uint8 /*--*/ eventType;
-	uint8 /*--*/ pad0[63];
+	uint32 /*-------*/ eventSize;
+	uint8 /*--------*/ eventType;
+	uint8 /*--------*/ pad0[59];
 } GenericEvent;
+
+def struct{
+	uint32 /*-------*/ descriptorSize;
+	uint32 /*-------*/ protocolVersion;
+	uint32 /*-------*/ extensionVersion;
+	uint32 /*-------*/ nameSize;
+	const char * /*-*/ name;
+	bool /*---------*/ (*initServerExtensionDescriptorSystem)(void);
+	bool /*---------*/ (*parseExtensionRequest)(const GenericRequest *const request, const uint32 itemAmount, uint8 *const statusReturn);
+	bool /*---------*/ (*parseExtensionReply)(const uint8 replyType, GenericReply *const replyReturn);
+	bool /*---------*/ (*finiServerExtensionDescriptorSystem)(void);
+} ServerExtensionDescriptor;
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED
-#include "cold/hot.hold"
+#include "headers/cold/hot.hold"
 #endif
 
 #endif

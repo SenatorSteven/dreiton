@@ -6,12 +6,12 @@ true=1;
 false=0;
 
 function main(){
-	[ $true        ] && { local name="base-server-extension";                                                } || :;
-	[ $true        ] && { local folder="/tmp/$name";                                                         } || :;
-	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2;                   return 1; } || :;
-	[ $true        ] && { rm -rf "$folder";                                                                  } || :;
-	[ $true        ] && { mkdir -p "$folder/output";                                                         } || :;
-	[ $true        ] && { gcc -fPIC -shared -x c -o "$folder/output/$name.so" "source/$name.cold"; return 0; } || :;
+	[ $true        ] && { local name="base-server-extension";                                                           } || :;
+	[ $true        ] && { local folder="/tmp/$name";                                                                    } || :;
+	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2;                              return 1; } || :;
+	[ $true        ] && { rm -rf "$folder";                                                                             } || :;
+	[ $true        ] && { mkdir -p "$folder/output";                                                                    } || :;
+	[ $true        ] && { gcc "-I$(pwd)" -fPIC -shared -x c -o "$folder/output/$name.so" "source/$name.cold"; return 0; } || :;
 
 
 

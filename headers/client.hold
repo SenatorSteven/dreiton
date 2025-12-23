@@ -26,9 +26,17 @@ SOFTWARE. */
 #ifndef CLIENT_HOLD
 #define CLIENT_HOLD
 
-#define HEADER
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
 
 /*!*/
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
 
 #endif
 

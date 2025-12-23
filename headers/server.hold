@@ -26,18 +26,16 @@ SOFTWARE. */
 #ifndef SERVER_HOLD
 #define SERVER_HOLD
 
-#define HEADER
-
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
-#include "../../headers/cold/cold.hold"
+#include "headers/cold/cold.hold"
 #endif
 
 /*!*/
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED
-#include "../../headers/cold/hot.hold"
+#include "headers/cold/hot.hold"
 #endif
 
 #endif
