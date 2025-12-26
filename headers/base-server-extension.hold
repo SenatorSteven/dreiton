@@ -51,29 +51,22 @@ SOFTWARE. */
 #define NONE_BASE_EVENT_TYPE_MASK /*-----------------*/ (b(0))
 
 def struct{
-	uint8 /*----*/ pad0[1];
+	uint8 /*--------*/ pad0[1];
 } GetMagicNumberBaseRequest;
 
 def struct{
-	uint32 /*---*/ magicNumberSize;
-	uint8 /*----*/ pad0[4];
-	uint32 * /*-*/ magicNumberStart;
+	uint32 /*-------*/ magicNumberSize;
+	uint8 /*--------*/ pad0[4];
+	uint32 * /*-----*/ magicNumberStart;
 } SetMagicNumberBaseRequest;
 
 def struct{
-	uint32 /*---*/ replySize;
-	uint32 /*---*/ token;
-	uint8 /*----*/ replyType;
-	uint8 /*----*/ status;
-	uint8 /*----*/ pad0[2];
-	uint32 /*---*/ magicNumber;
+	GenericReply /*-*/ reply;
+	uint32 /*-------*/ magicNumber;
 } GetMagicNumberBaseReply;
 
 def struct{
-	uint32 /*---*/ replySize;
-	uint32 /*---*/ token;
-	uint8 /*----*/ replyType;
-	uint8 /*----*/ status;
+	GenericReply /*-*/ reply;
 } SetMagicNumberBaseReply;
 
 #ifdef  COLD_INCLUDED

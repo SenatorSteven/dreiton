@@ -2,7 +2,7 @@
 /*!
 	add counter representing how many clients use an extension.
 
-	unloading should happen per client close. the client loads, the counter goes up, the counter goes up on client close. if 0, unload.
+	unloading should happen per client close. the client loads, the counter goes up, the counter goes down on client close. if 0, unload.
 */
 
 /*!
@@ -10,15 +10,11 @@
 */
 
 /*!
-	lower the registration loop down the totem pole of importance: tell the reply loop to sign up the client itself, as if it was a request.
-
-	something like that might also be wrong in other ways the threads communicate. fix that too.
+	max client amount?
 */
 
 /*!
-	allocate about 16kib for a max of 256 requests.
-
-	do the same for replies and events. do the math.
+	add generations and other data to extensions, as well as the clients.
 */
 
 
@@ -99,7 +95,6 @@ INITSERVERSYSTEM(){
 	}
 	(*serverSystem).serverChannelPath = NULL;
 	(*serverSystem).clientChannelPath = NULL;
-	(*serverSystem).database = NULL;
 	(*serverSystem).serverExtensionStart = NULL;
 	(*serverSystem).serverExtensionSize = 0;
 	(*serverSystem).serverExtensionAllocated = 0;
@@ -111,13 +106,25 @@ INITSERVERSYSTEM(){
 	(*serverSystem).replyEpollFd = 0;
 	(*serverSystem).eventEpollFd = 0;
 	(*serverSystem).signalFd = 0;
-	(*serverSystem).serverClientId = 0;
 	(*serverSystem).replyLoopRunning = false;
 	(*serverSystem).eventLoopRunning = false;
-	(*serverSystem).clientRegistrationRunning = false;
+	(*serverSystem).registrationLoopRunning = false;
 	(*serverSystem).replyLoopThreadCreated = false;
 	(*serverSystem).eventLoopThreadCreated = false;
-	(*serverSystem).clientRegistrationThreadCreated = false;
+	(*serverSystem).registrationLoopThreadCreated = false;
+
+
+
+	(*serverSystem).registrationEventFd = 0;
+	(*serverSystem).registrationEpollFd = 0;
+	(*serverSystem).replyEventFd = 0;
+	(*serverSystem).clientOffset = 0;
+	*((*serverSystem).fdCopy + 0) = 0;
+	*((*serverSystem).fdCopy + 1) = 0;
+	*((*serverSystem).fdCopy + 2) = 0;
+
+
+
 	ret true;
 }
 SETSERVERSERVERCHANNELPATH(){
@@ -138,16 +145,6 @@ SETSERVERCLIENTCHANNELPATH(){
 		ret false;
 	}
 	(*serverSystem).clientChannelPath = clientChannelPath;
-	ret true;
-}
-SETSERVERDATABASE(){
-	if(!serverSystem){
-		ret false;
-	}
-	if(database == (*serverSystem).database){
-		ret false;
-	}
-	(*serverSystem).database = database;
 	ret true;
 }
 SETSERVEREXTENSIONBLOCKSIZE(){
@@ -200,17 +197,17 @@ BOOTSERVEREVENTLOOPTHREAD(){
 	}
 	ret true;
 }
-BOOTSERVERCLIENTREGISTRATIONTHREAD(){
+BOOTSERVERREGISTRATIONLOOPTHREAD(){
 	if(!serverSystem){
 		ret false;
 	}
-	if((*serverSystem).clientRegistrationThreadCreated or (*serverSystem).clientRegistrationRunning){
+	if((*serverSystem).registrationLoopThreadCreated or (*serverSystem).registrationLoopRunning){
 		ret false;
 	}
-	(*serverSystem).clientRegistrationRunning = true;
-	(*serverSystem).clientRegistrationThreadCreated = pthread_create(&(*serverSystem).clientRegistrationThread, NULL, &serverClientRegistrationLoop, serverSystem) == PTHREAD_CREATE_SUCCESS;
-	if(!(*serverSystem).clientRegistrationThreadCreated){
-		(*serverSystem).clientRegistrationRunning = false;
+	(*serverSystem).registrationLoopRunning = true;
+	(*serverSystem).registrationLoopThreadCreated = pthread_create(&(*serverSystem).registrationLoopThread, NULL, &serverRegistrationLoop, serverSystem) == PTHREAD_CREATE_SUCCESS;
+	if(!(*serverSystem).registrationLoopThreadCreated){
+		(*serverSystem).registrationLoopRunning = false;
 		ret false;
 	}
 	ret true;
@@ -245,48 +242,48 @@ BOOTSERVERCLIENTREGISTRATIONTHREAD(){
 /*! demon area on */
 
 SERVERREPLYLOOP(){
+
+	/*! success when? */
+
 	ServerSystem *const serverSystem = arg;
-	struct epoll_event eventStart[512];
+	int replyEpollFd;
 	bool success;
 	if(!serverSystem){
 		ret NULL;
 	}
+	replyEpollFd = 0;
 	success = false;
+	if((*serverSystem).replyEpollFd){
+		jmp emergencyExit;
+	}
 	if(!(*serverSystem).replyLoopThreadCreated){
 		(*serverSystem).replyLoopRunning = true;
 	}
-	if((*serverSystem).replyEpollFd){
-		if(!(*serverSystem).replyLoopThreadCreated){
-			(*serverSystem).replyLoopRunning = false;
-		}
-		ret NULL;
+	replyEpollFd = epoll_create1(NONE_EPOLL_FLAG);
+	if(replyEpollFd == EPOLL_CREATE1_FAILURE){
+		replyEpollFd = 0;
+		jmp emergencyExit;
 	}
-	(*serverSystem).replyEpollFd = epoll_create1(NONE_EPOLL_FLAG); /*! errors? */
-	if((*serverSystem).replyEpollFd == EPOLL_CREATE1_FAILURE){
-		(*serverSystem).replyEpollFd = 0;
-		if(!(*serverSystem).replyLoopThreadCreated){
-			(*serverSystem).replyLoopRunning = false;
-		}
-		ret NULL;
-	}
+	(*serverSystem).replyEpollFd = replyEpollFd;
 	jmp replyLoop;
 	replyLoop:{
-		const int eventAmount = epoll_wait((*serverSystem).replyEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
-		const struct epoll_event *eventCurrent;
-		const struct epoll_event *eventWall;
+		struct epoll_event eventStart[128];
+		int eventAmount = epoll_wait(replyEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
+		struct epoll_event *eventCurrent;
+		struct epoll_event *eventWall;
 		if(!(*serverSystem).replyLoopRunning){
 			jmp emergencyExit;
 		}
 		eventCurrent = eventStart;
 		eventWall = eventCurrent + eventAmount;
-		jmp clientRequestLoop;
-		clientRequestLoop:{
+		jmp parseRequestLoop;
+		parseRequestLoop:{
 			if(eventCurrent < eventWall){
 				const int fd = (*eventCurrent).data.fd;
-				if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP)){
-					jmp closeConnection;
-				}
-				if((*eventCurrent).events & EPOLLERR){
+				if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+					if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP)){
+						jmp closeConnection;
+					}
 					jmp closeConnection;
 				}
 				if((*eventCurrent).events & EPOLLIN){
@@ -294,65 +291,143 @@ SERVERREPLYLOOP(){
 					readRequestLoop:{
 						uint64 message;
 						int returnValue = read(fd, &message, sizeof(message));
-						if(returnValue > 0){
-							const uint32 id = message >> 32; /*! update */
-							/*! add generation? */
-							const uint8 requestAmount = message;
-							ServerClient *serverClient;
-							if(!requestAmount){
-								jmp closeConnection;
-							}
-							serverClient = findServerClientFdId(serverSystem, fd, id);
-							if(serverClient){
-								parseServerClientRequests(serverSystem, serverClient, requestAmount);
-							}else{
-								/*! error in communication or bad actor? */
-							}
-						}elif(returnValue == -1){
-							if(errno == EINTR){
-								jmp readRequestLoop;
-							}
-							if(errno != EAGAIN and errno != EWOULDBLOCK){
-								jmp closeConnection;
-							}
-						}else{
-							jmp closeConnection;
-							closeConnection:{
-								ServerClient *const serverClient = findServerClientFd(serverSystem, fd);
+						if(fd != (*serverSystem).registrationEventFd){
+
+
+
+
+
+
+
+
+
+							if(returnValue > 0){
+								const uint32 id = message >> 32; /*! update */
+								/*! add generation? */
+								const uint8 requestAmount = message;
+								ServerClient *serverClient;
+								if(!requestAmount){
+									jmp closeConnection;
+								}
+								serverClient = findServerClientFdId(serverSystem, fd, id);
 								if(serverClient){
-
-
-
-									/*! I AM RESPONSIBLE FOR ADDING AND REMOVING CLIENTS FROM THE BUFFER, the thread said calmly */
-
-									/*! remove the client from the buffer */
-
-									fprintf(stdout, "disconnected %u\n", (*serverClient).serverClientId);
-									epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_DEL, (*serverClient).serverRequestReadFd, NULL); /*! errors? */
-									shmctl((*serverClient).shmId, IPC_RMID, NULL); /*! errors? */
-									shmdt((*serverClient).shmStart); /*! errors? */
-									close((*serverClient).serverRequestReadFd); /*! on signal interrupt? */
-									close((*serverClient).serverClientReplyWriteFd); /*! on signal interrupt? */
-									close((*serverClient).serverClientEventWriteFd); /*! on signal interrupt? */
-									(*serverClient).serverClientId = 0;
-
-
-
+									parseServerClientRequests(serverSystem, serverClient, requestAmount);
+								}else{
+									fprintf(stdout, "could not find the client\n");
+									/*! error in communication or bad actor? */
+								}
+							}elif(returnValue == -1){
+								if(errno == EINTR){
+									jmp readRequestLoop;
+								}
+								if(errno != EAGAIN and errno != EWOULDBLOCK){
+									jmp closeConnection;
+								}
+							}else{
+								jmp closeConnection;
+								closeConnection:{
+									ServerClient *const serverClient = findServerClientFd(serverSystem, fd);
+									if(serverClient){
+										removeServerClient(serverSystem, serverClient);
+										fprintf(stdout, "disconnected %u\n", (*serverClient).clientId);
+									}
 								}
 							}
+
+
+
+
+
+
+
+
+
+						}else{
+
+
+
+
+
+
+
+
+
+							if(returnValue > 0){
+
+								/*!*/
+
+							}elif(returnValue == -1){
+								if(errno == EINTR){
+									jmp readRequestLoop;
+								}
+
+								/*!*/
+
+							}else{
+
+								/*!*/
+
+							}
+
+
+
+							if(!(*serverSystem).replyEventFd){
+								struct epoll_event event;
+								(*serverSystem).replyEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+								event.events = EPOLLIN;
+								event.data.fd = (*serverSystem).replyEventFd;
+								epoll_ctl((*serverSystem).registrationEpollFd, EPOLL_CTL_ADD, (*serverSystem).replyEventFd, &event); /*! errors? */
+							}
+
+
+
+							if(!insertServerClient(serverSystem, *((*serverSystem).fdCopy + 0), *((*serverSystem).fdCopy + 1), *((*serverSystem).fdCopy + 2))){
+								*((*serverSystem).fdCopy + 0) = 0;
+								*((*serverSystem).fdCopy + 1) = 0;
+								*((*serverSystem).fdCopy + 2) = 0;
+								jmp insertClientFailure;
+								insertClientFailure:{
+									const uint64 value = 1;
+									(*serverSystem).clientOffset = 0;
+									write((*serverSystem).replyEventFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+									inc eventCurrent;
+									jmp parseRequestLoop;
+								}
+							}
+							*((*serverSystem).fdCopy + 0) = 0;
+							*((*serverSystem).fdCopy + 1) = 0;
+							*((*serverSystem).fdCopy + 2) = 0;
+							{
+								const uint64 value = 1;
+								(*serverSystem).clientOffset = (*serverSystem).serverClientAllocated - 1; /*! update when stack are in use */
+								write((*serverSystem).replyEventFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+							}
+							inc eventCurrent;
+							jmp parseRequestLoop;
+
+
+
+
+
+
+
+
+
 						}
 					}
 				}
 				inc eventCurrent;
-				jmp clientRequestLoop;
+				jmp parseRequestLoop;
 			}
 			jmp replyLoop;
 		}
 	}
 	emergencyExit:{
-		removeAllServerClients(serverSystem); /*! why are we doing this here, other than because the epoll is not yet lost? */
-		close((*serverSystem).replyEpollFd); /*! on signal interrupt? */
-		(*serverSystem).replyEpollFd = 0;
+		removeAllServerClients(serverSystem);
+		if(replyEpollFd){
+			close(replyEpollFd); /*! on signal interrupt? */
+			(*serverSystem).replyEpollFd = 0;
+		}
 		if(!(*serverSystem).replyLoopThreadCreated){
 			(*serverSystem).replyLoopRunning = false;
 		}
@@ -363,75 +438,116 @@ SERVERREPLYLOOP(){
 	}
 }
 SERVEREVENTLOOP(){
+
+	/*! success when? */
+
 	ServerSystem *const serverSystem = arg;
-	struct epoll_event eventStart[1024];
+	int eventEpollFd;
 	bool success;
 	if(!serverSystem){
 		ret NULL;
 	}
+	eventEpollFd = 0;
 	success = false;
+	if((*serverSystem).eventEpollFd){
+		jmp emergencyExit;
+	}
 	if(!(*serverSystem).eventLoopThreadCreated){
 		(*serverSystem).eventLoopRunning = true;
 	}
-	if((*serverSystem).eventEpollFd){
-		if(!(*serverSystem).eventLoopThreadCreated){
-			(*serverSystem).eventLoopRunning = false;
-		}
-		ret NULL;
+	eventEpollFd = epoll_create1(NONE_EPOLL_FLAG);
+	if(eventEpollFd == EPOLL_CREATE1_FAILURE){
+		eventEpollFd = 0;
+		jmp emergencyExit;
 	}
-	(*serverSystem).eventEpollFd = epoll_create1(NONE_EPOLL_FLAG); /*! errors? */
-	if((*serverSystem).eventEpollFd == EPOLL_CREATE1_FAILURE){
-		(*serverSystem).eventEpollFd = 0;
-		if(!(*serverSystem).eventLoopThreadCreated){
-			(*serverSystem).eventLoopRunning = false;
-		}
-		ret NULL;
-	}
+	(*serverSystem).eventEpollFd = eventEpollFd;
 	jmp eventLoop;
 	eventLoop:{
-		const int eventAmount = epoll_wait((*serverSystem).eventEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
-		const struct epoll_event *eventCurrent;
-		const struct epoll_event *eventWall;
-		uint64 requestValue;
-		int returnValue;
+		struct epoll_event eventStart[1];
+		int eventAmount = epoll_wait(eventEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
+		struct epoll_event *eventCurrent;
+		struct epoll_event *eventWall;
 		if(!(*serverSystem).eventLoopRunning){
 			jmp emergencyExit;
 		}
-		(void)eventAmount;
-		(void)eventCurrent;
-		(void)eventWall;
-		(void)requestValue;
-		(void)returnValue;
+		eventCurrent = eventStart;
+		eventWall = eventCurrent + eventAmount;
+		jmp parseEventLoop;
+		parseEventLoop:{
+			if(eventCurrent < eventWall){
+				const int fd = (*eventCurrent).data.fd;
 
 
 
 #ifdef a
-		returnValue = read((*serverClient).serverRequestReadFd, &requestValue, sizeof(requestValue));
-		fprintf(stdout, "got event with %lu\n", requestValue);
-		/*! store all clients that are interested in specific events separately and send them a message each whenever an event happens */
-		{
-			ServerEvent *e = (*serverSystem).eventStart + eventId;
-			uint i = 0;
-			jmp sendClientEventLoop;
-			sendClientEventLoop:{
-				if(i < (*e).count){
-					const uint serverclientId = *((*e).subscribers + i);
-					ServerClient *serverClient = (*serverSystem).serverClientStart + serverClientId;
-					/*! pass the event over */
-					inc i;
-					jmp sendClientEventLoop;
+				if(fd != /*! local-to-the-server event fd */){
+					jmp eventLoop;
 				}
-			}
-		}
 #endif
 
 
 
-		jmp eventLoop;
+				if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+					if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP)){
+
+
+
+						/*!*/
+
+
+
+					}
+
+
+
+					/*!*/
+
+
+
+				}
+				if((*eventCurrent).events & EPOLLIN){
+					jmp readGeneratedEventLoop;
+					readGeneratedEventLoop:{
+						uint64 message;
+						int returnValue = read(fd, &message, sizeof(message));
+						if(returnValue > 0){
+
+
+
+							/*!*/
+
+
+
+						}elif(returnValue == -1){
+
+
+
+							/*!*/
+
+
+
+						}else{
+
+
+
+							/*!*/
+
+
+
+						}
+					}
+				}
+				inc eventCurrent;
+				jmp parseEventLoop;
+			}
+			jmp eventLoop;
+		}
 	}
 	emergencyExit:{
-		close((*serverSystem).eventEpollFd); /*! on signal interrupt? */
-		(*serverSystem).eventEpollFd = 0;
+		if(eventEpollFd){
+			close(eventEpollFd); /*! on signal interrupt? */
+			(*serverSystem).eventEpollFd = 0;
+		}
 		if(!(*serverSystem).eventLoopThreadCreated){
 			(*serverSystem).eventLoopRunning = false;
 		}
@@ -441,22 +557,30 @@ SERVEREVENTLOOP(){
 		ret serverSystem;
 	}
 }
-SERVERCLIENTREGISTRATIONLOOP(){
+SERVERREGISTRATIONLOOP(){
 	ServerSystem *const serverSystem = arg;
+	int registrationEpollFd;
 	int socketConnection;
 	struct sockaddr_un address;
 	bool success;
 	if(!serverSystem){
 		ret NULL;
 	}
+	registrationEpollFd = 0;
 	socketConnection = 0;
 	success = false;
-	if(!(*serverSystem).clientRegistrationThreadCreated){
-		(*serverSystem).clientRegistrationRunning = true;
-	}
-	if(!(*serverSystem).serverChannelPath or !(*serverSystem).clientChannelPath){
+	if(!(*serverSystem).serverChannelPath or !(*serverSystem).clientChannelPath or (*serverSystem).registrationEpollFd){
 		jmp emergencyExit;
 	}
+	if(!(*serverSystem).registrationLoopThreadCreated){
+		(*serverSystem).registrationLoopRunning = true;
+	}
+	registrationEpollFd = epoll_create1(NONE_EPOLL_FLAG);
+	if(registrationEpollFd == EPOLL_CREATE1_FAILURE){
+		registrationEpollFd = 0;
+		jmp emergencyExit;
+	}
+	(*serverSystem).registrationEpollFd = registrationEpollFd;
 	jmp createServerClientChannelPath;
 	createServerClientChannelPath:{
 		FILE *const file = fopen((*serverSystem).clientChannelPath, "w");
@@ -464,24 +588,19 @@ SERVERCLIENTREGISTRATIONLOOP(){
 			jmp emergencyExit;
 		}
 		fclose(file);
-		jmp createServerClientRegistrationConnection;
+		jmp createServerRegistrationLoopConnection;
 	}
-	createServerClientRegistrationConnection:{
-
-
-
-		/*!*/
-
-		uint concurrentConnectionAmount = 128;
-
-
-
-		socketConnection = socket(AF_UNIX, SOCK_STREAM, NONE_SOCKET_PROTOCOL);
+	createServerRegistrationLoopConnection:{
+		uint concurrentConnectionAmount = 128; /*! parameterize */
+		socketConnection = socket(AF_UNIX, SOCK_STREAM, NONE_SOCKET_PROTOCOL); /*! errors? */
+		if(socketConnection == SOCKET_FAILURE){
+			jmp emergencyExit;
+		}
 		address.sun_family = AF_UNIX;
 		strcpy(address.sun_path, (*serverSystem).serverChannelPath);
-		unlink((*serverSystem).serverChannelPath);
-		bind(socketConnection, (void *)&address, sizeof(address));
-		listen(socketConnection, concurrentConnectionAmount);
+		unlink((*serverSystem).serverChannelPath); /*! errors? */
+		bind(socketConnection, (void *)&address, sizeof(address)); /*! errors? */
+		listen(socketConnection, concurrentConnectionAmount); /*! errors? */
 		jmp registrationLoop;
 	}
 	registrationLoop:{
@@ -489,136 +608,231 @@ SERVERCLIENTREGISTRATIONLOOP(){
 		int serverRequestReadFd;
 		int clientReplyWriteFd;
 		int clientEventWriteFd;
-		struct epoll_event event;
-		Header header;
-		ServerClient *serverClient;
-
-
-
-		uint64 generationClientId;
-
-
-
-		if(!(*serverSystem).clientRegistrationRunning){
+		if(!(*serverSystem).registrationLoopRunning){
 			close(clientSocket); /*! on signal interrupt? */
 			jmp emergencyExit;
 		}
-
-
-
-		if((*serverSystem).serverClientAllocated == (*serverSystem).serverClientSize){
-			void *temp;
-			if(!(*serverSystem).serverClientBlockSize){
-				close(clientSocket); /*! on signal interrupt? */
-				jmp registrationLoop;
-			}
-			(*serverSystem).serverClientSize += (*serverSystem).serverClientBlockSize;
-			temp = realloc((*serverSystem).serverClientStart, (*serverSystem).serverClientSize * sizeof(ServerClient));
-			if(!temp){
-				(*serverSystem).serverClientSize -= (*serverSystem).serverClientBlockSize;
-				close(clientSocket); /*! on signal interrupt? */
-				jmp registrationLoop;
-			}
-			(*serverSystem).serverClientStart = temp;
+		if(!(*serverSystem).replyEpollFd){
+			close(clientSocket); /*! on signal interrupt? */
+			jmp registrationLoop;
 		}
-
-
-
-		/*! error checking? also update server protocol for such things, to avoid freezing. */
-
 		{
 			int fd[3];
-			receiveFd(clientSocket, countof(fd), fd);
+			if(!receiveFd(clientSocket, countof(fd), fd)){ /*! errors? client might not send, how to mitigate? */
+				close(clientSocket); /*! on signal interrupt? */
+				jmp registrationLoop;
+			}
 			serverRequestReadFd = *(fd + 0);
 			clientReplyWriteFd = *(fd + 1);
 			clientEventWriteFd = *(fd + 2);
 		}
-
-		/*! might want to remove this if i change the looping of the read() in main */
-
 		{
-			int flags = fcntl(serverRequestReadFd, F_GETFL, 0); /*! errors? */
-			fcntl(serverRequestReadFd, F_SETFL, flags | O_NONBLOCK); /*! errors? also why pick these ones? */
+			const int flag = fcntl(serverRequestReadFd, F_GETFL, 0); /*! errors? */
+			int returnValue;
+			if(flag == FCNTL_FAILURE){
+				close(clientEventWriteFd); /*! errors? */
+				close(clientReplyWriteFd); /*! errors? */
+				close(serverRequestReadFd); /*! errors? */
+				close(clientSocket); /*! on signal interrupt? */
+				jmp registrationLoop;
+			}
+			returnValue = fcntl(serverRequestReadFd, F_SETFL, flag | O_NONBLOCK); /*! errors? also why pick these ones? */
+			if(returnValue == FCNTL_FAILURE){
+				close(clientEventWriteFd); /*! errors? */
+				close(clientReplyWriteFd); /*! errors? */
+				close(serverRequestReadFd); /*! errors? */
+				close(clientSocket); /*! on signal interrupt? */
+				jmp registrationLoop;
+			}
 		}
 
+
+
+
+
+
+
+
+
+		/*!*/
+
 		{
+			struct epoll_event event;
 			event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
 			event.data.fd = serverRequestReadFd;
 			epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_ADD, serverRequestReadFd, &event); /*! errors? */
 		}
 
-		/*! update the id sent back to have a generation */
-
-		generationClientId = (*serverSystem).serverClientAllocated;
 
 
+		if(!(*serverSystem).registrationEventFd){
+			struct epoll_event event;
+			(*serverSystem).registrationEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+			event.events = EPOLLIN;
+			event.data.fd = (*serverSystem).registrationEventFd;
+			epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_ADD, (*serverSystem).registrationEventFd, &event); /*! errors? */
+		}
+		{
+			const uint64 value = 1;
+			*((*serverSystem).fdCopy + 0) = serverRequestReadFd;
+			*((*serverSystem).fdCopy + 1) = clientReplyWriteFd;
+			*((*serverSystem).fdCopy + 2) = clientEventWriteFd;
+			write((*serverSystem).registrationEventFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+		}
 
-		header.requestSlotSize = 256; /*!*/
-		header.requestSize = 16 * 1024; /*!*/
-		header.replySize = 256; /*!*/
-		header.eventSize = 256; /*!*/
-		header.requestSlotStartOffset = 0 + sizeof(Header);
-		header.requestStartOffset = header.requestSlotStartOffset + header.requestSlotSize * sizeof(RequestSlot);
-		header.replyStartOffset = header.requestStartOffset + header.requestSize * sizeof(uint8);
-		header.eventStartOffset = header.replyStartOffset + header.replySize * sizeof(GenericReply);
-		header.currentWriterRequest = 0;
-		header.currentReaderRequest = 0;
-		header.currentWriterReply = 0;
-		header.currentReaderReply = 0;
-		header.currentWriterEvent = 0;
-		header.currentReaderEvent = 0;
-		header.generationClientId = generationClientId;
-		inc (*serverSystem).serverClientId;
+
 
 		{
-			const int shmKey = ftok((*serverSystem).clientChannelPath, (*serverSystem).serverClientId); /*! writeFileToKey() function. the lower 0x(F)FFF is the number given here */
-			const int shmId = shmget(shmKey, sizeof(Header) + header.requestSlotSize * sizeof(RequestSlot) + header.requestSize * sizeof(uint8) + header.replySize * sizeof(GenericReply) + header.eventSize * sizeof(GenericEvent), IPC_CREAT | 0666); /*! error? */
-			Header *shmStart = shmat(shmId, NULL, SHM_NONE); /*! error? */
-			serverClient = (*serverSystem).serverClientStart + (*serverSystem).serverClientAllocated;
-			(*serverClient).shmStart = shmStart;
-			(*serverClient).requestSlotStart = (void *)((uint8 *)shmStart + header.requestSlotStartOffset);
-			(*serverClient).requestStart = (void *)((uint8 *)shmStart + header.requestStartOffset);
-			(*serverClient).replyStart = (void *)((uint8 *)shmStart + header.replyStartOffset);
-			(*serverClient).eventStart = (void *)((uint8 *)shmStart + header.eventStartOffset);
-			(*serverClient).shmId = shmId;
-			(*serverClient).serverRequestReadFd = serverRequestReadFd;
-			(*serverClient).serverClientReplyWriteFd = clientReplyWriteFd;
-			(*serverClient).serverClientEventWriteFd = clientEventWriteFd;
-			(*serverClient).serverClientId = (*serverSystem).serverClientId;
-			(*serverClient).generationClientId = generationClientId;
+			struct epoll_event eventStart[1];
+			uint64 message;
+			const int eventAmount = epoll_wait(registrationEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
+			int returnValue = read((*eventStart).data.fd, &message, sizeof(message));
+			(void)eventAmount;
+			(void)returnValue;
 		}
 
-		inc (*serverSystem).serverClientAllocated;
-		memcpy((*serverClient).shmStart, &header, sizeof(Header));
-		send(clientSocket, &(*serverClient).shmId, sizeof((*serverClient).shmId), 0); /*! error? */
+
+
+		if(!(*serverSystem).clientOffset){
+			const uint32 value = 0;
+			send(clientSocket, &value, sizeof(value), 0); /*! error? */
+		}else{
+			ServerClient *const serverClient = (*serverSystem).serverClientStart + (*serverSystem).clientOffset;
+			send(clientSocket, &(*serverClient).shmId, sizeof((*serverClient).shmId), 0); /*! error? */
+			(*serverSystem).clientOffset = 0;
+			fprintf(stdout, "connected %u on %i\n", (*serverClient).clientId, (*serverClient).shmId);
+			success = true;
+		}
+
+		/*!*/
+
+
+
+
+
+
+
+
+
 		close(clientSocket); /*! on signal interrupt? */
-		fprintf(stdout, "connected %u on %i\n", (*serverClient).serverClientId, (*serverClient).shmId);
 		jmp registrationLoop;
 	}
-
-
-
-	/*! when does return become true? */
-
-
-
 	emergencyExit:{
-		if(socketConnection){
-			close(socketConnection); /*! on signal interrupt? */
-		}
 		if((*serverSystem).serverChannelPath){
 			unlink((*serverSystem).serverChannelPath); /*! what do? */
+		}
+		if(socketConnection){
+			close(socketConnection); /*! on signal interrupt? */
 		}
 		if((*serverSystem).clientChannelPath){
 			unlink((*serverSystem).clientChannelPath); /*! what do? */
 		}
-		if(!(*serverSystem).clientRegistrationThreadCreated){
-			(*serverSystem).clientRegistrationRunning = false;
+		if(registrationEpollFd){
+			close(registrationEpollFd); /*! on signal interrupt? */
+			(*serverSystem).registrationEpollFd = 0;
+		}
+		if(!(*serverSystem).registrationLoopThreadCreated){
+			(*serverSystem).registrationLoopRunning = false;
 		}
 		if(!success){
 			ret NULL;
 		}
 		ret serverSystem;
+	}
+}
+INSERTSERVERCLIENT(){
+	ServerClient *serverClient;
+	uint64 clientId;
+	int shmKey;
+	int shmId;
+	Header *shmStart;
+	uint32 requestSlotSize;
+	uint32 replySlotSize;
+	uint32 eventSlotSize;
+	uint32 requestSize;
+	uint32 replySize;
+	uint32 eventSize;
+	Header header;
+	if(!serverSystem){
+		ret false;
+	}
+	if(!(*serverSystem).clientChannelPath or !serverRequestReadFd or !clientReplyWriteFd or !clientEventWriteFd){
+		ret false;
+	}
+	jmp insertClient;
+	insertClient:{
+		if((*serverSystem).serverClientAllocated == (*serverSystem).serverClientSize){
+			void *temp;
+			if(!(*serverSystem).serverClientBlockSize){
+				ret false;
+			}
+			(*serverSystem).serverClientSize += (*serverSystem).serverClientBlockSize;
+			temp = realloc((*serverSystem).serverClientStart, (*serverSystem).serverClientSize * sizeof(ServerClient));
+			if(!temp){
+				(*serverSystem).serverClientSize -= (*serverSystem).serverClientBlockSize;
+				ret false;
+			}
+			(*serverSystem).serverClientStart = temp;
+			if(!(*serverSystem).serverClientAllocated){
+				inc (*serverSystem).serverClientAllocated;
+				jmp insertClient;
+			}
+		}
+		clientId = (*serverSystem).serverClientAllocated;
+		requestSlotSize = 256; /*! parameterize */
+		replySlotSize = 256; /*! parameterize */
+		eventSlotSize = 256; /*! parameterize */
+		requestSize = 16 * 1024; /*! parameterize */
+		replySize = 16 * 1024; /*! parameterize */
+		eventSize = 16 * 1024; /*! parameterize */
+		shmKey = ftok((*serverSystem).clientChannelPath, clientId); /*! writeFileToKey() function. the lower 0x(F)FFF is the number given here */
+		shmId = shmget(shmKey, sizeof(Header) + requestSlotSize * sizeof(RequestSlot) + replySlotSize * sizeof(ReplySlot) + eventSlotSize * sizeof(EventSlot) + requestSize * sizeof(uint8) + replySize * sizeof(uint8) + eventSize * sizeof(uint8), IPC_CREAT | 0666);
+		if(!shmId){
+			ret false;
+		}
+		shmStart = shmat(shmId, NULL, SHM_NONE); /*! params? */
+		if(!shmStart){
+			ret false;
+		}
+		clientId = 0 | clientId; /*! update the id sent back to have a generation and maybe a unique part */
+		header.requestSlotSize = requestSlotSize;
+		header.requestSize = requestSize;
+		header.replySlotSize = replySlotSize;
+		header.replySize = replySize;
+		header.eventSlotSize = eventSlotSize;
+		header.eventSize = eventSize;
+		header.requestSlotStartOffset = 0 + sizeof(Header);
+		header.replySlotStartOffset = header.requestSlotStartOffset + requestSlotSize * sizeof(RequestSlot);
+		header.eventSlotStartOffset = header.replySlotStartOffset + replySlotSize * sizeof(ReplySlot);
+		header.requestStartOffset = header.eventSlotStartOffset + eventSlotSize * sizeof(EventSlot);
+		header.replyStartOffset = header.requestStartOffset + requestSize * sizeof(uint8);
+		header.eventStartOffset = header.replyStartOffset + replySize * sizeof(uint8);
+		header.requestCurrentWriter = 0;
+		header.requestCurrentReader = 0;
+		header.replyCurrentWriter = 0;
+		header.replyCurrentReader = 0;
+		header.eventCurrentWriter = 0;
+		header.eventCurrentReader = 0;
+		header.clientId = clientId;
+		serverClient = (*serverSystem).serverClientStart + (*serverSystem).serverClientAllocated;
+		(*serverClient).shmStart = shmStart;
+		(*serverClient).requestSlotStart = (void *)((uint8 *)shmStart + header.requestSlotStartOffset);
+		(*serverClient).replySlotStart = (void *)((uint8 *)shmStart + header.replySlotStartOffset);
+		(*serverClient).eventSlotStart = (void *)((uint8 *)shmStart + header.eventSlotStartOffset);
+		(*serverClient).requestStart = (void *)((uint8 *)shmStart + header.requestStartOffset);
+		(*serverClient).requestCurrent = (*serverClient).requestStart;
+		(*serverClient).replyStart = (void *)((uint8 *)shmStart + header.replyStartOffset);
+		(*serverClient).replyCurrent = (*serverClient).replyStart;
+		(*serverClient).eventStart = (void *)((uint8 *)shmStart + header.eventStartOffset);
+		(*serverClient).eventCurrent = (*serverClient).eventStart;
+		(*serverClient).shmId = shmId;
+		(*serverClient).serverRequestReadFd = serverRequestReadFd;
+		(*serverClient).serverClientReplyWriteFd = clientReplyWriteFd;
+		(*serverClient).serverClientEventWriteFd = clientEventWriteFd;
+		(*serverClient).clientId = clientId;
+		memcpy(shmStart, &header, sizeof(Header));
+		inc (*serverSystem).serverClientAllocated;
+		ret true;
 	}
 }
 
@@ -630,7 +844,7 @@ SERVERCLIENTREGISTRATIONLOOP(){
 
 
 
-#define UNPACKREQUESTITEMS() /*-*/ bool  unpackRequestItems(ServerSystem *const serverSystem, const GenericRequest *const request, const uint32 itemAmount, void **itemStartReturn, uint32 *itemSizeReturn)
+#define UNPACKREQUESTITEMS() /*-*/ bool  unpackRequestItems(ServerSystem *const serverSystem, const GenericRequest *const request, const uint32 itemAmount, const void **itemStartReturn, uint32 *itemSizeReturn)
 
 UNPACKREQUESTITEMS();
 
@@ -654,19 +868,21 @@ UNPACKREQUESTITEMS(){
 	sizeCurrent = (uint32 *)payloadStart + 1;
 	sizeWall = sizeCurrent + itemAmount;
 	pointerCurrent = (void *)(sizeCurrent + amount);
-	fprintf(stdout, "request @ ?\n");
+	/*! {
+		fprintf(stdout, "request @ ?\n");
+	} */
 	jmp unpackRequestItemLoop;
 	unpackRequestItemLoop:{
 		if(sizeCurrent < sizeWall){
-			fprintf(stdout, "\tvalue @ %u\n", *sizeCurrent);
-			{
+			/*! {
 				uint i;
+				fprintf(stdout, "\tvalue @ %u\n", *sizeCurrent);
 				fprintf(stdout, "\tdata @");
 				for(i = 0; i < *sizeCurrent; inc i){
 					fprintf(stdout, " %u", *(pointerCurrent + i));
 				}
 				fprintf(stdout, "\n");
-			}
+			} */
 			*itemStartReturn = pointerCurrent;
 			*itemSizeReturn = *sizeCurrent;
 			inc itemStartReturn;
@@ -675,7 +891,9 @@ UNPACKREQUESTITEMS(){
 			inc sizeCurrent;
 			jmp unpackRequestItemLoop;
 		}
-		fprintf(stdout, "\n");
+		/*! {
+			fprintf(stdout, "\n");
+		} */
 		ret true;
 	}
 }
@@ -688,20 +906,21 @@ UNPACKREQUESTITEMS(){
 
 
 
+/*! what happens when there is not enough space for the reply data to exist in? how do i handle that? maybe return the size via parseExtensionRequest()? */
+
 PARSESERVERCLIENTREQUESTS(){
 	uint current;
 	uint wall;
 	Header *header;
-	uint32 currentReaderRequest;
+	uint32 requestCurrentReader;
 	uint32 requestSlotSize;
-	Database *database;
-	uint32 currentWriterReply;
+	uint32 replyCurrentWriter;
 	uint32 replySize;
 	bool success;
 	if(!serverSystem){
 		ret false;
 	}
-	if(serverClient < (*serverSystem).serverClientStart or serverClient >= (*serverSystem).serverClientStart + (*serverSystem).serverClientAllocated or !(*serverClient).serverClientId or !requestAmount){
+	if(!isValidServerClient(serverSystem, serverClient) or !requestAmount){
 		ret false;
 	}
 
@@ -714,36 +933,37 @@ PARSESERVERCLIENTREQUESTS(){
 	current = 0;
 	wall = requestAmount;
 	header = (*serverClient).shmStart;
-	currentReaderRequest = (*header).currentReaderRequest;
+	requestCurrentReader = (*header).requestCurrentReader;
 	requestSlotSize = (*header).requestSlotSize;
-	database = (*serverSystem).database;
-	currentWriterReply = (*header).currentWriterReply;
+	replyCurrentWriter = (*header).replyCurrentWriter;
 	replySize = (*header).replySize;
 	success = false;
 	jmp parseServerClientRequestLoop;
 	parseServerClientRequestLoop:{
 		if(current < wall){
-			uint32 token;
 			uint8 requestType;
 			uint8 extension;
 			bool sendReply;
+			uint32 token;
 			uint8 status;
+			uint32 replyPayloadSize;
 			uint32 extensionId; /*! temporary variable for the enable extension request */
 			jmp processRequest;
 			processRequest:{
-				RequestSlot *const requestSlot = (*serverClient).requestSlotStart + currentReaderRequest;
+				RequestSlot *const requestSlot = (*serverClient).requestSlotStart + requestCurrentReader;
 				GenericRequest *const request = (void *)((uint8 *)(*serverClient).requestStart + (*requestSlot).requestStartOffset);
 				uint32 payloadStartOffset;
 				uint32 payloadSize;
 				uint32 itemAmount;
+				fprintf(stdout, "\nparsing request from client...\n");
 				if((*requestSlot).requestSize != sizeof(GenericRequest) or (*requestSlot).requestStartOffset + (*requestSlot).requestSize > (*header).requestSize or (*requestSlot).requestStartOffset + (*requestSlot).requestSize + (*request).payloadSize > (*header).requestSize){
-					currentReaderRequest = (currentReaderRequest + 1) % requestSlotSize;
+					requestCurrentReader = (requestCurrentReader + 1) % requestSlotSize;
 					jmp sendBadRequest;
 				}
-				token = (*request).token;
 				requestType = (*request).requestType;
 				extension = (*request).extension;
 				sendReply = (*request).sendReply;
+				token = (*request).token;
 				payloadStartOffset = (*request).payloadStartOffset;
 				payloadSize = (*request).payloadSize;
 				itemAmount = 0;
@@ -751,17 +971,17 @@ PARSESERVERCLIENTREQUESTS(){
 					const uint8 *const payloadStart = (uint8 *)request + payloadStartOffset;
 					itemAmount = *(uint32 *)payloadStart;
 				}
-
-
-
-
-
-
-
-
-
-				currentReaderRequest = (currentReaderRequest + 1) % requestSlotSize;
+				requestCurrentReader = (requestCurrentReader + 1) % requestSlotSize;
 				status = NONE_REPLY_STATUS;
+				replyPayloadSize = 0 * sizeof(uint8);
+
+
+
+fprintf(stdout, "\trequest slot @ %u\n", (*requestSlot).requestStartOffset);
+fprintf(stdout, "\tstruct got is %u %u %u %u %u %u\n", (*request).requestType, (*request).extension, (*request).sendReply, (*request).token, (*request).payloadStartOffset, (*request).payloadSize);
+
+
+
 				if(extension){
 					ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extension;
 					ServerExtensionDescriptor *serverExtensionDescriptor;
@@ -772,14 +992,12 @@ PARSESERVERCLIENTREQUESTS(){
 					if(!(*serverExtensionDescriptor).parseExtensionRequest){
 						jmp sendBadRequest;
 					}
-					if((*(*serverExtensionDescriptor).parseExtensionRequest)(request, itemAmount, &status)){
-						status |= UPDATED_REPLY_STATUS;
+					if(!(*(*serverExtensionDescriptor).parseExtensionRequest)(request, itemAmount, &status, &replyPayloadSize)){
+						jmp sendBadRequest;
 					}
-					status |= SUCCESS_REPLY_STATUS;
 				}else{
 					switch(requestType){
 						to NONE_SERVER_REQUEST_TYPE:{
-							fprintf(stdout, "got none request\n");
 							jmp sendBadRequest;
 						}
 						to NO_OPERATION_SERVER_REQUEST_TYPE:{
@@ -795,11 +1013,12 @@ PARSESERVERCLIENTREQUESTS(){
 							brk;
 						}
 						to ENABLE_EXTENSION_SERVER_REQUEST_TYPE:{
+							replyPayloadSize = 2 * sizeof(uint32);
 							extensionId = 0;
 							if(itemAmount == 1){
-								EnableExtensionRequest enableExtensionRequest;
-								unpackRequestItems(serverSystem, request, 1, (void *)&enableExtensionRequest.pathStart, &enableExtensionRequest.pathSize);
-								if(loadServerExtension(serverSystem, enableExtensionRequest.pathStart, &extensionId)){
+								EnableExtensionServerRequest enableExtensionServerRequest;
+								unpackRequestItems(serverSystem, request, 1, (void *)&enableExtensionServerRequest.pathStart, &enableExtensionServerRequest.pathSize);
+								if(loadServerExtension(serverSystem, enableExtensionServerRequest.pathStart, &extensionId)){
 									const ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extensionId;
 									const ServerExtensionDescriptor *const serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
 									if((*(*serverExtensionDescriptor).initServerExtensionDescriptorSystem)()){
@@ -810,10 +1029,18 @@ PARSESERVERCLIENTREQUESTS(){
 									}
 								}
 							}
+
+
+
+							if(!(status & SUCCESS_REPLY_STATUS)){
+								fprintf(stdout, "failed the extension adding\n");
+							}
+
+
+
 							brk;
 						}
 						off:{
-							fprintf(stdout, "got unknown request with value %u\n", requestType);
 							jmp sendBadRequest;
 						}
 					}
@@ -822,10 +1049,24 @@ PARSESERVERCLIENTREQUESTS(){
 				jmp formReply;
 			}
 			formReply:{
-				if(sendReply){
-					const uint64 response = ((uint64)currentWriterReply << 32) | token;
-					GenericReply *const reply = (*serverClient).replyStart + currentWriterReply;
-					currentWriterReply = (currentWriterReply + 1) % replySize;
+				if(sendReply and sizeof(GenericReply) + replyPayloadSize <= replySize){
+					const uint64 response = ((uint64)replyCurrentWriter << 32) | token;
+					ReplySlot *const replySlot = (*serverClient).replySlotStart + replyCurrentWriter;
+					GenericReply *const reply = (*serverClient).replyCurrent;
+
+
+
+					/*! handle space in a safer way */
+
+					if((uint8 *)(*serverClient).replyCurrent >= (uint8 *)(*serverClient).replyStart + replySize){
+						(*serverClient).replyCurrent = (*serverClient).replyStart;
+					}elif((uint8 *)(*serverClient).replyCurrent + sizeof(GenericReply) + replyPayloadSize > (uint8 *)(*serverClient).replyStart + replySize){
+						(*serverClient).replyCurrent = (*serverClient).replyStart;
+					}
+
+
+
+					replyCurrentWriter = (replyCurrentWriter + 1) % replySize;
 					if(extension){
 						ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extension;
 						ServerExtensionDescriptor *serverExtensionDescriptor;
@@ -842,7 +1083,7 @@ PARSESERVERCLIENTREQUESTS(){
 					}else{
 						switch(requestType){
 							to NONE_SERVER_REPLY_TYPE:{
-								brk;
+								jmp sendBadRequest;
 							}
 							to NO_OPERATION_SERVER_REPLY_TYPE:{
 								brk;
@@ -851,33 +1092,49 @@ PARSESERVERCLIENTREQUESTS(){
 								brk;
 							}
 							to ENABLE_EXTENSION_SERVER_REPLY_TYPE:{
-								(*(EnableExtensionReply *)reply).extensionId = extensionId;
+								(*(EnableExtensionServerReply *)reply).extensionId = extensionId;
+								(*(EnableExtensionServerReply *)reply).baseEvent = 0; /*! use a base variable and then increment by the amount of extension events, but increment on request */
 								brk;
 							}
 							off:{
-								brk;
+								jmp sendBadRequest;
 							}
 						}
 					}
-					(*reply).replySize = sizeof(GenericReply);
-					(*reply).token = token;
+					(*replySlot).replyStartOffset = (uint8 *)reply - (uint8 *)(*serverClient).replyStart;
+					(*replySlot).replySize = sizeof(GenericReply);
 					(*reply).replyType = requestType;
+					(*reply).extension = extension;
 					(*reply).status = status;
-					fprintf(stdout, "writing reply token with client token %04u in slot %04lu\n", (*reply).token, response >> 32);
+					(*reply).token = token;
+					(*reply).payloadStartOffset = !!replyPayloadSize * sizeof(GenericReply);
+					(*reply).payloadSize = replyPayloadSize;
+
+					(*serverClient).replyCurrent += sizeof(GenericReply) + replyPayloadSize;
+
+
+
+					fprintf(stdout, "\n\treply slot @ %u\n", (*replySlot).replyStartOffset);
+					fprintf(stdout, "\tsending back  %u %u %u %u %u %u\n", (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize);
+
+
+
 					write((*serverClient).serverClientReplyWriteFd, &response, sizeof(response)); /*! errors? */
 					success = true;
 				}
 				inc current;
 				jmp parseServerClientRequestLoop;
 				sendBadRequest:{
-					/*! send back bad request write() */
+					const uint64 response = 0; /*! do something better? */
+					fprintf(stdout, "\tsending back  bad response\n");
+					write((*serverClient).serverClientReplyWriteFd, &response, sizeof(response)); /*! errors? */
 					inc current;
 					jmp parseServerClientRequestLoop;
 				}
 			}
 		}
-		(*header).currentWriterReply = currentWriterReply;
-		(*header).currentReaderRequest = currentReaderRequest;
+		(*header).replyCurrentWriter = replyCurrentWriter;
+		(*header).requestCurrentReader = requestCurrentReader;
 		jmp emergencyExit;
 	}
 	emergencyExit:{
@@ -1023,13 +1280,65 @@ UNLOADSERVEREXTENSION(){
 
 
 
-QUITSERVERCLIENTREGISTRATIONTHREAD(){
+REMOVESERVERCLIENT(){
+	if(!serverSystem){
+		ret false;
+	}
+	if(!isValidServerClient(serverSystem, serverClient)){
+		ret false;
+	}
+	epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_DEL, (*serverClient).serverRequestReadFd, NULL); /*! errors? */
+	shmctl((*serverClient).shmId, IPC_RMID, NULL); /*! errors? */
+	shmdt((*serverClient).shmStart); /*! errors? */
+	close((*serverClient).serverRequestReadFd); /*! on signal interrupt? */
+	close((*serverClient).serverClientReplyWriteFd); /*! on signal interrupt? */
+	close((*serverClient).serverClientEventWriteFd); /*! on signal interrupt? */
+	(*serverClient).clientId = 0;
+	ret true;
+}
+REMOVEALLSERVERCLIENTS(){
+	ServerClient *current;
+	ServerClient *wall;
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	if(!(*serverSystem).serverClientStart and !(*serverSystem).serverClientSize and !(*serverSystem).serverClientAllocated){
+		ret false;
+	}
+	current = (*serverSystem).serverClientStart + 1;
+	wall = current + (*serverSystem).serverClientAllocated;
+	success = false;
+	if((*serverSystem).replyEpollFd){
+		jmp removeServerClientLoop;
+		removeServerClientLoop:{
+			if(current < wall){
+				removeServerClient(serverSystem, current);
+				inc current;
+				jmp removeServerClientLoop;
+			}
+		}
+	}
+	free((*serverSystem).serverClientStart);
+	(*serverSystem).serverClientStart = NULL;
+	(*serverSystem).serverClientSize = 0;
+	(*serverSystem).serverClientAllocated = 0;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+QUITSERVERREGISTRATIONLOOPTHREAD(){
 	int socketConnection;
 	struct sockaddr_un address;
 	if(!serverSystem){
 		ret false;
 	}
-	if(!(*serverSystem).clientRegistrationRunning){
+	if(!(*serverSystem).registrationLoopRunning){
 		ret false;
 	}
 	socketConnection = socket(AF_UNIX, SOCK_STREAM, NONE_SOCKET_PROTOCOL);
@@ -1038,9 +1347,9 @@ QUITSERVERCLIENTREGISTRATIONTHREAD(){
 	}
 	address.sun_family = AF_UNIX;
 	strcpy(address.sun_path, (*serverSystem).serverChannelPath); /*! replace with toolkit function */
-	(*serverSystem).clientRegistrationRunning = false;
+	(*serverSystem).registrationLoopRunning = false;
 	if(connect(socketConnection, (void *)&address, sizeof(address)) == CONNECT_FAILURE){
-		(*serverSystem).clientRegistrationRunning = true;
+		(*serverSystem).registrationLoopRunning = true;
 		close(socketConnection); /*! on signal interrupt? */
 		ret false;
 	}
@@ -1062,7 +1371,7 @@ QUITSERVERREPLYLOOPTHREAD(){
 		signalFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
 		(*serverSystem).signalFd = signalFd;
 	}
-	event.events = EPOLLIN; /*! you sure? */
+	event.events = EPOLLIN;
 	event.data.fd = signalFd;
 	value = 1;
 	epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_ADD, signalFd, &event); /*! errors? */
@@ -1085,7 +1394,7 @@ QUITSERVEREVENTLOOPTHREAD(){
 		signalFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
 		(*serverSystem).signalFd = signalFd;
 	}
-	event.events = EPOLLIN; /*! you sure? */
+	event.events = EPOLLIN;
 	event.data.fd = signalFd;
 	value = 1;
 	epoll_ctl((*serverSystem).eventEpollFd, EPOLL_CTL_ADD, signalFd, &event); /*! errors? */
@@ -1093,16 +1402,16 @@ QUITSERVEREVENTLOOPTHREAD(){
 	write(signalFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
 	ret true;
 }
-AWAITSERVERCLIENTREGISTRATIONTHREADEXIT(){
+AWAITSERVERREGISTRATIONLOOPTHREADEXIT(){
 	void *serverSystemReturn;
 	if(!serverSystem){
 		ret false;
 	}
-	if(!(*serverSystem).clientRegistrationThreadCreated){
+	if(!(*serverSystem).registrationLoopThreadCreated){
 		ret false;
 	}
-	pthread_join((*serverSystem).clientRegistrationThread, &serverSystemReturn);
-	(*serverSystem).clientRegistrationThreadCreated = false;
+	pthread_join((*serverSystem).registrationLoopThread, &serverSystemReturn);
+	(*serverSystem).registrationLoopThreadCreated = false;
 	if(!serverSystemReturn){
 		ret false;
 	}
@@ -1137,55 +1446,6 @@ AWAITSERVEREVENTLOOPTHREADEXIT(){
 		ret false;
 	}
 	ret true;
-}
-REMOVEALLSERVERCLIENTS(){
-	ServerClient *current;
-	ServerClient *wall;
-	bool success;
-	if(!serverSystem){
-		ret false;
-	}
-	if(!(*serverSystem).serverClientStart and !(*serverSystem).serverClientSize and !(*serverSystem).serverClientAllocated){
-		ret false;
-	}
-	current = (*serverSystem).serverClientStart;
-	wall = current + (*serverSystem).serverClientAllocated;
-	success = false;
-	if((*serverSystem).replyEpollFd){
-		jmp removeServerClientLoop;
-		removeServerClientLoop:{
-			if(current < wall){
-				if((*current).serverClientId){
-
-
-
-					epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_DEL, (*current).serverRequestReadFd, NULL); /*! errors? */
-					shmctl((*current).shmId, IPC_RMID, NULL); /*! errors? */
-					shmdt((*current).shmStart); /*! errors? */
-					close((*current).serverRequestReadFd); /*! on signal interrupt? */ /*! errors? */
-					close((*current).serverClientReplyWriteFd); /*! on signal interrupt? */ /*! errors? */
-					close((*current).serverClientEventWriteFd); /*! on signal interrupt? */ /*! errors? */
-
-
-
-					success = true;
-				}
-				inc current;
-				jmp removeServerClientLoop;
-			}
-		}
-	}
-	jmp emergencyExit;
-	emergencyExit:{
-		free((*serverSystem).serverClientStart);
-		(*serverSystem).serverClientStart = NULL;
-		(*serverSystem).serverClientSize = 0;
-		(*serverSystem).serverClientAllocated = 0;
-		if(!success){
-			ret false;
-		}
-		ret true;
-	}
 }
 REMOVEALLSERVEREXTENSIONS(){
 	const ServerExtension *start;
@@ -1231,6 +1491,15 @@ REMOVEALLSERVEREXTENSIONS(){
 		ret true;
 	}
 }
+ISVALIDSERVERCLIENT(){
+	if(!serverSystem){
+		ret false;
+	}
+	if(serverClient <= (*serverSystem).serverClientStart or serverClient >= (*serverSystem).serverClientStart + (*serverSystem).serverClientAllocated or !(*serverClient).clientId){
+		ret false;
+	}
+	ret true;
+}
 FINDSERVERCLIENTFD(){
 	ServerClient *current;
 	ServerClient *wall;
@@ -1240,12 +1509,12 @@ FINDSERVERCLIENTFD(){
 	if(!(*serverSystem).serverClientAllocated or !fd){
 		ret NULL;
 	}
-	current = (*serverSystem).serverClientStart;
+	current = (*serverSystem).serverClientStart + 1;
 	wall = current + (*serverSystem).serverClientAllocated;
 	jmp findServerClientFdLoop;
 	findServerClientFdLoop:{
 		if(current < wall){
-			if((*current).serverRequestReadFd == fd and (*current).serverClientId){
+			if((*current).serverRequestReadFd == fd and (*current).clientId){
 				ret current;
 			}
 			inc current;
@@ -1259,14 +1528,11 @@ FINDSERVERCLIENTFDID(){
 	if(!serverSystem){
 		ret NULL;
 	}
-	if(!(*serverSystem).serverClientAllocated or !fd){
-		ret NULL;
-	}
-	if(id >= (*serverSystem).serverClientAllocated){ /*! update later when stacks are added */
+	if(!fd or id >= (*serverSystem).serverClientAllocated){ /*! update later when stacks are added */
 		ret NULL;
 	}
 	serverClient = (*serverSystem).serverClientStart + id;
-	if((*serverClient).serverRequestReadFd != fd){
+	if(!(*serverClient).clientId or (*serverClient).serverRequestReadFd != fd){
 		ret NULL;
 	}
 	ret serverClient;
@@ -1275,10 +1541,34 @@ FINISERVERSYSTEM(){
 	if(!serverSystem){
 		ret false;
 	}
-	if((*serverSystem).clientRegistrationThreadCreated){
-		quitServerClientRegistrationThread(serverSystem);
-		pthread_join((*serverSystem).clientRegistrationThread, NULL);
-		(*serverSystem).clientRegistrationThreadCreated = false;
+
+
+
+	/*! deal with these later */
+
+	if((*serverSystem).registrationEventFd){
+		close((*serverSystem).registrationEventFd);
+		(*serverSystem).registrationEventFd = 0;
+	}
+	if((*serverSystem).registrationEpollFd){
+		close((*serverSystem).registrationEpollFd);
+		(*serverSystem).registrationEpollFd = 0;
+	}
+	if((*serverSystem).replyEventFd){
+		close((*serverSystem).replyEventFd);
+		(*serverSystem).replyEventFd = 0;
+	}
+	(*serverSystem).clientOffset = 0;
+	*((*serverSystem).fdCopy + 0) = 0;
+	*((*serverSystem).fdCopy + 1) = 0;
+	*((*serverSystem).fdCopy + 2) = 0;
+
+
+
+	if((*serverSystem).registrationLoopThreadCreated){
+		quitServerRegistrationLoopThread(serverSystem);
+		pthread_join((*serverSystem).registrationLoopThread, NULL);
+		(*serverSystem).registrationLoopThreadCreated = false;
 	}
 	if((*serverSystem).eventLoopThreadCreated){
 		quitServerEventLoopThread(serverSystem);
@@ -1290,7 +1580,7 @@ FINISERVERSYSTEM(){
 		pthread_join((*serverSystem).replyLoopThread, NULL);
 		(*serverSystem).replyLoopThreadCreated = false;
 	}
-	(*serverSystem).clientRegistrationRunning = false;
+	(*serverSystem).registrationLoopRunning = false;
 	(*serverSystem).eventLoopRunning = false;
 	(*serverSystem).replyLoopRunning = false;
 
@@ -1298,7 +1588,6 @@ FINISERVERSYSTEM(){
 
 	/*! should someone else be responsible for these? namely the functions dealing with this stuff */
 
-	(*serverSystem).serverClientId = 0;
 	if((*serverSystem).signalFd){
 		close((*serverSystem).signalFd); /*! on signal interrupt? */ /*! errors? */
 		(*serverSystem).signalFd = 0;
@@ -1319,8 +1608,6 @@ FINISERVERSYSTEM(){
 
 
 
-	/*! who should be handling this? */
-
 	removeAllServerClients(serverSystem);
 
 
@@ -1335,7 +1622,6 @@ FINISERVERSYSTEM(){
 
 
 
-	(*serverSystem).database = NULL;
 	(*serverSystem).clientChannelPath = NULL;
 	(*serverSystem).serverChannelPath = NULL;
 	ret true;

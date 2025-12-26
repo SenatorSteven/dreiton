@@ -30,7 +30,7 @@ SOFTWARE. */
 #include "headers/base-server-extension.hold"
 
 #define INITSERVEREXTENSIONDESCRIPTORSYSTEM() /*-*/ bool  initServerExtensionDescriptorSystem(void)
-#define PARSEEXTENSIONREQUEST() /*---------------*/ bool  parseExtensionRequest(const GenericRequest *const request, const uint32 itemAmount, uint8 *const statusReturn)
+#define PARSEEXTENSIONREQUEST() /*---------------*/ bool  parseExtensionRequest(const GenericRequest *const request, const uint32 itemAmount, uint8 *const statusReturn, uint32 *const payloadSizeReturn)
 #define PARSEEXTENSIONREPLY() /*-----------------*/ bool  parseExtensionReply(const uint8 replyType, GenericReply *const replyReturn)
 #define FINISERVEREXTENSIONDESCRIPTORSYSTEM() /*-*/ bool  finiServerExtensionDescriptorSystem(void)
 
@@ -63,7 +63,7 @@ INITSERVEREXTENSIONDESCRIPTORSYSTEM(){
 }
 PARSEEXTENSIONREQUEST(){
 	uint8 requestType;
-	if(!request or !statusReturn){
+	if(!request or !statusReturn or !payloadSizeReturn){
 		ret false;
 	}
 	requestType = (*request).requestType;
@@ -72,6 +72,7 @@ PARSEEXTENSIONREQUEST(){
 			ret false;
 		}
 		to GET_MAGIC_NUMBER_BASE_REQUEST_TYPE:{
+			*payloadSizeReturn = 1 * sizeof(uint32);
 			if(!itemAmount){
 				*statusReturn |= SUCCESS_REPLY_STATUS;
 			}
@@ -89,6 +90,9 @@ PARSEEXTENSIONREQUEST(){
 
 
 
+				if(magicNumber != database.magicNumber){
+					*statusReturn |= UPDATED_REPLY_STATUS;
+				}
 				database.magicNumber = magicNumber;
 				*statusReturn |= SUCCESS_REPLY_STATUS;
 			}
@@ -108,12 +112,10 @@ PARSEEXTENSIONREPLY(){
 			ret false;
 		}
 		to GET_MAGIC_NUMBER_BASE_REPLY_TYPE:{
-			(*(GetMagicNumberBaseReply *)replyReturn).replySize = sizeof(GetMagicNumberBaseReply);
 			(*(GetMagicNumberBaseReply *)replyReturn).magicNumber = database.magicNumber;
 			ret true;
 		}
 		to SET_MAGIC_NUMBER_BASE_REPLY_TYPE:{
-			(*(SetMagicNumberBaseReply *)replyReturn).replySize = sizeof(SetMagicNumberBaseReply);
 			ret true;
 		}
 		off:{

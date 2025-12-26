@@ -61,6 +61,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h> /*! remove later */
@@ -86,10 +87,14 @@ INITSERVERCONNECTION(){
 	(*serverConnectionSystem).serverChannelPath = NULL;
 	(*serverConnectionSystem).shmStart = NULL;
 	(*serverConnectionSystem).requestSlotStart = NULL;
+	(*serverConnectionSystem).replySlotStart = NULL;
+	(*serverConnectionSystem).eventSlotStart = NULL;
 	(*serverConnectionSystem).requestStart = NULL;
 	(*serverConnectionSystem).requestCurrent = NULL;
 	(*serverConnectionSystem).replyStart = NULL;
+	(*serverConnectionSystem).replyCurrent = NULL;
 	(*serverConnectionSystem).eventStart = NULL;
+	(*serverConnectionSystem).eventCurrent = NULL;
 	(*serverConnectionSystem).replyEpollFd = 0;
 	(*serverConnectionSystem).eventEpollFd = 0;
 	(*serverConnectionSystem).serverRequestWriteFd = 0;
@@ -118,7 +123,7 @@ CONNECTTOSERVER(){
 	int socketConnection;
 	struct sockaddr_un address;
 	int shmId;
-	void *shmStart;
+	Header *shmStart;
 	bool success;
 	struct{
 		int32 /*--*/ readFd;
@@ -170,6 +175,28 @@ CONNECTTOSERVER(){
 		eventEpollFd = 0;
 		jmp emergencyExit;
 	}
+	{
+		const int flag = fcntl(clientReplyPipe.readFd, F_GETFL, 0); /*! errors? */
+		int returnValue;
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		returnValue = fcntl(clientReplyPipe.readFd, F_SETFL, flag | O_NONBLOCK); /*! errors? also why pick these ones? */
+		if(returnValue == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
+	{
+		const int flag = fcntl(clientEventPipe.readFd, F_GETFL, 0); /*! errors? */
+		int returnValue;
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		returnValue = fcntl(clientEventPipe.readFd, F_SETFL, flag | O_NONBLOCK); /*! errors? also why pick these ones? */
+		if(returnValue == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
 	event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
 	event.data.fd = clientReplyPipe.readFd;
 	if(epoll_ctl(replyEpollFd, EPOLL_CTL_ADD, clientReplyPipe.readFd, &event) == EPOLL_CTL_FAILURE){
@@ -195,9 +222,14 @@ CONNECTTOSERVER(){
 		*(fd + 0) = serverRequestPipe.readFd;
 		*(fd + 1) = clientReplyPipe.writeFd;
 		*(fd + 2) = clientEventPipe.writeFd;
-		sendFd(socketConnection, fd, countof(fd)); /*! error checking? also update server protocol for such things, to avoid freezing. */
+		if(!sendFd(socketConnection, fd, countof(fd))){ /*! errors? */
+			jmp emergencyExit;
+		}
 	}
 	if(recv(socketConnection, &shmId, sizeof(shmId), 0) == RECV_FAILURE){ /*! this fails? what do? */
+		jmp emergencyExit;
+	}
+	if(!shmId){
 		jmp emergencyExit;
 	}
 	shmStart = shmat(shmId, NULL, SHM_NONE);
@@ -205,12 +237,16 @@ CONNECTTOSERVER(){
 		jmp emergencyExit;
 	}
 	(*serverConnectionSystem).shmStart = shmStart;
-	(*serverConnectionSystem).requestSlotStart = (void *)((uint8 *)shmStart + (*(Header *)shmStart).requestSlotStartOffset);
-	(*serverConnectionSystem).requestStart = (void *)((uint8 *)shmStart + (*(Header *)shmStart).requestStartOffset);
+	(*serverConnectionSystem).requestSlotStart = (void *)((uint8 *)shmStart + (*shmStart).requestSlotStartOffset);
+	(*serverConnectionSystem).replySlotStart = (void *)((uint8 *)shmStart + (*shmStart).replySlotStartOffset);
+	(*serverConnectionSystem).eventSlotStart = (void *)((uint8 *)shmStart + (*shmStart).eventSlotStartOffset);
+	(*serverConnectionSystem).requestStart = (void *)((uint8 *)shmStart + (*shmStart).requestStartOffset);
 	(*serverConnectionSystem).requestCurrent = (*serverConnectionSystem).requestStart;
-	(*serverConnectionSystem).replyStart = (void *)((uint8 *)shmStart + (*(Header *)shmStart).replyStartOffset);
-	(*serverConnectionSystem).eventStart = (void *)((uint8 *)shmStart + (*(Header *)shmStart).eventStartOffset);
-	(*serverConnectionSystem).generationClientId = (*(Header *)shmStart).generationClientId;
+	(*serverConnectionSystem).replyStart = (void *)((uint8 *)shmStart + (*shmStart).replyStartOffset);
+	(*serverConnectionSystem).replyCurrent = (*serverConnectionSystem).replyStart;
+	(*serverConnectionSystem).eventStart = (void *)((uint8 *)shmStart + (*shmStart).eventStartOffset);
+	(*serverConnectionSystem).eventCurrent = (*serverConnectionSystem).eventStart;
+	(*serverConnectionSystem).clientId = (*shmStart).clientId;
 	(*serverConnectionSystem).replyEpollFd = replyEpollFd;
 	(*serverConnectionSystem).eventEpollFd = eventEpollFd;
 	(*serverConnectionSystem).serverRequestWriteFd = serverRequestPipe.writeFd;
@@ -275,10 +311,12 @@ SENDSERVERREQUEST(){
 	if(!serverConnectionSystem){
 		ret false;
 	}
+	success = false;
 	if((*serverConnectionSystem).hasError){
 		ret false;
 	}
 	header = (*serverConnectionSystem).shmStart;
+	fprintf(stdout, "\nsending request to server...\n");
 
 
 
@@ -307,7 +345,7 @@ SENDSERVERREQUEST(){
 		}
 	}
 	if(sizeof(GenericRequest) + payloadSize > (*header).requestSize){
-		ret false;
+		jmp emergencyExit;
 	}
 
 
@@ -327,7 +365,7 @@ SENDSERVERREQUEST(){
 	if((*serverConnectionSystem).requestAmount == (*header).requestSlotSize){
 		if(!flushServerBuffer(serverConnectionSystem)){
 			if((*serverConnectionSystem).requestAmount){
-				ret false;
+				jmp emergencyExit;
 			}
 		}
 	}
@@ -335,7 +373,7 @@ SENDSERVERREQUEST(){
 
 
 	{
-		RequestSlot *const requestSlot = (*serverConnectionSystem).requestSlotStart + (*header).currentWriterRequest;
+		RequestSlot *const requestSlot = (*serverConnectionSystem).requestSlotStart + (*header).requestCurrentWriter;
 		GenericRequest *const requestCurrent = (*serverConnectionSystem).requestCurrent;
 
 		currentToken = (*serverConnectionSystem).currentToken + 1;
@@ -353,38 +391,26 @@ SENDSERVERREQUEST(){
 		(*requestCurrent).payloadStartOffset = !!payloadSize * sizeof(GenericRequest);
 		(*requestCurrent).payloadSize = payloadSize;
 
-		fprintf(stdout, "\nslot is @ %u\n", (*requestSlot).requestStartOffset);
-		fprintf(stdout, "struct is @ %u %u %u %u %u %u\n", (*requestCurrent).token, (*requestCurrent).requestType, (*requestCurrent).extension, (*requestCurrent).sendReply, (*requestCurrent).payloadStartOffset, (*requestCurrent).payloadSize);
+		fprintf(stdout, "\trequest slot @ %u\n", (*requestSlot).requestStartOffset);
+		fprintf(stdout, "\tsending request with %u %u %u %u %u %u\n", (*requestCurrent).requestType, (*requestCurrent).extension, (*requestCurrent).sendReply, (*requestCurrent).token, (*requestCurrent).payloadStartOffset, (*requestCurrent).payloadSize);
 
 		if(request and itemAmount){
 			uint32 *sizeCurrent = request;
 			uint32 *const sizeWall = sizeCurrent + itemAmount;
-
-
-
 			void **pointerCurrent = (void *)((uint32 *)request + itemAmount + (itemAmount % 2));
 			uint32 *sizeDestination = (void *)((uint8 *)requestCurrent + (*requestCurrent).payloadStartOffset);
 			uint8 *dataDestination = (void *)((uint32 *)sizeDestination + itemAmount + 1);
 			*sizeDestination = itemAmount;
 			inc sizeDestination;
-
-
-
 			jmp copyPayloadLoop;
 			copyPayloadLoop:{
 				if(sizeCurrent < sizeWall){
 					const uint size = *sizeCurrent;
-
-
-
 					*sizeDestination = size;
 					memcpy(dataDestination, *pointerCurrent, size * sizeof(uint8));
 					inc sizeDestination;
 					dataDestination += (size + (sizeof(uint32) - 1)) & ~(sizeof(uint32) - 1);
 					inc pointerCurrent;
-
-
-
 					inc sizeCurrent;
 					jmp copyPayloadLoop;
 				}
@@ -393,7 +419,7 @@ SENDSERVERREQUEST(){
 
 		(*serverConnectionSystem).requestCurrent += sizeof(GenericRequest) + payloadSize;
 
-		(*header).currentWriterRequest = ((*header).currentWriterRequest + 1) % (*header).requestSlotSize;
+		(*header).requestCurrentWriter = ((*header).requestCurrentWriter + 1) % (*header).requestSlotSize;
 		(*serverConnectionSystem).currentToken = currentToken;
 	}
 
@@ -402,16 +428,53 @@ SENDSERVERREQUEST(){
 	if(tokenReturn){
 		*tokenReturn = currentToken;
 	}
-	ret true;
+	fprintf(stdout, "\tdone\n");
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 WAITFORSERVERREPLY(){
 	bool success;
 	if(!serverConnectionSystem){
 		ret false;
 	}
+	success = false;
 	if(!(*serverConnectionSystem).replyEpollFd or (*serverConnectionSystem).hasError or !token){
-		ret false;
+		jmp emergencyExit;
 	}
+	fprintf(stdout, "\nwaiting on reply from server...\n");
 
 
 
@@ -420,45 +483,53 @@ WAITFORSERVERREPLY(){
 	/*! O(n) on weird catching of the replies is lame. */
 
 	if(token < (*serverConnectionSystem).lastTokenRead){
-		Header *header = (*serverConnectionSystem).shmStart;
-		GenericReply *start = (*serverConnectionSystem).replyStart + (*header).currentReaderReply;
-		GenericReply *current = start;
-		GenericReply *const wall = current + (*serverConnectionSystem).tokenBacklogSize;
+		uint32 current = 0;
+		uint32 wall = (*serverConnectionSystem).tokenBacklogSize;
+		Header *const header = (*serverConnectionSystem).shmStart;
+		ReplySlot *const replySlotStart = (*serverConnectionSystem).replySlotStart;
+		uint32 replyCurrentReader = (*header).replyCurrentReader;
+		GenericReply *const replyStart = (*serverConnectionSystem).replyStart;
+		uint32 replySlotSize = (*header).replySlotSize;
 		jmp readPastReplyLoop;
 		readPastReplyLoop:{
 			if(current < wall){
-				if((*current).token == token){
-					fprintf(stdout, "waiting for %04u, got %04u at %04lu\n", token, (*current).token, current - (*serverConnectionSystem).replyStart);
-
+				GenericReply *const reply = (void *)((uint8 *)replyStart + (*(replySlotStart + replyCurrentReader)).replyStartOffset);
+				if((*reply).token == token){
+					fprintf(stdout, "\treply slot @ %u\n", (*(replySlotStart + replyCurrentReader)).replyStartOffset);
+					fprintf(stdout, "\tgot reply with %u %u %u %u %u %u\n", (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize);
 					if(replyReturn){
-						memcpy(replyReturn, current, sizeof(GenericReply));
+						*(GenericReply *)replyReturn = *reply;
+						memcpy((uint8 *)replyReturn + sizeof(GenericReply), (uint8 *)reply + (*reply).payloadStartOffset, (*reply).payloadSize);
 					}
-
-					(*current).token = 0;
-					if(current == start){
-						jmp removeOldReplyLoop;
-						removeOldReplyLoop:{
+					(*reply).token = 0;
+					if(!current){
+						replyCurrentReader = (replyCurrentReader + 1) % replySlotSize;
+						dec (*serverConnectionSystem).tokenBacklogSize;
+						inc current;
+						jmp removeOldestReplyLoop;
+						removeOldestReplyLoop:{
 							if(current < wall){
-								if(!(*current).token){
-									(*header).currentReaderReply = ((*header).currentReaderReply + 1) % (*header).replySize;
+								GenericReply *const reply = (void *)((uint8 *)replyStart + (*(replySlotStart + replyCurrentReader)).replyStartOffset);
+								if(!(*reply).token){
+									replyCurrentReader = (replyCurrentReader + 1) % replySlotSize;
 									dec (*serverConnectionSystem).tokenBacklogSize;
 									inc current;
-									jmp removeOldReplyLoop;
+									jmp removeOldestReplyLoop;
 								}
 							}
+							(*header).replyCurrentReader = replyCurrentReader;
 						}
 					}
 					ret true;
 				}
+				replyCurrentReader = (replyCurrentReader + 1) % replySlotSize;
 				inc current;
 				jmp readPastReplyLoop;
 			}
+			fprintf(stdout, "\tfailure to find previously received reply\n");
 			ret false;
 		}
 	}
-
-
-
 	jmp waitForServerReplyLoop;
 	waitForServerReplyLoop:{
 		struct epoll_event epollEventStart[1];
@@ -471,64 +542,130 @@ WAITFORSERVERREPLY(){
 		if(epollEventAmount){ /*! handle errors here */
 			/*! handle errors here */
 		}
-		if((*epollEventStart).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){ /*! update this */
-			fprintf(stdout, "reply failed because the server shut off\n");
+		if((*epollEventStart).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){ /*! anything else under this? */
+			if((*epollEventStart).events & (EPOLLRDHUP | EPOLLHUP)){
+				fprintf(stdout, "reply failed because the server shut off (hangup)\n");
+				(*serverConnectionSystem).hasError = true;
+				ret false;
+			}
+			fprintf(stdout, "reply failed because the server shut off (error)\n");
 			(*serverConnectionSystem).hasError = true;
 			ret false;
 		}
 		returnValue = read((*serverConnectionSystem).clientReplyReadFd, &response, sizeof(response));
-		if(returnValue){ /*! handle errors here */
-			/*! handle errors here */
+		if(returnValue > 0){
+
+			/*!*/
+
+		}elif(returnValue == -1){
+
+			/*!*/
+
+		}else{
+
+			/*!*/
+
+		}
+		if(!response){
+			ret false;
 		}
 
 
 
 		replyToken = response;
-		(*serverConnectionSystem).lastTokenRead = replyToken;
+		(*serverConnectionSystem).lastTokenRead = replyToken; /*! on wrap around? */
 
 
 
-		if(replyToken != token){
+		if(replyToken < token){
 			jmp waitForServerReplyLoop;
 		}
+		if(replyToken > token){
+			/*! something must have happened. go back to checking the arrived tokens */
+		}
 		replySlot = response >> 32;
-		fprintf(stdout, "waiting for %04u, got %04u at %04u\n", token, replyToken, replySlot);
 
 
 
 		{
 			Header *header = (*serverConnectionSystem).shmStart;
-			GenericReply *reply = (*serverConnectionSystem).replyStart + replySlot;
-
+			GenericReply *const reply = (void *)((uint8 *)(*serverConnectionSystem).replyStart + (*((*serverConnectionSystem).replySlotStart + replySlot)).replyStartOffset);
+			fprintf(stdout, "\treply slot @ %u\n", (*((*serverConnectionSystem).replySlotStart + replySlot)).replyStartOffset);
+			fprintf(stdout, "\tgot reply with %u %u %u %u %u %u\n", (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize);
 			if(replyReturn){
-				memcpy(replyReturn, reply, sizeof(GenericReply));
+				*(GenericReply *)replyReturn = *reply;
+				memcpy((uint8 *)replyReturn + sizeof(GenericReply), (uint8 *)reply + (*reply).payloadStartOffset, (*reply).payloadSize);
 			}
-
 			(*reply).token = 0;
-			if(!(*(GenericReply *)((*serverConnectionSystem).replyStart + (*header).currentReaderReply)).token){
-				(*header).currentReaderReply = ((*header).currentReaderReply + 1) % (*header).replySize;
+			if(!(*((*serverConnectionSystem).replyStart + (*header).replyCurrentReader)).token){
+				(*header).replyCurrentReader = ((*header).replyCurrentReader + 1) % (*header).replySlotSize;
 				dec (*serverConnectionSystem).tokenBacklogSize;
 			}
 		}
 
 
 
+		fprintf(stdout, "\tdone\n");
+		success = true;
+		jmp emergencyExit;
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 WAITFORSERVEREVENT(){
+	bool success;
+	(void)eventReturn;
+	if(!serverConnectionSystem){
+		ret false;
+	}
+	success = false;
+	if((*serverConnectionSystem).hasError){
+		jmp emergencyExit;
+	}
+
+
+
+	(*serverConnectionSystem).hasError = true;
+
+
+
+#ifdef a
 	struct epoll_event epollEventStart[1];
 	int epollEventAmount;
 	uint32 response;
 	uint32 replySlot;
 	int returnValue;
-	bool success;
-	if(!serverConnectionSystem){
-		ret false;
-	}
-	if((*serverConnectionSystem).hasError){
-		ret false;
-	}
 	epollEventAmount = epoll_wait((*serverConnectionSystem).eventEpollFd, epollEventStart, countof(epollEventStart), INFINITE_EPOLL_WAIT_TIMEOUT);
 	if(epollEventAmount){ /*! handle errors here */
 		/*! handle errors here */
@@ -539,8 +676,18 @@ WAITFORSERVEREVENT(){
 		ret false;
 	}
 	returnValue = read((*serverConnectionSystem).clientEventReadFd, &response, sizeof(response));
-	if(returnValue){ /*! handle errors here */
-		/*! handle errors here */
+	if(returnValue > 0){
+
+		/*!*/
+
+	}elif(returnValue == -1){
+
+		/*!*/
+
+	}else{
+
+		/*!*/
+
 	}
 	replySlot = response;
 	fprintf(stdout, "event came in\n");
@@ -555,40 +702,21 @@ WAITFORSERVEREVENT(){
 			memcpy(eventReturn, event, sizeof(GenericEvent));
 		}
 
-		(*header).currentReaderEvent = ((*header).currentReaderEvent + 1) % (*header).eventSize;
+		(*header).eventCurrentReader = ((*header).eventCurrentReader + 1) % (*header).eventSize;
 	}
+#endif
 
 
 
-	ret true;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 FLUSHSERVERBUFFER(){
 	uint64 message;
 	bool success;
@@ -599,14 +727,50 @@ FLUSHSERVERBUFFER(){
 	/*! should this be responsible for anything else? */
 
 	if(!(*serverConnectionSystem).serverRequestWriteFd or !(*serverConnectionSystem).requestAmount or (*serverConnectionSystem).hasError){
-		ret false;
+		jmp emergencyExit;
 	}
-	message = (*serverConnectionSystem).generationClientId;
+	message = (*serverConnectionSystem).clientId;
 	message = (message << 32) | (*serverConnectionSystem).requestAmount; /*! add generation? */
+	fprintf(stdout, "\nflushing %u requests to server...\n", (*serverConnectionSystem).requestAmount);
 	write((*serverConnectionSystem).serverRequestWriteFd, &message, sizeof(message)); /*! errors? */
+	fprintf(stdout, "\tdone\n");
 	(*serverConnectionSystem).requestAmount = 0;
-	ret true;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 DISCONNECTFROMSERVER(){
 	struct epoll_event epollEventStart[1];
 	if(!serverConnectionSystem){
@@ -615,7 +779,7 @@ DISCONNECTFROMSERVER(){
 
 
 
-/*! insert this here: .requestStart and maybe .requestCurrent */
+/*! update this */
 
 	if(!(*serverConnectionSystem).eventStart or !(*serverConnectionSystem).replyStart or !(*serverConnectionSystem).requestSlotStart or !(*serverConnectionSystem).shmStart or !(*serverConnectionSystem).eventEpollFd or !(*serverConnectionSystem).replyEpollFd or !(*serverConnectionSystem).clientEventReadFd or !(*serverConnectionSystem).clientReplyReadFd or !(*serverConnectionSystem).serverRequestWriteFd){
 		ret false;
@@ -644,11 +808,15 @@ DISCONNECTFROMSERVER(){
 	(*serverConnectionSystem).serverRequestWriteFd = 0;
 	(*serverConnectionSystem).eventEpollFd = 0;
 	(*serverConnectionSystem).replyEpollFd = 0;
-	(*serverConnectionSystem).generationClientId = 0;
+	(*serverConnectionSystem).clientId = 0;
+	(*serverConnectionSystem).eventCurrent = NULL;
 	(*serverConnectionSystem).eventStart = NULL;
+	(*serverConnectionSystem).replyCurrent = NULL;
 	(*serverConnectionSystem).replyStart = NULL;
 	(*serverConnectionSystem).requestCurrent = NULL;
 	(*serverConnectionSystem).requestStart = NULL;
+	(*serverConnectionSystem).eventSlotStart = NULL;
+	(*serverConnectionSystem).replySlotStart = NULL;
 	(*serverConnectionSystem).requestSlotStart = NULL;
 	(*serverConnectionSystem).shmStart = NULL;
 	ret true;

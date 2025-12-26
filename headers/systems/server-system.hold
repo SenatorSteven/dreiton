@@ -31,154 +31,40 @@ SOFTWARE. */
 #include "headers/cold/cold.hold"
 #endif
 
-#define ServerSystem /*--------------------------------*/ ServerSystem
-
-#define NONE_SERVER_REQUEST_TYPE /*--------------------*/ (0)
-#define NO_OPERATION_SERVER_REQUEST_TYPE /*------------*/ (1)
-#define SYNC_SERVER_REQUEST_TYPE /*--------------------*/ (2)
-#define ENABLE_EXTENSION_SERVER_REQUEST_TYPE /*--------*/ (3)
-
-#define NO_OPERATION_SERVER_REQUEST_ITEM_AMOUNT /*-----*/ (0)
-#define SYNC_SERVER_REQUEST_ITEM_AMOUNT /*-------------*/ (0)
-#define ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT /*-*/ (1)
-
-#define NONE_SERVER_REPLY_TYPE /*----------------------*/ (0)
-#define NO_OPERATION_SERVER_REPLY_TYPE /*--------------*/ (1)
-#define SYNC_SERVER_REPLY_TYPE /*----------------------*/ (2)
-#define ENABLE_EXTENSION_SERVER_REPLY_TYPE /*----------*/ (3)
-
-#define NONE_SERVER_EVENT_TYPE /*----------------------*/ (0)
-#define TIME_SERVER_EVENT_TYPE /*----------------------*/ (1)
-
-#define NONE_SERVER_EVENT_TYPE_MASK /*-----------------*/ (b(0))
-#define TIME_SERVER_EVENT_TYPE_MASK /*-----------------*/ (b(1))
-
-
+#define ServerSystem /*------------------------------*/ ServerSystem
 
 /*! add a way to block adding modules, thus turning a boolean on, thus performing on checks on mod loading */
 
 /*! allow closing on 0 clients. */
 
-#define INITSERVERSYSTEM() /*------------------------*/ bool           initServerSystem(ServerSystem *const serverSystem)
-#define SETSERVERSERVERCHANNELPATH() /*--------------*/ bool           setServerServerChannelPath(ServerSystem *const serverSystem, const char *const serverChannelPath)
-#define SETSERVERCLIENTCHANNELPATH() /*--------------*/ bool           setServerClientChannelPath(ServerSystem *const serverSystem, const char *const clientChannelPath)
-#define SETSERVERDATABASE() /*-----------------------*/ bool           setServerDatabase(ServerSystem *const serverSystem, Database *const database)
-#define SETSERVEREXTENSIONBLOCKSIZE() /*-------------*/ bool           setServerExtensionBlockSize(ServerSystem *const serverSystem, const uint serverExtensionBlockSize)
-#define SETSERVERCLIENTBLOCKSIZE() /*----------------*/ bool           setServerClientBlockSize(ServerSystem *const serverSystem, const uint serverClientBlockSize)
-#define BOOTSERVERREPLYLOOPTHREAD() /*---------------*/ bool           bootServerReplyLoopThread(ServerSystem *const serverSystem)
-#define BOOTSERVEREVENTLOOPTHREAD() /*---------------*/ bool           bootServerEventLoopThread(ServerSystem *const serverSystem)
-#define BOOTSERVERCLIENTREGISTRATIONTHREAD() /*------*/ bool           bootServerClientRegistrationThread(ServerSystem *const serverSystem)
-#define SERVERREPLYLOOP() /*-------------------------*/ void *         serverReplyLoop(void *const arg)
-#define SERVEREVENTLOOP() /*-------------------------*/ void *         serverEventLoop(void *const arg)
-#define SERVERCLIENTREGISTRATIONLOOP() /*------------*/ void *         serverClientRegistrationLoop(void *const arg)
-#define PARSESERVERCLIENTREQUESTS() /*---------------*/ bool           parseServerClientRequests(ServerSystem *const serverSystem, ServerClient *const serverClient, const uint8 requestAmount)
-#define LOADSERVEREXTENSION() /*---------------------*/ bool           loadServerExtension(ServerSystem *const serverSystem, const char *const path, uint32 *const extensionIdReturn)
-#define UNLOADSERVEREXTENSION() /*-------------------*/ bool           unloadServerExtension(ServerSystem *const serverSystem)
-#define QUITSERVERCLIENTREGISTRATIONTHREAD() /*------*/ bool           quitServerClientRegistrationThread(ServerSystem *const serverSystem)
-#define QUITSERVEREVENTLOOPTHREAD() /*---------------*/ bool           quitServerEventLoopThread(ServerSystem *const serverSystem)
-#define QUITSERVERREPLYLOOPTHREAD() /*---------------*/ bool           quitServerReplyLoopThread(ServerSystem *const serverSystem)
-#define AWAITSERVERCLIENTREGISTRATIONTHREADEXIT() /*-*/ bool           awaitServerClientRegistrationThreadExit(ServerSystem *const serverSystem)
-#define AWAITSERVEREVENTLOOPTHREADEXIT() /*----------*/ bool           awaitServerEventLoopThreadExit(ServerSystem *const serverSystem)
-#define AWAITSERVERREPLYLOOPTHREADEXIT() /*----------*/ bool           awaitServerReplyLoopThreadExit(ServerSystem *const serverSystem)
-#define REMOVEALLSERVEREXTENSIONS() /*---------------*/ bool           removeAllServerExtensions(ServerSystem *const serverSystem)
-#define REMOVEALLSERVERCLIENTS() /*------------------*/ bool           removeAllServerClients(ServerSystem *const serverSystem)
-#define FINDSERVERCLIENTFD() /*----------------------*/ ServerClient * findServerClientFd(ServerSystem *const serverSystem, const int fd)
-#define FINDSERVERCLIENTFDID() /*--------------------*/ ServerClient * findServerClientFdId(ServerSystem *const serverSystem, const int fd, const uint32 id)
-#define FINISERVERSYSTEM() /*------------------------*/ bool           finiServerSystem(ServerSystem *const serverSystem)
-
-def struct{
-	uint8 /*--*/ pad0[1];
-} NoOperationRequest;
-
-def struct{
-	uint8 /*--*/ pad0[1];
-} SyncRequest;
-
-def struct{
-	uint32 /*-*/ pathSize;
-	uint8 /*--*/ pad0[4];
-	char * /*-*/ pathStart;
-} EnableExtensionRequest;
-
-def struct{
-	uint32 /*-*/ replySize;
-	uint32 /*-*/ token;
-	uint8 /*--*/ replyType;
-	uint8 /*--*/ status;
-} NoOperationReply;
-
-def struct{
-	uint32 /*-*/ replySize;
-	uint32 /*-*/ token;
-	uint8 /*--*/ replyType;
-	uint8 /*--*/ status;
-} SyncReply;
-
-def struct{
-	uint32 /*-*/ replySize;
-	uint32 /*-*/ token;
-	uint8 /*--*/ replyType;
-	uint8 /*--*/ status;
-	uint8 /*--*/ pad0[2];
-	uint32 /*-*/ extensionId;
-} EnableExtensionReply;
-
-def struct{
-	uint32 /*-*/ eventSize;
-	uint8 /*--*/ eventType;
-} TimeEvent;
-
-
-
-
-
-
-
-
-
-def struct{
-	uint32 /*-*/ requestStartOffset;
-	uint32 /*-*/ requestSize;
-} RequestSlot;
-
-def struct{
-	uint32 /*-*/ requestSlotStartOffset;
-	uint32 /*-*/ requestSlotSize;
-	uint32 /*-*/ requestStartOffset;
-	uint32 /*-*/ requestSize;
-	uint32 /*-*/ currentWriterRequest;
-	uint32 /*-*/ currentReaderRequest;
-
-	uint32 /*-*/ replyStartOffset;
-	uint32 /*-*/ replySize;
-	uint32 /*-*/ currentWriterReply;
-	uint32 /*-*/ currentReaderReply;
-
-	uint32 /*-*/ eventStartOffset;
-	uint32 /*-*/ eventSize;
-
-
-
-	/*! what can be removed from the event's simplex segment? */
-	uint32 /*-*/ currentWriterEvent;
-	uint32 /*-*/ currentReaderEvent;
-
-
-
-	uint32 /*-*/ generationClientId;
-} Header;
-
-
-
-
-
-
-
-
-
-def struct{
-	uint8 /*-----------------------*/ pad0[8];
-} Database;
+#define INITSERVERSYSTEM() /*----------------------*/ bool           initServerSystem(ServerSystem *const serverSystem)
+#define SETSERVERSERVERCHANNELPATH() /*------------*/ bool           setServerServerChannelPath(ServerSystem *const serverSystem, const char *const serverChannelPath)
+#define SETSERVERCLIENTCHANNELPATH() /*------------*/ bool           setServerClientChannelPath(ServerSystem *const serverSystem, const char *const clientChannelPath)
+#define SETSERVEREXTENSIONBLOCKSIZE() /*-----------*/ bool           setServerExtensionBlockSize(ServerSystem *const serverSystem, const uint serverExtensionBlockSize)
+#define SETSERVERCLIENTBLOCKSIZE() /*--------------*/ bool           setServerClientBlockSize(ServerSystem *const serverSystem, const uint serverClientBlockSize)
+#define BOOTSERVERREPLYLOOPTHREAD() /*-------------*/ bool           bootServerReplyLoopThread(ServerSystem *const serverSystem)
+#define BOOTSERVEREVENTLOOPTHREAD() /*-------------*/ bool           bootServerEventLoopThread(ServerSystem *const serverSystem)
+#define BOOTSERVERREGISTRATIONLOOPTHREAD() /*------*/ bool           bootServerRegistrationLoopThread(ServerSystem *const serverSystem)
+#define SERVERREPLYLOOP() /*-----------------------*/ void *         serverReplyLoop(void *const arg)
+#define SERVEREVENTLOOP() /*-----------------------*/ void *         serverEventLoop(void *const arg)
+#define SERVERREGISTRATIONLOOP() /*----------------*/ void *         serverRegistrationLoop(void *const arg)
+#define INSERTSERVERCLIENT() /*--------------------*/ bool           insertServerClient(ServerSystem *const serverSystem, const int serverRequestReadFd, const int clientReplyWriteFd, const int clientEventWriteFd)
+#define PARSESERVERCLIENTREQUESTS() /*-------------*/ bool           parseServerClientRequests(ServerSystem *const serverSystem, ServerClient *const serverClient, const uint8 requestAmount)
+#define LOADSERVEREXTENSION() /*-------------------*/ bool           loadServerExtension(ServerSystem *const serverSystem, const char *const path, uint32 *const extensionIdReturn)
+#define UNLOADSERVEREXTENSION() /*-----------------*/ bool           unloadServerExtension(ServerSystem *const serverSystem)
+#define REMOVESERVERCLIENT() /*--------------------*/ bool           removeServerClient(ServerSystem *const serverSystem, ServerClient *const serverClient)
+#define REMOVEALLSERVERCLIENTS() /*----------------*/ bool           removeAllServerClients(ServerSystem *const serverSystem)
+#define QUITSERVERREGISTRATIONLOOPTHREAD() /*------*/ bool           quitServerRegistrationLoopThread(ServerSystem *const serverSystem)
+#define QUITSERVEREVENTLOOPTHREAD() /*-------------*/ bool           quitServerEventLoopThread(ServerSystem *const serverSystem)
+#define QUITSERVERREPLYLOOPTHREAD() /*-------------*/ bool           quitServerReplyLoopThread(ServerSystem *const serverSystem)
+#define AWAITSERVERREGISTRATIONLOOPTHREADEXIT() /*-*/ bool           awaitServerRegistrationLoopThreadExit(ServerSystem *const serverSystem)
+#define AWAITSERVEREVENTLOOPTHREADEXIT() /*--------*/ bool           awaitServerEventLoopThreadExit(ServerSystem *const serverSystem)
+#define AWAITSERVERREPLYLOOPTHREADEXIT() /*--------*/ bool           awaitServerReplyLoopThreadExit(ServerSystem *const serverSystem)
+#define REMOVEALLSERVEREXTENSIONS() /*-------------*/ bool           removeAllServerExtensions(ServerSystem *const serverSystem)
+#define ISVALIDSERVERCLIENT() /*-------------------*/ bool           isValidServerClient(ServerSystem *const serverSystem, ServerClient *const serverClient)
+#define FINDSERVERCLIENTFD() /*--------------------*/ ServerClient * findServerClientFd(ServerSystem *const serverSystem, const int fd)
+#define FINDSERVERCLIENTFDID() /*------------------*/ ServerClient * findServerClientFdId(ServerSystem *const serverSystem, const int fd, const uint32 id)
+#define FINISERVERSYSTEM() /*----------------------*/ bool           finiServerSystem(ServerSystem *const serverSystem)
 
 def struct{
 	void * /*----------------------*/ serverExtensionHandle;
@@ -188,24 +74,64 @@ def struct{
 } ServerExtension;
 
 def struct{
+	uint32 /*----------------------*/ requestSlotStartOffset;
+	uint32 /*----------------------*/ requestSlotSize;
+	uint32 /*----------------------*/ requestStartOffset;
+	uint32 /*----------------------*/ requestSize;
+	uint32 /*----------------------*/ requestCurrentWriter;
+	uint32 /*----------------------*/ requestCurrentReader;
+	uint32 /*----------------------*/ replySlotStartOffset;
+	uint32 /*----------------------*/ replySlotSize;
+	uint32 /*----------------------*/ replyStartOffset;
+	uint32 /*----------------------*/ replySize;
+	uint32 /*----------------------*/ replyCurrentWriter;
+	uint32 /*----------------------*/ replyCurrentReader;
+	uint32 /*----------------------*/ eventSlotStartOffset;
+	uint32 /*----------------------*/ eventSlotSize;
+	uint32 /*----------------------*/ eventStartOffset;
+	uint32 /*----------------------*/ eventSize;
+	uint32 /*----------------------*/ eventCurrentWriter;
+	uint32 /*----------------------*/ eventCurrentReader;
+	uint32 /*----------------------*/ clientId;
+} Header;
+
+def struct{
+	uint32 /*----------------------*/ requestStartOffset;
+	uint32 /*----------------------*/ requestSize;
+} RequestSlot;
+
+def struct{
+	uint32 /*----------------------*/ replyStartOffset;
+	uint32 /*----------------------*/ replySize;
+} ReplySlot;
+
+def struct{
+	uint32 /*----------------------*/ eventStartOffset;
+	uint32 /*----------------------*/ eventSize;
+} EventSlot;
+
+def struct{
 	Header * /*--------------------*/ shmStart;
 	RequestSlot * /*---------------*/ requestSlotStart;
+	ReplySlot * /*-----------------*/ replySlotStart;
+	EventSlot * /*-----------------*/ eventSlotStart;
 	GenericRequest * /*------------*/ requestStart;
 	GenericRequest * /*------------*/ requestCurrent;
 	GenericReply * /*--------------*/ replyStart;
+	GenericReply * /*--------------*/ replyCurrent;
 	GenericEvent * /*--------------*/ eventStart;
+	GenericEvent * /*--------------*/ eventCurrent;
 	int32 /*-----------------------*/ shmId;
 	int32 /*-----------------------*/ serverRequestReadFd;
 	int32 /*-----------------------*/ serverClientReplyWriteFd;
 	int32 /*-----------------------*/ serverClientEventWriteFd;
-	uint32 /*----------------------*/ serverClientId;
-	uint32 /*----------------------*/ generationClientId;
+	uint32 /*----------------------*/ clientId;
+	uint8 /*-----------------------*/ pad0[4];
 } ServerClient;
 
 def struct{
 	const char * /*----------------*/ serverChannelPath;
 	const char * /*----------------*/ clientChannelPath;
-	Database * /*------------------*/ database;
 	ServerExtension * /*-----------*/ serverExtensionStart;
 	ServerClient * /*--------------*/ serverClientStart;
 	uint32 /*----------------------*/ serverExtensionSize;
@@ -217,29 +143,31 @@ def struct{
 	int32 /*-----------------------*/ replyEpollFd;
 	int32 /*-----------------------*/ eventEpollFd;
 	int32 /*-----------------------*/ signalFd;
-	uint32 /*----------------------*/ serverClientId; /*! shit solution, use instead the position in the soon-to-be-added stack holding the clients */
 	bool /*------------------------*/ replyLoopRunning;
 	bool /*------------------------*/ eventLoopRunning;
-	bool /*------------------------*/ clientRegistrationRunning;
+	bool /*------------------------*/ registrationLoopRunning;
 	bool /*------------------------*/ replyLoopThreadCreated;
 	bool /*------------------------*/ eventLoopThreadCreated;
-	bool /*------------------------*/ clientRegistrationThreadCreated;
-	uint8 /*-----------------------*/ pad0[2];
+	bool /*------------------------*/ registrationLoopThreadCreated;
+	uint8 /*-----------------------*/ pad0[6];
 	pthread_t /*-------------------*/ replyLoopThread;
 	pthread_t /*-------------------*/ eventLoopThread;
-	pthread_t /*-------------------*/ clientRegistrationThread;
+	pthread_t /*-------------------*/ registrationLoopThread;
+
+
+
+	/*!*/
+
+	int32 /*-----------------------*/ registrationEventFd;
+	int32 /*-----------------------*/ registrationEpollFd;
+	int32 /*-----------------------*/ replyEventFd;
+	uint32 /*----------------------*/ clientOffset;
+	int32 /*-----------------------*/ fdCopy[3];
+	uint8 /*-----------------------*/ pad1[4];
+
+
+
 } ServerSystem;
-
-
-
-#ifdef a
-/*! server.cold */
-def struct{
-	const char * /*-----------*/ path;
-	uint32 /*-----------------*/ extensionId;
-	uint32 /*-----------------*/ baseEvent;
-} ServerExtension;
-#endif
 
 
 
@@ -440,13 +368,9 @@ EMITEVENT(){
 			uint clientOffset = (*current).clientOffset;
 			ServerClient *serverClient = clientStart + clientOffset;
 			(void)serverClient;
-
-
-
-			fprintf(stdout, "event %u -> client %u\n", eventType, clientOffset);
-
-
-
+			{
+				fprintf(stdout, "event %u -> client %u\n", eventType, clientOffset);
+			}
 			success = true;
 			inc current;
 			jmp emitEventLoop;
@@ -531,26 +455,28 @@ int main(void){
 INITSERVERSYSTEM();
 SETSERVERSERVERCHANNELPATH();
 SETSERVERCLIENTCHANNELPATH();
-SETSERVERDATABASE();
 SETSERVEREXTENSIONBLOCKSIZE();
 SETSERVERCLIENTBLOCKSIZE();
 BOOTSERVERREPLYLOOPTHREAD();
 BOOTSERVEREVENTLOOPTHREAD();
-BOOTSERVERCLIENTREGISTRATIONTHREAD();
+BOOTSERVERREGISTRATIONLOOPTHREAD();
 SERVERREPLYLOOP();
 SERVEREVENTLOOP();
-SERVERCLIENTREGISTRATIONLOOP();
+SERVERREGISTRATIONLOOP();
+INSERTSERVERCLIENT();
 PARSESERVERCLIENTREQUESTS();
 LOADSERVEREXTENSION();
 UNLOADSERVEREXTENSION();
-QUITSERVERCLIENTREGISTRATIONTHREAD();
+REMOVESERVERCLIENT();
+REMOVEALLSERVERCLIENTS();
+QUITSERVERREGISTRATIONLOOPTHREAD();
 QUITSERVEREVENTLOOPTHREAD();
 QUITSERVERREPLYLOOPTHREAD();
-AWAITSERVERCLIENTREGISTRATIONTHREADEXIT();
+AWAITSERVERREGISTRATIONLOOPTHREADEXIT();
 AWAITSERVEREVENTLOOPTHREADEXIT();
 AWAITSERVERREPLYLOOPTHREADEXIT();
 REMOVEALLSERVEREXTENSIONS();
-REMOVEALLSERVERCLIENTS();
+ISVALIDSERVERCLIENT();
 FINDSERVERCLIENTFD();
 FINDSERVERCLIENTFDID();
 FINISERVERSYSTEM();

@@ -47,11 +47,15 @@ def struct{
 	const char * /*-----*/ serverChannelPath;
 	Header * /*---------*/ shmStart;
 	RequestSlot * /*----*/ requestSlotStart;
+	ReplySlot * /*------*/ replySlotStart;
+	EventSlot * /*------*/ eventSlotStart;
 	GenericRequest * /*-*/ requestStart;
 	GenericRequest * /*-*/ requestCurrent;
 	GenericReply * /*---*/ replyStart;
+	GenericReply * /*---*/ replyCurrent;
 	GenericEvent * /*---*/ eventStart;
-	uint32 /*-----------*/ generationClientId;
+	GenericEvent * /*---*/ eventCurrent;
+	uint32 /*-----------*/ clientId;
 	int32 /*------------*/ replyEpollFd;
 	int32 /*------------*/ eventEpollFd;
 	int32 /*------------*/ serverRequestWriteFd;
@@ -62,7 +66,7 @@ def struct{
 	uint32 /*-----------*/ tokenBacklogSize;
 	uint8 /*------------*/ requestAmount;
 	bool /*-------------*/ hasError;
-	uint8 /*------------*/ pad0[6];
+	uint8 /*------------*/ pad0[2];
 } ServerConnectionSystem;
 
 INITSERVERCONNECTION();

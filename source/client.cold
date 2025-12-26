@@ -108,10 +108,10 @@ bool requestServerSync(ServerConnectionSystem *const serverConnectionSystem, uin
 	ret sendServerRequest(serverConnectionSystem, SYNC_SERVER_REQUEST_TYPE, 0, NULL, SYNC_SERVER_REQUEST_ITEM_AMOUNT, tokenReturn);
 }
 bool requestServerEnableExtension(ServerConnectionSystem *const serverConnectionSystem, const uint32 pathSize, const char *const pathStart, uint32 *const tokenReturn){
-	EnableExtensionRequest enableExtensionRequest;
-	enableExtensionRequest.pathSize = pathSize;
-	enableExtensionRequest.pathStart = (void *)pathStart;
-	ret sendServerRequest(serverConnectionSystem, ENABLE_EXTENSION_SERVER_REQUEST_TYPE, NONE_SERVER_EXTENSION, &enableExtensionRequest, ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT, tokenReturn);
+	EnableExtensionServerRequest enableExtensionServerRequest;
+	enableExtensionServerRequest.pathSize = pathSize;
+	enableExtensionServerRequest.pathStart = (void *)pathStart;
+	ret sendServerRequest(serverConnectionSystem, ENABLE_EXTENSION_SERVER_REQUEST_TYPE, NONE_SERVER_EXTENSION, &enableExtensionServerRequest, ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT, tokenReturn);
 }
 
 
@@ -158,11 +158,15 @@ int main(void){
 		uint32 baseServerExtensionId;
 		{
 			#define PATH /*-*/ "/tmp/base-server-extension/output/base-server-extension.so"
-			EnableExtensionReply enableExtensionReply;
+			EnableExtensionServerReply enableExtensionServerReply;
+			uint32 token1;
+			requestServerNoOperation(serverConnectionSystem, &token1);
 			requestServerEnableExtension(serverConnectionSystem, lengthof(PATH) + 1, PATH, &token);
 			flushServerBuffer(serverConnectionSystem);
-			waitForServerReply(serverConnectionSystem, token, &enableExtensionReply);
-			baseServerExtensionId = enableExtensionReply.extensionId;
+			waitForServerReply(serverConnectionSystem, token, &enableExtensionServerReply);
+			waitForServerReply(serverConnectionSystem, token1, NULL);
+			baseServerExtensionId = enableExtensionServerReply.extensionId;
+			fprintf(stdout, "extension id @ %u\n", baseServerExtensionId);
 			#undef  PATH
 		}
 		{
@@ -172,7 +176,7 @@ int main(void){
 			requestBaseGetMagicNumber(serverConnectionSystem, baseServerExtensionId, &token);
 			flushServerBuffer(serverConnectionSystem);
 			waitForServerReply(serverConnectionSystem, token, &getMagicNumberBaseReply);
-			fprintf(stdout, "\twe got the %s number back\n", getMagicNumberBaseReply.magicNumber == magicNumber? "right" : "wrong");
+			fprintf(stdout, "we got the %s number back\n", getMagicNumberBaseReply.magicNumber == magicNumber? "right" : "wrong");
 		}
 		jmp eventLoop;
 	}

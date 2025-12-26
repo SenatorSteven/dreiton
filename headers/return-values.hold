@@ -47,6 +47,7 @@ SOFTWARE. */
 #define EPOLL_CTL_FAILURE /*-----------*/ (-1)
 #define RECV_FAILURE /*----------------*/ (-1)
 #define SENDMSG_FAILURE /*-------------*/ (-1)
+#define FCNTL_FAILURE /*---------------*/ (-1)
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED

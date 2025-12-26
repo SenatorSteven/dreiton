@@ -31,39 +31,100 @@ SOFTWARE. */
 #include "headers/cold/cold.hold"
 #endif
 
-#define SERVER_PROTOCOL_VERSION /*-*/ (1)
+#define SERVER_PROTOCOL_VERSION /*---------------------*/ (1)
 
-#define NONE_SERVER_EXTENSION /*---*/ (0)
+#define NONE_SERVER_EXTENSION /*-----------------------*/ (0)
 
-#define NONE_REPLY_STATUS /*-------*/ (b(00))
-#define SUCCESS_REPLY_STATUS /*----*/ (b(01))
-#define UPDATED_REPLY_STATUS /*----*/ (b(10))
+#define NONE_SERVER_REQUEST_TYPE /*--------------------*/ (0)
+#define NO_OPERATION_SERVER_REQUEST_TYPE /*------------*/ (1)
+#define SYNC_SERVER_REQUEST_TYPE /*--------------------*/ (2)
+#define ENABLE_EXTENSION_SERVER_REQUEST_TYPE /*--------*/ (3)
+
+#define NO_OPERATION_SERVER_REQUEST_ITEM_AMOUNT /*-----*/ (0)
+#define SYNC_SERVER_REQUEST_ITEM_AMOUNT /*-------------*/ (0)
+#define ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT /*-*/ (1)
+
+#define NONE_SERVER_REPLY_TYPE /*----------------------*/ (0)
+#define NO_OPERATION_SERVER_REPLY_TYPE /*--------------*/ (1)
+#define SYNC_SERVER_REPLY_TYPE /*----------------------*/ (2)
+#define ENABLE_EXTENSION_SERVER_REPLY_TYPE /*----------*/ (3)
+
+#define NONE_REPLY_STATUS /*---------------------------*/ (b(00))
+#define SUCCESS_REPLY_STATUS /*------------------------*/ (b(01))
+#define UPDATED_REPLY_STATUS /*------------------------*/ (b(10))
+
+#define NONE_SERVER_EVENT_TYPE /*----------------------*/ (0)
+#define TIME_SERVER_EVENT_TYPE /*----------------------*/ (1)
+
+#define NONE_SERVER_EVENT_TYPE_MASK /*-----------------*/ (b(0))
+#define TIME_SERVER_EVENT_TYPE_MASK /*-----------------*/ (b(1))
 
 def struct{
-	uint32 /*-------*/ token;
 	uint8 /*--------*/ requestType;
 	uint8 /*--------*/ extension;
 	bool /*---------*/ sendReply;
 	uint8 /*--------*/ pad0[1];
+	uint32 /*-------*/ token;
 	uint32 /*-------*/ payloadStartOffset;
 	uint32 /*-------*/ payloadSize;
 } GenericRequest;
 
-/*! lower sizes later? all are sized 8 * sizeof(uint64) */
-
 def struct{
-	uint32 /*-------*/ replySize;
-	uint32 /*-------*/ token;
 	uint8 /*--------*/ replyType;
+	uint8 /*--------*/ extension;
 	uint8 /*--------*/ status;
-	uint8 /*--------*/ pad0[54];
+	uint8 /*--------*/ pad0[1];
+	uint32 /*-------*/ token;
+	uint32 /*-------*/ payloadStartOffset;
+	uint32 /*-------*/ payloadSize;
 } GenericReply;
 
 def struct{
+	uint8 /*--------*/ eventType;
+	uint8 /*--------*/ extension;
+	uint8 /*--------*/ pad0[6];
+	uint32 /*-------*/ payloadStartOffset;
+	uint32 /*-------*/ payloadSize;
+} GenericEvent;
+
+def struct{
+	uint8 /*--------*/ pad0[1];
+} NoOperationServerRequest;
+
+def struct{
+	uint8 /*--------*/ pad0[1];
+} SyncServerRequest;
+
+def struct{
+	uint32 /*-------*/ pathSize;
+	uint8 /*--------*/ pad0[4];
+	char * /*-------*/ pathStart;
+} EnableExtensionServerRequest;
+
+def struct{
+	GenericReply /*-*/ reply;
+} NoOperationServerReply;
+
+def struct{
+	GenericReply /*-*/ reply;
+} SyncServerReply;
+
+def struct{
+	GenericReply /*-*/ reply;
+	uint32 /*-------*/ extensionId;
+	uint32 /*-------*/ baseEvent;
+} EnableExtensionServerReply;
+
+
+
+#ifdef a
+def struct{
 	uint32 /*-------*/ eventSize;
 	uint8 /*--------*/ eventType;
-	uint8 /*--------*/ pad0[59];
-} GenericEvent;
+} TimeServerEvent;
+#endif
+
+
 
 def struct{
 	uint32 /*-------*/ descriptorSize;
@@ -72,7 +133,7 @@ def struct{
 	uint32 /*-------*/ nameSize;
 	const char * /*-*/ name;
 	bool /*---------*/ (*initServerExtensionDescriptorSystem)(void);
-	bool /*---------*/ (*parseExtensionRequest)(const GenericRequest *const request, const uint32 itemAmount, uint8 *const statusReturn);
+	bool /*---------*/ (*parseExtensionRequest)(const GenericRequest *const request, const uint32 itemAmount, uint8 *const statusReturn, uint32 *const payloadSizeReturn);
 	bool /*---------*/ (*parseExtensionReply)(const uint8 replyType, GenericReply *const replyReturn);
 	bool /*---------*/ (*finiServerExtensionDescriptorSystem)(void);
 } ServerExtensionDescriptor;

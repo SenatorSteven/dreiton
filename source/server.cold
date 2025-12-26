@@ -74,7 +74,7 @@ local ServerSystem /*-*/ serverSystem;
 void signalHandler(const int signal){
 	if(signal == SIGINT){
 		fprintf(stdout, "\n");
-		quitServerClientRegistrationThread(&serverSystem);
+		quitServerRegistrationLoopThread(&serverSystem);
 		quitServerReplyLoopThread(&serverSystem);
 	}
 	if(signal == SIGPIPE){
@@ -98,8 +98,8 @@ int main(void){
 	setServerClientBlockSize(&serverSystem, 16);
 	bootServerReplyLoopThread(&serverSystem);
 	bootServerEventLoopThread(&serverSystem);
-	bootServerClientRegistrationThread(&serverSystem);
-	awaitServerClientRegistrationThreadExit(&serverSystem);
+	bootServerRegistrationLoopThread(&serverSystem);
+	awaitServerRegistrationLoopThreadExit(&serverSystem);
 	awaitServerReplyLoopThreadExit(&serverSystem);
 	finiServerSystem(&serverSystem);
 	ret 0;
