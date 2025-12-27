@@ -70,11 +70,13 @@ SOFTWARE. */
 #include "headers/base-server-extension.hold"
 
 local ServerSystem /*-*/ serverSystem;
+local Database /*-----*/ database;
 
 void signalHandler(const int signal){
 	if(signal == SIGINT){
 		fprintf(stdout, "\n");
 		quitServerRegistrationLoopThread(&serverSystem);
+		quitServerEventLoopThread(&serverSystem);
 		quitServerReplyLoopThread(&serverSystem);
 	}
 	if(signal == SIGPIPE){
@@ -94,13 +96,22 @@ int main(void){
 	initServerSystem(&serverSystem);
 	setServerServerChannelPath(&serverSystem, "/dev/shm/registration-form");
 	setServerClientChannelPath(&serverSystem, "/dev/shm/client-writer");
+	setServerDatabase(&serverSystem, &database);
+	setServerOwner(&serverSystem, NONE_SERVER_OWNER);
 	setServerExtensionBlockSize(&serverSystem, 16);
 	setServerClientBlockSize(&serverSystem, 16);
 	bootServerReplyLoopThread(&serverSystem);
 	bootServerEventLoopThread(&serverSystem);
 	bootServerRegistrationLoopThread(&serverSystem);
+
+
+
 	awaitServerRegistrationLoopThreadExit(&serverSystem);
+	awaitServerEventLoopThreadExit(&serverSystem);
 	awaitServerReplyLoopThreadExit(&serverSystem);
+
+
+
 	finiServerSystem(&serverSystem);
 	ret 0;
 }

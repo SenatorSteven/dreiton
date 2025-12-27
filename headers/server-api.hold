@@ -38,16 +38,26 @@ SOFTWARE. */
 #define NONE_SERVER_REQUEST_TYPE /*--------------------*/ (0)
 #define NO_OPERATION_SERVER_REQUEST_TYPE /*------------*/ (1)
 #define SYNC_SERVER_REQUEST_TYPE /*--------------------*/ (2)
-#define ENABLE_EXTENSION_SERVER_REQUEST_TYPE /*--------*/ (3)
+#define CLAIM_OWNERSHIP_SERVER_REQUEST_TYPE /*---------*/ (3)
+#define CLOSE_ON_IDLE_SERVER_REQUEST_TYPE /*-----------*/ (4)
+#define ENABLE_EXTENSION_SERVER_REQUEST_TYPE /*--------*/ (5)
+#define SEAL_OWNERSHIP_SERVER_REQUEST_TYPE /*----------*/ (6)
 
+#define NONE_SERVER_REQUEST_ITEM_AMOUNT /*-------------*/ (0)
 #define NO_OPERATION_SERVER_REQUEST_ITEM_AMOUNT /*-----*/ (0)
 #define SYNC_SERVER_REQUEST_ITEM_AMOUNT /*-------------*/ (0)
+#define CLAIM_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT /*--*/ (0)
+#define CLOSE_ON_IDLE_SERVER_REQUEST_ITEM_AMOUNT /*----*/ (0)
 #define ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT /*-*/ (1)
+#define SEAL_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT /*---*/ (0)
 
 #define NONE_SERVER_REPLY_TYPE /*----------------------*/ (0)
 #define NO_OPERATION_SERVER_REPLY_TYPE /*--------------*/ (1)
 #define SYNC_SERVER_REPLY_TYPE /*----------------------*/ (2)
-#define ENABLE_EXTENSION_SERVER_REPLY_TYPE /*----------*/ (3)
+#define CLAIM_OWNERSHIP_SERVER_REPLY_TYPE /*-----------*/ (3)
+#define CLOSE_ON_IDLE_SERVER_REPLY_TYPE /*-------------*/ (4)
+#define ENABLE_EXTENSION_SERVER_REPLY_TYPE /*----------*/ (5)
+#define SEAL_OWNERSHIP_SERVER_REPLY_TYPE /*------------*/ (6)
 
 #define NONE_REPLY_STATUS /*---------------------------*/ (b(00))
 #define SUCCESS_REPLY_STATUS /*------------------------*/ (b(01))
@@ -96,10 +106,22 @@ def struct{
 } SyncServerRequest;
 
 def struct{
+	uint8 /*--------*/ pad0[1];
+} ClaimOwnershipServerRequest;
+
+def struct{
+	uint8 /*--------*/ pad0[1];
+} CloseOnIdleServerRequest;
+
+def struct{
 	uint32 /*-------*/ pathSize;
 	uint8 /*--------*/ pad0[4];
 	char * /*-------*/ pathStart;
 } EnableExtensionServerRequest;
+
+def struct{
+	uint8 /*--------*/ pad0[1];
+} SealOwnershipServerRequest;
 
 def struct{
 	GenericReply /*-*/ reply;
@@ -111,9 +133,21 @@ def struct{
 
 def struct{
 	GenericReply /*-*/ reply;
+} ClaimOwnershipServerReply;
+
+def struct{
+	GenericReply /*-*/ reply;
+} CloseOnIdleServerReply;
+
+def struct{
+	GenericReply /*-*/ reply;
 	uint32 /*-------*/ extensionId;
 	uint32 /*-------*/ baseEvent;
 } EnableExtensionServerReply;
+
+def struct{
+	GenericReply /*-*/ reply;
+} SealOwnershipServerReply;
 
 
 

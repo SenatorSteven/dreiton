@@ -98,6 +98,7 @@ SOFTWARE. */
 local ServerConnectionSystem /*---*/ _serverConnectionSystem;
 local ServerConnectionSystem * /*-*/ serverConnectionSystem;
 local GenericEvent /*-------------*/ event;
+local uint32 /*-------------------*/ baseServerExtensionId;
 
 
 
@@ -113,17 +114,32 @@ bool requestServerEnableExtension(ServerConnectionSystem *const serverConnection
 	enableExtensionServerRequest.pathStart = (void *)pathStart;
 	ret sendServerRequest(serverConnectionSystem, ENABLE_EXTENSION_SERVER_REQUEST_TYPE, NONE_SERVER_EXTENSION, &enableExtensionServerRequest, ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT, tokenReturn);
 }
+inline bool waitForServerNoOperationReply(ServerConnectionSystem *const serverConnectionSystem, const uint32 token, NoOperationServerReply *const reply){
+	ret waitForServerReply(serverConnectionSystem, token, reply);
+}
+inline bool waitForServerSyncReply(ServerConnectionSystem *const serverConnectionSystem, const uint32 token, SyncServerReply *const reply){
+	ret waitForServerReply(serverConnectionSystem, token, reply);
+}
+inline bool waitForServerEnableExtensionReply(ServerConnectionSystem *const serverConnectionSystem, const uint32 token, EnableExtensionServerReply *const reply){
+	ret waitForServerReply(serverConnectionSystem, token, reply);
+}
 
 
 
 bool requestBaseGetMagicNumber(ServerConnectionSystem *const serverConnectionSystem, const uint32 extensionId, uint32 *const tokenReturn){
 	ret sendServerRequest(serverConnectionSystem, GET_MAGIC_NUMBER_BASE_REQUEST_TYPE, extensionId, NULL, GET_MAGIC_NUMBER_BASE_REQUEST_ITEM_AMOUNT, tokenReturn);
 }
-bool requestBaseSetMagicNumber(ServerConnectionSystem *const serverConnectionSystem, const uint32 extensionId, uint32 magicNumber, uint32 *const tokenReturn){
+bool requestBaseSetMagicNumber(ServerConnectionSystem *const serverConnectionSystem, const uint32 extensionId, const uint32 magicNumber, uint32 *const tokenReturn){
 	SetMagicNumberBaseRequest setMagicNumberBaseRequest;
 	setMagicNumberBaseRequest.magicNumberSize = sizeof(uint32);
-	setMagicNumberBaseRequest.magicNumberStart = &magicNumber;
+	setMagicNumberBaseRequest.magicNumberStart = (void *)&magicNumber;
 	ret sendServerRequest(serverConnectionSystem, SET_MAGIC_NUMBER_BASE_REQUEST_TYPE, extensionId, &setMagicNumberBaseRequest, SET_MAGIC_NUMBER_BASE_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+inline bool waitForBaseGetMagicNumberReply(ServerConnectionSystem *const serverConnectionSystem, const uint32 token, GetMagicNumberBaseReply *const reply){
+	ret waitForServerReply(serverConnectionSystem, token, reply);
+}
+inline bool waitForBaseSetMagicNumberReply(ServerConnectionSystem *const serverConnectionSystem, const uint32 token, SetMagicNumberBaseReply *const reply){
+	ret waitForServerReply(serverConnectionSystem, token, reply);
 }
 
 
@@ -138,6 +154,10 @@ void signalHandler(const int signal){
 	ret;
 }
 int main(void){
+	{
+		serverConnectionSystem = &_serverConnectionSystem;
+		baseServerExtensionId = 0;
+	}
 	/*!setSignals:*/{
 		struct sigaction s;
 		s.sa_handler = signalHandler;
@@ -146,38 +166,49 @@ int main(void){
 		sigaction(SIGINT , &s, NULL);
 		sigaction(SIGPIPE, &s, NULL);
 	}
-	serverConnectionSystem = &_serverConnectionSystem;
 	initServerConnection(serverConnectionSystem);
 	setServerConnectionServerChannelPath(serverConnectionSystem, "/dev/shm/registration-form");
 	if(!connectToServer(serverConnectionSystem)){
 		fprintf(stdout, "failed serverConnectionSystem\n");
 		ret 0;
 	}
+
+
+
 	{
 		uint32 token;
-		uint32 baseServerExtensionId;
-		{
+		ClaimOwnershipServerReply claimOwnershipServerReply;
+		sendServerRequest(serverConnectionSystem, CLAIM_OWNERSHIP_SERVER_REQUEST_TYPE, 0, NULL, CLAIM_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT, &token);
+		flushServerBuffer(serverConnectionSystem);
+		waitForServerReply(serverConnectionSystem, token, &claimOwnershipServerReply);
+		if(claimOwnershipServerReply.reply.status & SUCCESS_REPLY_STATUS){
 			#define PATH /*-*/ "/tmp/base-server-extension/output/base-server-extension.so"
 			EnableExtensionServerReply enableExtensionServerReply;
-			uint32 token1;
-			requestServerNoOperation(serverConnectionSystem, &token1);
+			fprintf(stdout, "\nentering the owner seat...\n");
+			sendServerRequest(serverConnectionSystem, CLOSE_ON_IDLE_SERVER_REQUEST_TYPE, 0, NULL, CLOSE_ON_IDLE_SERVER_REQUEST_ITEM_AMOUNT, NULL);
 			requestServerEnableExtension(serverConnectionSystem, lengthof(PATH) + 1, PATH, &token);
 			flushServerBuffer(serverConnectionSystem);
 			waitForServerReply(serverConnectionSystem, token, &enableExtensionServerReply);
-			waitForServerReply(serverConnectionSystem, token1, NULL);
 			baseServerExtensionId = enableExtensionServerReply.extensionId;
 			fprintf(stdout, "extension id @ %u\n", baseServerExtensionId);
+			sendServerRequest(serverConnectionSystem, SEAL_OWNERSHIP_SERVER_REQUEST_TYPE, 0, NULL, SEAL_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT, NULL);
+			flushServerBuffer(serverConnectionSystem);
+			fprintf(stdout, "done\n");
 			#undef  PATH
 		}
-		{
-			const uint32 magicNumber = 123;
-			GetMagicNumberBaseReply getMagicNumberBaseReply;
-			requestBaseSetMagicNumber(serverConnectionSystem, baseServerExtensionId, magicNumber, NULL);
-			requestBaseGetMagicNumber(serverConnectionSystem, baseServerExtensionId, &token);
-			flushServerBuffer(serverConnectionSystem);
-			waitForServerReply(serverConnectionSystem, token, &getMagicNumberBaseReply);
-			fprintf(stdout, "we got the %s number back\n", getMagicNumberBaseReply.magicNumber == magicNumber? "right" : "wrong");
-		}
+	}
+
+
+
+	{
+		const uint32 magicNumber = 123;
+		uint32 token;
+		GetMagicNumberBaseReply getMagicNumberBaseReply;
+		requestBaseSetMagicNumber(serverConnectionSystem, baseServerExtensionId, magicNumber, NULL);
+		requestBaseGetMagicNumber(serverConnectionSystem, baseServerExtensionId, &token);
+		flushServerBuffer(serverConnectionSystem);
+		waitForBaseGetMagicNumberReply(serverConnectionSystem, token, &getMagicNumberBaseReply);
+		fprintf(stdout, "we got the %s number back\n", getMagicNumberBaseReply.magicNumber == magicNumber? "right" : "wrong");
 		jmp eventLoop;
 	}
 	eventLoop:{

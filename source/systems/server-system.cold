@@ -95,6 +95,7 @@ INITSERVERSYSTEM(){
 	}
 	(*serverSystem).serverChannelPath = NULL;
 	(*serverSystem).clientChannelPath = NULL;
+	(*serverSystem).database = NULL;
 	(*serverSystem).serverExtensionStart = NULL;
 	(*serverSystem).serverExtensionSize = 0;
 	(*serverSystem).serverExtensionAllocated = 0;
@@ -105,7 +106,7 @@ INITSERVERSYSTEM(){
 	(*serverSystem).serverClientBlockSize = 0;
 	(*serverSystem).replyEpollFd = 0;
 	(*serverSystem).eventEpollFd = 0;
-	(*serverSystem).signalFd = 0;
+	(*serverSystem).signalEventFd = 0;
 	(*serverSystem).replyLoopRunning = false;
 	(*serverSystem).eventLoopRunning = false;
 	(*serverSystem).registrationLoopRunning = false;
@@ -145,6 +146,30 @@ SETSERVERCLIENTCHANNELPATH(){
 		ret false;
 	}
 	(*serverSystem).clientChannelPath = clientChannelPath;
+	ret true;
+}
+SETSERVERDATABASE(){
+	if(!serverSystem){
+		ret false;
+	}
+	if(database == (*serverSystem).database){
+		ret false;
+	}
+	(*serverSystem).database = database;
+	(*database).owner = NONE_SERVER_OWNER;
+	(*database).closeOnIdle = false;
+	ret true;
+}
+SETSERVEROWNER(){
+	Database *database;
+	if(!serverSystem){
+		ret false;
+	}
+	database = (*serverSystem).database;
+	if(owner == (*database).owner){
+		ret false;
+	}
+	(*database).owner = owner;
 	ret true;
 }
 SETSERVEREXTENSIONBLOCKSIZE(){
@@ -243,7 +268,11 @@ BOOTSERVERREGISTRATIONLOOPTHREAD(){
 
 SERVERREPLYLOOP(){
 
+
+
 	/*! success when? */
+
+
 
 	ServerSystem *const serverSystem = arg;
 	int replyEpollFd;
@@ -330,6 +359,10 @@ SERVERREPLYLOOP(){
 									if(serverClient){
 										removeServerClient(serverSystem, serverClient);
 										fprintf(stdout, "disconnected %u\n", (*serverClient).clientId);
+										if((*serverSystem).serverClientAllocated == 1 and (*serverSystem).database and (*(*serverSystem).database).closeOnIdle){
+											fprintf(stdout, "reply thread exited due to no clients\n");
+											jmp emergencyExit;
+										}
 									}
 								}
 							}
@@ -439,7 +472,11 @@ SERVERREPLYLOOP(){
 }
 SERVEREVENTLOOP(){
 
+
+
 	/*! success when? */
+
+
 
 	ServerSystem *const serverSystem = arg;
 	int eventEpollFd;
@@ -685,7 +722,7 @@ SERVERREGISTRATIONLOOP(){
 		{
 			struct epoll_event eventStart[1];
 			uint64 message;
-			const int eventAmount = epoll_wait(registrationEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
+			int eventAmount = epoll_wait(registrationEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
 			int returnValue = read((*eventStart).data.fd, &message, sizeof(message));
 			(void)eventAmount;
 			(void)returnValue;
@@ -906,7 +943,7 @@ UNPACKREQUESTITEMS(){
 
 
 
-/*! what happens when there is not enough space for the reply data to exist in? how do i handle that? maybe return the size via parseExtensionRequest()? */
+/*! what happens when there is not enough space for the reply data to exist in? how do i handle that? maybe return the size via parseExtensionRequest()? malloc() the data to send later? when is later? */
 
 PARSESERVERCLIENTREQUESTS(){
 	uint current;
@@ -920,7 +957,7 @@ PARSESERVERCLIENTREQUESTS(){
 	if(!serverSystem){
 		ret false;
 	}
-	if(!isValidServerClient(serverSystem, serverClient) or !requestAmount){
+	if(!(*serverSystem).database or !isValidServerClient(serverSystem, serverClient) or !requestAmount){
 		ret false;
 	}
 
@@ -968,20 +1005,13 @@ PARSESERVERCLIENTREQUESTS(){
 				payloadSize = (*request).payloadSize;
 				itemAmount = 0;
 				if(payloadStartOffset and payloadSize){
-					const uint8 *const payloadStart = (uint8 *)request + payloadStartOffset;
-					itemAmount = *(uint32 *)payloadStart;
+					itemAmount = *(uint32 *)((uint8 *)request + payloadStartOffset);
 				}
 				requestCurrentReader = (requestCurrentReader + 1) % requestSlotSize;
 				status = NONE_REPLY_STATUS;
 				replyPayloadSize = 0 * sizeof(uint8);
-
-
-
-fprintf(stdout, "\trequest slot @ %u\n", (*requestSlot).requestStartOffset);
-fprintf(stdout, "\tstruct got is %u %u %u %u %u %u\n", (*request).requestType, (*request).extension, (*request).sendReply, (*request).token, (*request).payloadStartOffset, (*request).payloadSize);
-
-
-
+				fprintf(stdout, "\trequest slot @ %u\n", (*requestSlot).requestStartOffset);
+				fprintf(stdout, "\tparsed  data @ %u %u %u %u %u %u\n", (*request).requestType, (*request).extension, (*request).sendReply, (*request).token, (*request).payloadStartOffset, (*request).payloadSize);
 				if(extension){
 					ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extension;
 					ServerExtensionDescriptor *serverExtensionDescriptor;
@@ -1001,43 +1031,68 @@ fprintf(stdout, "\tstruct got is %u %u %u %u %u %u\n", (*request).requestType, (
 							jmp sendBadRequest;
 						}
 						to NO_OPERATION_SERVER_REQUEST_TYPE:{
-							if(!itemAmount){
+							if(itemAmount == NO_OPERATION_SERVER_REQUEST_ITEM_AMOUNT){
 								status |= SUCCESS_REPLY_STATUS;
 							}
 							brk;
 						}
 						to SYNC_SERVER_REQUEST_TYPE:{
-							if(!itemAmount){
+							if(itemAmount == SYNC_SERVER_REQUEST_ITEM_AMOUNT){
 								status |= SUCCESS_REPLY_STATUS;
 							}
 							brk;
 						}
+						to CLAIM_OWNERSHIP_SERVER_REQUEST_TYPE:{
+							if(itemAmount == CLAIM_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT){
+								Database *const database = (*serverSystem).database;
+								if(!(*database).owner){
+									(*database).owner = (*serverClient).clientId;
+									status |= SUCCESS_REPLY_STATUS;
+								}
+							}
+							brk;
+						}
+						to CLOSE_ON_IDLE_SERVER_REQUEST_TYPE:{
+							if(itemAmount == CLOSE_ON_IDLE_SERVER_REQUEST_ITEM_AMOUNT){
+								Database *const database = (*serverSystem).database;
+								if((*database).owner == (*serverClient).clientId){
+									(*database).closeOnIdle = true;
+									status |= SUCCESS_REPLY_STATUS;
+								}
+							}
+							brk;
+						}
 						to ENABLE_EXTENSION_SERVER_REQUEST_TYPE:{
-							replyPayloadSize = 2 * sizeof(uint32);
-							extensionId = 0;
-							if(itemAmount == 1){
-								EnableExtensionServerRequest enableExtensionServerRequest;
-								unpackRequestItems(serverSystem, request, 1, (void *)&enableExtensionServerRequest.pathStart, &enableExtensionServerRequest.pathSize);
-								if(loadServerExtension(serverSystem, enableExtensionServerRequest.pathStart, &extensionId)){
-									const ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extensionId;
-									const ServerExtensionDescriptor *const serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
-									if((*(*serverExtensionDescriptor).initServerExtensionDescriptorSystem)()){
-										if((*serverExtension).serverExtensionReferenceCount == 1){
-											status |= UPDATED_REPLY_STATUS;
+							if(itemAmount == ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT){
+								Database *const database = (*serverSystem).database;
+								if((*database).owner == (*serverClient).clientId){
+									EnableExtensionServerRequest enableExtensionServerRequest;
+									unpackRequestItems(serverSystem, request, 1, (void *)&enableExtensionServerRequest.pathStart, &enableExtensionServerRequest.pathSize);
+									if(!*(enableExtensionServerRequest.pathStart + enableExtensionServerRequest.pathSize - 1)){
+										if(loadServerExtension(serverSystem, (*database).owner == (*serverClient).clientId, enableExtensionServerRequest.pathStart, &extensionId)){
+											const ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extensionId;
+											const ServerExtensionDescriptor *const serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
+											if((*(*serverExtensionDescriptor).initServerExtensionDescriptorSystem)()){
+												if((*serverExtension).serverExtensionReferenceCount == 1){
+													status |= UPDATED_REPLY_STATUS;
+												}
+												status |= SUCCESS_REPLY_STATUS;
+												replyPayloadSize = 2 * sizeof(uint32);
+											}
 										}
-										status |= SUCCESS_REPLY_STATUS;
 									}
 								}
 							}
-
-
-
-							if(!(status & SUCCESS_REPLY_STATUS)){
-								fprintf(stdout, "failed the extension adding\n");
+							brk;
+						}
+						to SEAL_OWNERSHIP_SERVER_REQUEST_TYPE:{
+							if(itemAmount == SEAL_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT){
+								Database *const database = (*serverSystem).database;
+								if((*database).owner == (*serverClient).clientId){
+									(*database).owner = SEALED_SERVER_OWNER;
+									status |= SUCCESS_REPLY_STATUS;
+								}
 							}
-
-
-
 							brk;
 						}
 						off:{
@@ -1045,6 +1100,7 @@ fprintf(stdout, "\tstruct got is %u %u %u %u %u %u\n", (*request).requestType, (
 						}
 					}
 				}
+				replyPayloadSize = !!(status & SUCCESS_REPLY_STATUS) * replyPayloadSize;
 				success = true;
 				jmp formReply;
 			}
@@ -1067,37 +1123,48 @@ fprintf(stdout, "\tstruct got is %u %u %u %u %u %u\n", (*request).requestType, (
 
 
 					replyCurrentWriter = (replyCurrentWriter + 1) % replySize;
-					if(extension){
-						ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extension;
-						ServerExtensionDescriptor *serverExtensionDescriptor;
-						if(extension >= (*serverSystem).serverExtensionAllocated){
-							jmp sendBadRequest;
-						}
-						serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
-						if(!(*serverExtensionDescriptor).parseExtensionReply){
-							jmp sendBadRequest;
-						}
-						if(!(*(*serverExtensionDescriptor).parseExtensionReply)(requestType, reply)){
-							jmp sendBadRequest;
-						}
-					}else{
-						switch(requestType){
-							to NONE_SERVER_REPLY_TYPE:{
+					if(status & SUCCESS_REPLY_STATUS){
+						if(extension){
+							ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extension;
+							ServerExtensionDescriptor *serverExtensionDescriptor;
+							if(extension >= (*serverSystem).serverExtensionAllocated){
 								jmp sendBadRequest;
 							}
-							to NO_OPERATION_SERVER_REPLY_TYPE:{
-								brk;
-							}
-							to SYNC_SERVER_REPLY_TYPE:{
-								brk;
-							}
-							to ENABLE_EXTENSION_SERVER_REPLY_TYPE:{
-								(*(EnableExtensionServerReply *)reply).extensionId = extensionId;
-								(*(EnableExtensionServerReply *)reply).baseEvent = 0; /*! use a base variable and then increment by the amount of extension events, but increment on request */
-								brk;
-							}
-							off:{
+							serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
+							if(!(*serverExtensionDescriptor).parseExtensionReply){
 								jmp sendBadRequest;
+							}
+							if(!(*(*serverExtensionDescriptor).parseExtensionReply)(requestType, reply)){
+								jmp sendBadRequest;
+							}
+						}else{
+							switch(requestType){
+								to NONE_SERVER_REPLY_TYPE:{
+									jmp sendBadRequest;
+								}
+								to NO_OPERATION_SERVER_REPLY_TYPE:{
+									brk;
+								}
+								to SYNC_SERVER_REPLY_TYPE:{
+									brk;
+								}
+								to CLAIM_OWNERSHIP_SERVER_REPLY_TYPE:{
+									brk;
+								}
+								to CLOSE_ON_IDLE_SERVER_REQUEST_TYPE:{
+									brk;
+								}
+								to ENABLE_EXTENSION_SERVER_REPLY_TYPE:{
+									(*(EnableExtensionServerReply *)reply).extensionId = extensionId;
+									(*(EnableExtensionServerReply *)reply).baseEvent = 0; /*! use a base variable and then increment by the amount of extension events, but increment on request */
+									brk;
+								}
+								to SEAL_OWNERSHIP_SERVER_REPLY_TYPE:{
+									brk;
+								}
+								off:{
+									jmp sendBadRequest;
+								}
 							}
 						}
 					}
@@ -1109,16 +1176,10 @@ fprintf(stdout, "\tstruct got is %u %u %u %u %u %u\n", (*request).requestType, (
 					(*reply).token = token;
 					(*reply).payloadStartOffset = !!replyPayloadSize * sizeof(GenericReply);
 					(*reply).payloadSize = replyPayloadSize;
-
 					(*serverClient).replyCurrent += sizeof(GenericReply) + replyPayloadSize;
-
-
-
-					fprintf(stdout, "\n\treply slot @ %u\n", (*replySlot).replyStartOffset);
-					fprintf(stdout, "\tsending back  %u %u %u %u %u %u\n", (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize);
-
-
-
+					fprintf(stdout, "\nsending reply   to   client...\n");
+					fprintf(stdout, "\treply   slot @ %u\n", (*replySlot).replyStartOffset);
+					fprintf(stdout, "\tsending back @ %u %u %u %u %u %u\n", (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize);
 					write((*serverClient).serverClientReplyWriteFd, &response, sizeof(response)); /*! errors? */
 					success = true;
 				}
@@ -1172,14 +1233,11 @@ LOADSERVEREXTENSION(){
 				inc current;
 				jmp findServerExtensionLoop;
 			}
+			jmp emergencyExit;
 		}
-
-
-
-		/*! can this even fail? what happens then? */
-
-
-
+	}
+	if(!force){
+		jmp emergencyExit;
 	}
 	serverExtensionHandle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
 	if(!serverExtensionHandle){
@@ -1294,6 +1352,9 @@ REMOVESERVERCLIENT(){
 	close((*serverClient).serverClientReplyWriteFd); /*! on signal interrupt? */
 	close((*serverClient).serverClientEventWriteFd); /*! on signal interrupt? */
 	(*serverClient).clientId = 0;
+	if(serverClient - (*serverSystem).serverClientStart == (*serverSystem).serverClientAllocated - 1){
+		dec (*serverSystem).serverClientAllocated;
+	}
 	ret true;
 }
 REMOVEALLSERVERCLIENTS(){
@@ -1348,16 +1409,12 @@ QUITSERVERREGISTRATIONLOOPTHREAD(){
 	address.sun_family = AF_UNIX;
 	strcpy(address.sun_path, (*serverSystem).serverChannelPath); /*! replace with toolkit function */
 	(*serverSystem).registrationLoopRunning = false;
-	if(connect(socketConnection, (void *)&address, sizeof(address)) == CONNECT_FAILURE){
-		(*serverSystem).registrationLoopRunning = true;
-		close(socketConnection); /*! on signal interrupt? */
-		ret false;
-	}
+	connect(socketConnection, (void *)&address, sizeof(address));
 	close(socketConnection); /*! on signal interrupt? */
 	ret true;
 }
 QUITSERVERREPLYLOOPTHREAD(){
-	int signalFd;
+	int signalEventFd;
 	struct epoll_event event;
 	uint64 value;
 	if(!serverSystem){
@@ -1366,21 +1423,21 @@ QUITSERVERREPLYLOOPTHREAD(){
 	if(!(*serverSystem).replyEpollFd or !(*serverSystem).replyLoopRunning){
 		ret false;
 	}
-	signalFd = (*serverSystem).signalFd;
-	if(!signalFd){
-		signalFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
-		(*serverSystem).signalFd = signalFd;
+	signalEventFd = (*serverSystem).signalEventFd;
+	if(!signalEventFd){
+		signalEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+		(*serverSystem).signalEventFd = signalEventFd;
 	}
 	event.events = EPOLLIN;
-	event.data.fd = signalFd;
+	event.data.fd = signalEventFd;
 	value = 1;
-	epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_ADD, signalFd, &event); /*! errors? */
+	epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_ADD, signalEventFd, &event); /*! errors? */
 	(*serverSystem).replyLoopRunning = false;
-	write(signalFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+	write(signalEventFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
 	ret true;
 }
 QUITSERVEREVENTLOOPTHREAD(){
-	int signalFd;
+	int signalEventFd;
 	struct epoll_event event;
 	uint64 value;
 	if(!serverSystem){
@@ -1389,17 +1446,17 @@ QUITSERVEREVENTLOOPTHREAD(){
 	if(!(*serverSystem).eventEpollFd or !(*serverSystem).eventLoopRunning){
 		ret false;
 	}
-	signalFd = (*serverSystem).signalFd;
-	if(!signalFd){
-		signalFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
-		(*serverSystem).signalFd = signalFd;
+	signalEventFd = (*serverSystem).signalEventFd;
+	if(!signalEventFd){
+		signalEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+		(*serverSystem).signalEventFd = signalEventFd;
 	}
 	event.events = EPOLLIN;
-	event.data.fd = signalFd;
+	event.data.fd = signalEventFd;
 	value = 1;
-	epoll_ctl((*serverSystem).eventEpollFd, EPOLL_CTL_ADD, signalFd, &event); /*! errors? */
+	epoll_ctl((*serverSystem).eventEpollFd, EPOLL_CTL_ADD, signalEventFd, &event); /*! errors? */
 	(*serverSystem).eventLoopRunning = false;
-	write(signalFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+	write(signalEventFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
 	ret true;
 }
 AWAITSERVERREGISTRATIONLOOPTHREADEXIT(){
@@ -1588,9 +1645,9 @@ FINISERVERSYSTEM(){
 
 	/*! should someone else be responsible for these? namely the functions dealing with this stuff */
 
-	if((*serverSystem).signalFd){
-		close((*serverSystem).signalFd); /*! on signal interrupt? */ /*! errors? */
-		(*serverSystem).signalFd = 0;
+	if((*serverSystem).signalEventFd){
+		close((*serverSystem).signalEventFd); /*! on signal interrupt? */ /*! errors? */
+		(*serverSystem).signalEventFd = 0;
 	}
 
 	/*!*/
@@ -1598,7 +1655,7 @@ FINISERVERSYSTEM(){
 #ifdef a
 	int32 /*--------*/ replyEpollFd;
 	int32 /*--------*/ eventReplyEpollFd;
-	int32 /*--------*/ signalFd;
+	int32 /*--------*/ signalEventFd;
 	uint32 /*-------*/ clientId;
 #endif
 
@@ -1622,6 +1679,7 @@ FINISERVERSYSTEM(){
 
 
 
+	(*serverSystem).database = NULL;
 	(*serverSystem).clientChannelPath = NULL;
 	(*serverSystem).serverChannelPath = NULL;
 	ret true;

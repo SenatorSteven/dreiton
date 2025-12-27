@@ -107,14 +107,23 @@ INITSERVERCONNECTION(){
 	ret true;
 }
 SETSERVERCONNECTIONSERVERCHANNELPATH(){
+	bool success;
 	if(!serverConnectionSystem){
 		ret false;
 	}
+	success = false;
 	if(serverChannelPath == (*serverConnectionSystem).serverChannelPath){
-		ret false;
+		jmp emergencyExit;
 	}
 	(*serverConnectionSystem).serverChannelPath = serverChannelPath;
-	ret true;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
 }
 CONNECTTOSERVER(){
 	int replyEpollFd;
@@ -438,33 +447,6 @@ SENDSERVERREQUEST(){
 		ret true;
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 WAITFORSERVERREPLY(){
 	bool success;
 	if(!serverConnectionSystem){
@@ -616,33 +598,6 @@ WAITFORSERVERREPLY(){
 		ret true;
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 WAITFORSERVEREVENT(){
 	bool success;
 	(void)eventReturn;
@@ -663,7 +618,7 @@ WAITFORSERVEREVENT(){
 #ifdef a
 	struct epoll_event epollEventStart[1];
 	int epollEventAmount;
-	uint32 response;
+	uint64 response;
 	uint32 replySlot;
 	int returnValue;
 	epollEventAmount = epoll_wait((*serverConnectionSystem).eventEpollFd, epollEventStart, countof(epollEventStart), INFINITE_EPOLL_WAIT_TIMEOUT);
@@ -772,23 +727,25 @@ FLUSHSERVERBUFFER(){
 
 
 DISCONNECTFROMSERVER(){
-	struct epoll_event epollEventStart[1];
+	bool success;
 	if(!serverConnectionSystem){
 		ret false;
 	}
+	success = false;
 
 
 
 /*! update this */
 
 	if(!(*serverConnectionSystem).eventStart or !(*serverConnectionSystem).replyStart or !(*serverConnectionSystem).requestSlotStart or !(*serverConnectionSystem).shmStart or !(*serverConnectionSystem).eventEpollFd or !(*serverConnectionSystem).replyEpollFd or !(*serverConnectionSystem).clientEventReadFd or !(*serverConnectionSystem).clientReplyReadFd or !(*serverConnectionSystem).serverRequestWriteFd){
-		ret false;
+		jmp emergencyExit;
 	}
 
 
 
 	if(!(*serverConnectionSystem).hasError){
-		const uint8 requestAmount = 0;
+		const uint64 requestAmount = 0;
+		struct epoll_event epollEventStart[1];
 		write((*serverConnectionSystem).serverRequestWriteFd, &requestAmount, sizeof(requestAmount)); /*! errors? */
 		epoll_wait((*serverConnectionSystem).replyEpollFd, epollEventStart, countof(epollEventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
 	}
@@ -819,7 +776,14 @@ DISCONNECTFROMSERVER(){
 	(*serverConnectionSystem).replySlotStart = NULL;
 	(*serverConnectionSystem).requestSlotStart = NULL;
 	(*serverConnectionSystem).shmStart = NULL;
-	ret true;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
 }
 FINISERVERCONNECTION(){
 	if(!serverConnectionSystem){

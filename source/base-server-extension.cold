@@ -73,13 +73,13 @@ PARSEEXTENSIONREQUEST(){
 		}
 		to GET_MAGIC_NUMBER_BASE_REQUEST_TYPE:{
 			*payloadSizeReturn = 1 * sizeof(uint32);
-			if(!itemAmount){
+			if(itemAmount == GET_MAGIC_NUMBER_BASE_REQUEST_ITEM_AMOUNT){
 				*statusReturn |= SUCCESS_REPLY_STATUS;
 			}
 			ret true;
 		}
 		to SET_MAGIC_NUMBER_BASE_REQUEST_TYPE:{
-			if(itemAmount == 1){
+			if(itemAmount == SET_MAGIC_NUMBER_BASE_REQUEST_ITEM_AMOUNT){
 
 
 

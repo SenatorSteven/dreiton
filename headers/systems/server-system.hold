@@ -31,15 +31,16 @@ SOFTWARE. */
 #include "headers/cold/cold.hold"
 #endif
 
-#define ServerSystem /*------------------------------*/ ServerSystem
+#define ServerSystem /*----------------------------*/ ServerSystem
 
-/*! add a way to block adding modules, thus turning a boolean on, thus performing on checks on mod loading */
-
-/*! allow closing on 0 clients. */
+#define NONE_SERVER_OWNER /*-----------------------*/ (0)
+#define SEALED_SERVER_OWNER /*---------------------*/ (0xFFFFFFFF)
 
 #define INITSERVERSYSTEM() /*----------------------*/ bool           initServerSystem(ServerSystem *const serverSystem)
 #define SETSERVERSERVERCHANNELPATH() /*------------*/ bool           setServerServerChannelPath(ServerSystem *const serverSystem, const char *const serverChannelPath)
 #define SETSERVERCLIENTCHANNELPATH() /*------------*/ bool           setServerClientChannelPath(ServerSystem *const serverSystem, const char *const clientChannelPath)
+#define SETSERVERDATABASE() /*---------------------*/ bool           setServerDatabase(ServerSystem *const serverSystem, Database *const database)
+#define SETSERVEROWNER() /*------------------------*/ bool           setServerOwner(ServerSystem *const serverSystem, const uint32 owner)
 #define SETSERVEREXTENSIONBLOCKSIZE() /*-----------*/ bool           setServerExtensionBlockSize(ServerSystem *const serverSystem, const uint serverExtensionBlockSize)
 #define SETSERVERCLIENTBLOCKSIZE() /*--------------*/ bool           setServerClientBlockSize(ServerSystem *const serverSystem, const uint serverClientBlockSize)
 #define BOOTSERVERREPLYLOOPTHREAD() /*-------------*/ bool           bootServerReplyLoopThread(ServerSystem *const serverSystem)
@@ -50,7 +51,7 @@ SOFTWARE. */
 #define SERVERREGISTRATIONLOOP() /*----------------*/ void *         serverRegistrationLoop(void *const arg)
 #define INSERTSERVERCLIENT() /*--------------------*/ bool           insertServerClient(ServerSystem *const serverSystem, const int serverRequestReadFd, const int clientReplyWriteFd, const int clientEventWriteFd)
 #define PARSESERVERCLIENTREQUESTS() /*-------------*/ bool           parseServerClientRequests(ServerSystem *const serverSystem, ServerClient *const serverClient, const uint8 requestAmount)
-#define LOADSERVEREXTENSION() /*-------------------*/ bool           loadServerExtension(ServerSystem *const serverSystem, const char *const path, uint32 *const extensionIdReturn)
+#define LOADSERVEREXTENSION() /*-------------------*/ bool           loadServerExtension(ServerSystem *const serverSystem, const bool force, const char *const path, uint32 *const extensionIdReturn)
 #define UNLOADSERVEREXTENSION() /*-----------------*/ bool           unloadServerExtension(ServerSystem *const serverSystem)
 #define REMOVESERVERCLIENT() /*--------------------*/ bool           removeServerClient(ServerSystem *const serverSystem, ServerClient *const serverClient)
 #define REMOVEALLSERVERCLIENTS() /*----------------*/ bool           removeAllServerClients(ServerSystem *const serverSystem)
@@ -65,6 +66,12 @@ SOFTWARE. */
 #define FINDSERVERCLIENTFD() /*--------------------*/ ServerClient * findServerClientFd(ServerSystem *const serverSystem, const int fd)
 #define FINDSERVERCLIENTFDID() /*------------------*/ ServerClient * findServerClientFdId(ServerSystem *const serverSystem, const int fd, const uint32 id)
 #define FINISERVERSYSTEM() /*----------------------*/ bool           finiServerSystem(ServerSystem *const serverSystem)
+
+def struct{
+	uint32 /*----------------------*/ owner;
+	bool /*------------------------*/ closeOnIdle;
+	uint8 /*-----------------------*/ pad0[3];
+} Database;
 
 def struct{
 	void * /*----------------------*/ serverExtensionHandle;
@@ -132,6 +139,7 @@ def struct{
 def struct{
 	const char * /*----------------*/ serverChannelPath;
 	const char * /*----------------*/ clientChannelPath;
+	Database * /*------------------*/ database;
 	ServerExtension * /*-----------*/ serverExtensionStart;
 	ServerClient * /*--------------*/ serverClientStart;
 	uint32 /*----------------------*/ serverExtensionSize;
@@ -142,7 +150,7 @@ def struct{
 	uint32 /*----------------------*/ serverClientBlockSize;
 	int32 /*-----------------------*/ replyEpollFd;
 	int32 /*-----------------------*/ eventEpollFd;
-	int32 /*-----------------------*/ signalFd;
+	int32 /*-----------------------*/ signalEventFd;
 	bool /*------------------------*/ replyLoopRunning;
 	bool /*------------------------*/ eventLoopRunning;
 	bool /*------------------------*/ registrationLoopRunning;
@@ -455,6 +463,8 @@ int main(void){
 INITSERVERSYSTEM();
 SETSERVERSERVERCHANNELPATH();
 SETSERVERCLIENTCHANNELPATH();
+SETSERVERDATABASE();
+SETSERVEROWNER();
 SETSERVEREXTENSIONBLOCKSIZE();
 SETSERVERCLIENTBLOCKSIZE();
 BOOTSERVERREPLYLOOPTHREAD();
