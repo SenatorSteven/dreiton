@@ -90,6 +90,7 @@ SOFTWARE. */
 #include <stdio.h>
 
 #include "headers/cold/cold.hold"
+#include "headers/client-api.hold"
 #include "headers/server-api.hold"
 #include "headers/base-server-extension.hold"
 #include "headers/systems/server-system.hold"

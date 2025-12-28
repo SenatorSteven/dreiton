@@ -44,29 +44,38 @@ SOFTWARE. */
 #define FINISERVERCONNECTION() /*-----------------*/ bool  finiServerConnection(ServerConnectionSystem *const serverConnectionSystem)
 
 def struct{
-	const char * /*-----*/ serverChannelPath;
-	Header * /*---------*/ shmStart;
-	RequestSlot * /*----*/ requestSlotStart;
-	ReplySlot * /*------*/ replySlotStart;
-	EventSlot * /*------*/ eventSlotStart;
-	GenericRequest * /*-*/ requestStart;
-	GenericRequest * /*-*/ requestCurrent;
-	GenericReply * /*---*/ replyStart;
-	GenericReply * /*---*/ replyCurrent;
-	GenericEvent * /*---*/ eventStart;
-	GenericEvent * /*---*/ eventCurrent;
-	uint32 /*-----------*/ clientId;
-	int32 /*------------*/ replyEpollFd;
-	int32 /*------------*/ eventEpollFd;
-	int32 /*------------*/ serverRequestWriteFd;
-	int32 /*------------*/ clientReplyReadFd;
-	int32 /*------------*/ clientEventReadFd;
-	uint32 /*-----------*/ currentToken;
-	uint32 /*-----------*/ lastTokenRead;
-	uint32 /*-----------*/ tokenBacklogSize;
-	uint8 /*------------*/ requestAmount;
-	bool /*-------------*/ hasError;
-	uint8 /*------------*/ pad0[2];
+	void * /*----------------------*/ clientExtensionHandle;
+	ClientExtensionDescriptor * /*-*/ clientExtensionDescriptor;
+} ClientExtension;
+
+def struct{
+	const char * /*----------------*/ serverChannelPath;
+	ClientExtension * /*-----------*/ clientExtensionStart;
+	Header * /*--------------------*/ shmStart;
+	RequestSlot * /*---------------*/ requestSlotStart;
+	ReplySlot * /*-----------------*/ replySlotStart;
+	EventSlot * /*-----------------*/ eventSlotStart;
+	GenericRequest * /*------------*/ requestStart;
+	GenericRequest * /*------------*/ requestCurrent;
+	GenericReply * /*--------------*/ replyStart;
+	GenericReply * /*--------------*/ replyCurrent;
+	GenericEvent * /*--------------*/ eventStart;
+	GenericEvent * /*--------------*/ eventCurrent;
+	uint32 /*----------------------*/ clientExtensionSize;
+	uint32 /*----------------------*/ clientExtensionAllocated;
+	uint32 /*----------------------*/ clientExtensionBlockSize;
+	uint32 /*----------------------*/ clientId;
+	int32 /*-----------------------*/ replyEpollFd;
+	int32 /*-----------------------*/ eventEpollFd;
+	int32 /*-----------------------*/ serverRequestWriteFd;
+	int32 /*-----------------------*/ clientReplyReadFd;
+	int32 /*-----------------------*/ clientEventReadFd;
+	uint32 /*----------------------*/ currentToken;
+	uint32 /*----------------------*/ lastTokenRead;
+	uint32 /*----------------------*/ tokenBacklogSize;
+	uint8 /*-----------------------*/ requestAmount;
+	bool /*------------------------*/ hasError;
+	uint8 /*-----------------------*/ pad0[6];
 } ServerConnectionSystem;
 
 INITSERVERCONNECTION();

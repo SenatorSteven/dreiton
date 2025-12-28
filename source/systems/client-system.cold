@@ -77,6 +77,7 @@ SOFTWARE. */
 #include "headers/return-values.hold" /*! remove later */
 #include "headers/send-fd.hold" /*! replace later */
 #include "headers/server-api.hold"
+#include "headers/client-api.hold"
 #include "headers/systems/server-system.hold"
 #include "headers/systems/client-system.hold"
 
@@ -85,6 +86,10 @@ INITSERVERCONNECTION(){
 		ret false;
 	}
 	(*serverConnectionSystem).serverChannelPath = NULL;
+	(*serverConnectionSystem).clientExtensionStart = NULL;
+	(*serverConnectionSystem).clientExtensionSize = 0;
+	(*serverConnectionSystem).clientExtensionAllocated = 0;
+	(*serverConnectionSystem).clientExtensionBlockSize = 0;
 	(*serverConnectionSystem).shmStart = NULL;
 	(*serverConnectionSystem).requestSlotStart = NULL;
 	(*serverConnectionSystem).replySlotStart = NULL;
@@ -792,6 +797,10 @@ FINISERVERCONNECTION(){
 	if(!disconnectFromServer(serverConnectionSystem)){
 		ret false;
 	}
+	(*serverConnectionSystem).clientExtensionBlockSize = 0;
+	(*serverConnectionSystem).clientExtensionAllocated = 0;
+	(*serverConnectionSystem).clientExtensionSize = 0;
+	(*serverConnectionSystem).clientExtensionStart = NULL;
 	(*serverConnectionSystem).serverChannelPath = NULL;
 	ret true;
 }
