@@ -85,6 +85,15 @@ void signalHandler(const int signal){
 	ret;
 }
 int main(void){
+
+
+
+	/*! remove later */
+
+	(void)unpackRequest;
+
+
+
 	/*!setSignals:*/{
 		struct sigaction s;
 		s.sa_handler = signalHandler;
@@ -105,6 +114,8 @@ int main(void){
 	bootServerRegistrationLoopThread(&serverSystem);
 
 
+
+	/*! a */
 
 	awaitServerRegistrationLoopThreadExit(&serverSystem);
 	awaitServerEventLoopThreadExit(&serverSystem);

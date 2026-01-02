@@ -29,13 +29,15 @@ NAME="base-server-extension-compile.sh";
 true=1;
 false=0;
 
+settings="-Waddress -Warray-bounds=1 -Wbool-compare -Wbool-operation -Wcast-function-type -Wchar-subscripts -Wclobbered -Wduplicate-decl-specifier -Wempty-body -Wformat -Wformat-overflow -Wformat-truncation -Wignored-qualifiers -Wimplicit -Wimplicit-fallthrough=3 -Wimplicit-function-declaration -Wimplicit-int -Winit-self -Wint-in-bool-context -Wlogical-not-parentheses -Wmain -Wmaybe-uninitialized -Wmemset-elt-size -Wmemset-transposed-args -Wmissing-attributes -Wmissing-braces -Wmissing-field-initializers -Wmissing-parameter-type -Wmultistatement-macros -Wnarrowing -Wnonnull -Wnonnull-compare -Wold-style-declaration -Wopenmp-simd -Woverride-init -Wparentheses -Wpedantic -Wpointer-sign -Wrestrict -Wreturn-type -Wsequence-point -Wshift-negative-value -Wsign-compare -Wsizeof-pointer-div -Wsizeof-pointer-memaccess -Wstrict-aliasing -Wstrict-overflow=1 -Wswitch -Wtautological-compare -Wtrigraphs -Wtype-limits -Wuninitialized -Wunknown-pragmas -Wunused-but-set-parameter -Wunused-function -Wunused-label -Wunused-parameter -Wunused-value -Wunused-variable -Wvolatile-register-var -std=c89 -Os";
+
 function main(){
-	[ $true        ] && { local name="base-server-extension";                                                           } || :;
-	[ $true        ] && { local folder="/tmp/$name";                                                                    } || :;
-	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2;                              return 1; } || :;
-	[ $true        ] && { rm -rf "$folder";                                                                             } || :;
-	[ $true        ] && { mkdir -p "$folder/output";                                                                    } || :;
-	[ $true        ] && { gcc "-I$(pwd)" -fPIC -shared -x c -o "$folder/output/$name.so" "source/$name.cold"; return 0; } || :;
+	[ $true        ] && { local name="base-server-extension";                                                                     } || :;
+	[ $true        ] && { local folder="/tmp/$name";                                                                              } || :;
+	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2;                                        return 1; } || :;
+	[ $true        ] && { rm -rf "$folder";                                                                                       } || :;
+	[ $true        ] && { mkdir -p "$folder/output";                                                                              } || :;
+	[ $true        ] && { gcc "-I$(pwd)" -fPIC -shared $settings -x c -o "$folder/output/$name.so" "source/$name.cold"; return 0; } || :;
 
 
 

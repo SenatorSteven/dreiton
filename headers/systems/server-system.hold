@@ -67,6 +67,22 @@ SOFTWARE. */
 #define FINDSERVERCLIENTFDID() /*------------------*/ ServerClient * findServerClientFdId(ServerSystem *const serverSystem, const int fd, const uint32 id)
 #define FINISERVERSYSTEM() /*----------------------*/ bool           finiServerSystem(ServerSystem *const serverSystem)
 
+
+
+/*!*/
+
+def struct{
+	uint32 /*----------------------*/ eventType;
+	uint32 /*----------------------*/ eventSubscriptionOffset;
+} ClientSubscription;
+
+def struct{
+	uint32 /*----------------------*/ clientOffset;
+	uint32 /*----------------------*/ clientSubscriptionOffset;
+} EventSubscription;
+
+
+
 def struct{
 	uint32 /*----------------------*/ owner;
 	bool /*------------------------*/ closeOnIdle;
@@ -77,6 +93,8 @@ def struct{
 	void * /*----------------------*/ serverExtensionHandle;
 	ServerExtensionDescriptor * /*-*/ serverExtensionDescriptor;
 	uint32 /*----------------------*/ serverExtensionReferenceCount;
+	int32 /*-----------------------*/ serverExtensionEventFd;
+	uint32 /*----------------------*/ serverExtensionBaseEvent;
 	uint8 /*-----------------------*/ pad0[4];
 } ServerExtension;
 
@@ -134,7 +152,46 @@ def struct{
 	int32 /*-----------------------*/ serverClientEventWriteFd;
 	uint32 /*----------------------*/ clientId;
 	uint8 /*-----------------------*/ pad0[4];
+
+
+
+	/*!*/
+
+	ClientSubscription * /*--------*/ subscriptionStart;
+	uint32 /*----------------------*/ subscriptionSize;
+	uint32 /*----------------------*/ subscriptionAllocated;
+	uint32 * /*--------------------*/ _eventStart;
+	uint32 /*----------------------*/ _eventSize;
+	uint8 /*-----------------------*/ pad1[4];
+
+
+
 } ServerClient;
+
+
+
+/*!*/
+
+def struct{
+	EventSubscription * /*---------*/ subscriptionStart;
+	uint32 /*----------------------*/ subscriptionSize;
+	uint32 /*----------------------*/ subscriptionAllocated;
+} ServerEvent;
+
+
+
+/*!*/
+
+def struct{
+	uint32 /*----------------------*/ eventSlotStart;
+	uint32 /*----------------------*/ eventSlotSize;
+	uint32 /*----------------------*/ eventStart;
+	uint32 /*----------------------*/ eventSize;
+	uint32 /*----------------------*/ eventCurrentWriter;
+	uint32 /*----------------------*/ eventCurrentReader;
+} ExtensionRingBuffer;
+
+
 
 def struct{
 	const char * /*----------------*/ serverChannelPath;
@@ -171,11 +228,192 @@ def struct{
 	int32 /*-----------------------*/ replyEventFd;
 	uint32 /*----------------------*/ clientOffset;
 	int32 /*-----------------------*/ fdCopy[3];
+	uint32 /*----------------------*/ baseEvent;
+
+
+
+	/*! not implemented */
+
+	ExtensionRingBuffer * /*-------*/ extensionRingBufferStart;
+	uint32 /*----------------------*/ extensionRingBufferSize;
+	uint32 /*----------------------*/ extensionRingBufferAllocated;
+	uint32 /*----------------------*/ extensionRingBufferBlockSize;
 	uint8 /*-----------------------*/ pad1[4];
 
 
 
+	/*!*/
+
+	ServerEvent * /*---------------*/ eventStart;
+	uint32 /*----------------------*/ eventSize;
+	uint32 /*----------------------*/ eventAllocated;
+
+
+
 } ServerSystem;
+
+
+
+
+
+
+
+
+
+#ifdef a
+#define SUBSCRIBE() /*---*/ bool    subscribe(ServerSystem *const serverSystem, const uint32 clientOffset, const uint32 eventType)
+#define UNSUBSCRIBE() /*-*/ bool    unsubscribe(ServerSystem *const serverSystem, const uint32 clientOffset, const uint32 eventType)
+
+SUBSCRIBE(){
+	const uint32 blockSize = 16;
+	ServerClient *client;
+	ServerEvent *event;
+	ClientSubscription *clientSubscription;
+	EventSubscription *eventSubscription;
+	if(!serverSystem){
+		ret false;
+	}
+	if(!(*serverSystem).clientAllocated or !(*serverSystem).eventAllocated or !clientOffset or !eventType){
+		ret false;
+	}
+	client = (*serverSystem).clientStart + clientOffset;
+	if(eventType < (*client).eventSize and *((*client).eventStart + eventType)){
+		ret false;
+	}
+	event = (*serverSystem).eventStart + eventType;
+	if((*client).subscriptionAllocated == (*client).subscriptionSize){
+		void *temp;
+		(*client).subscriptionSize += blockSize;
+		temp = realloc((*client).subscriptionStart, (*client).subscriptionSize * sizeof(ClientSubscription));
+		if(!temp){
+			(*client).subscriptionSize -= blockSize;
+			ret false;
+		}
+		(*client).subscriptionStart = temp;
+	}
+	if(eventType >= (*client).eventSize){
+		const uint size = eventType + 1;
+		void *temp;
+		temp = realloc((*client).eventStart, size * sizeof(uint32));
+		if(!temp){
+			ret false;
+		}
+		(*client).eventStart = temp;
+		{
+			uint i = (*client).eventSize;
+			while(i < size){ /*! memset later */
+				*((*client).eventStart + i) = 0;
+				inc i;
+			}
+		}
+		(*client).eventSize = size;
+	}
+	if((*event).subscriptionAllocated == (*event).subscriptionSize){
+		void *temp;
+		(*event).subscriptionSize += blockSize;
+		temp = realloc((*event).subscriptionStart, (*event).subscriptionSize * sizeof(EventSubscription));
+		if(!temp){
+			(*event).subscriptionSize -= blockSize;
+			ret false;
+		}
+		(*event).subscriptionStart = temp;
+	}
+	clientSubscription = (*client).subscriptionStart + (*client).subscriptionAllocated;
+	(*clientSubscription).eventType = eventType;
+	(*clientSubscription).eventSubscriptionOffset = (*event).subscriptionAllocated;
+	eventSubscription = (*event).subscriptionStart + (*event).subscriptionAllocated;
+	(*eventSubscription).clientOffset = clientOffset;
+	(*eventSubscription).clientSubscriptionOffset = (*client).subscriptionAllocated;
+	inc (*client).subscriptionAllocated;
+	inc (*event).subscriptionAllocated;
+	*((*client).eventStart + eventType) = (*event).subscriptionAllocated;
+	ret true;
+}
+UNSUBSCRIBE(){
+	ServerClient *client;
+	ServerEvent *event;
+	uint32 eventSubscriptionOffset;
+	uint32 clientSubscriptionOffset;
+	uint32 lastClientSubscriptionOffset;
+	uint32 lastEventSubscriptionOffset;
+	if(!serverSystem){
+		ret false;
+	}
+	client = (*serverSystem).clientStart + clientOffset;
+	event = (*serverSystem).eventStart + eventType;
+	if(client < (*serverSystem).clientStart + 1 or client > (*serverSystem).clientStart + (*serverSystem).clientAllocated or eventType >= (*client).eventSize or event < (*serverSystem).eventStart + 1 or event > (*serverSystem).eventStart + (*serverSystem).eventAllocated){
+		ret false;
+	}
+	eventSubscriptionOffset = *((*client).eventStart + eventType);
+	if(!eventSubscriptionOffset){
+		ret false;
+	}
+	clientSubscriptionOffset = (*((*event).subscriptionStart + eventSubscriptionOffset)).clientSubscriptionOffset;
+	lastClientSubscriptionOffset = (*client).subscriptionAllocated - 1;
+	lastEventSubscriptionOffset = (*event).subscriptionAllocated - 1;
+	if(clientSubscriptionOffset != lastClientSubscriptionOffset){
+		const ClientSubscription lastClientSubscription = *((*client).subscriptionStart + lastClientSubscriptionOffset);
+		*((*client).subscriptionStart + clientSubscriptionOffset) = lastClientSubscription;
+		*((*client).eventStart + lastClientSubscription.eventType) = clientSubscriptionOffset;
+		(*((*((*serverSystem).eventStart + lastClientSubscription.eventType)).subscriptionStart + lastClientSubscription.eventSubscriptionOffset)).clientSubscriptionOffset = clientSubscriptionOffset;
+	}
+	if(eventSubscriptionOffset != lastEventSubscriptionOffset){
+		const EventSubscription lastEventSubscription = *((*event).subscriptionStart + lastEventSubscriptionOffset);
+		*((*event).subscriptionStart + eventSubscriptionOffset) = lastEventSubscription;
+		(*((*((*serverSystem).clientStart + lastEventSubscription.clientOffset)).subscriptionStart + lastEventSubscription.clientSubscriptionOffset)).eventSubscriptionOffset = eventSubscriptionOffset;
+	}
+	dec (*client).subscriptionAllocated;
+	dec (*event).subscriptionAllocated;
+	*((*client).eventStart + eventType) = 0;
+	ret true;
+}
+int main(void){
+	ServerSystem serverSystem;
+	serverSystem.clientStart = NULL;
+	serverSystem.clientSize = 0;
+	serverSystem.clientAllocated = 0;
+	serverSystem.eventStart = NULL;
+	serverSystem.eventSize = 0;
+	serverSystem.eventAllocated = 0;
+	{
+		const uint32 client1 = addClient(&serverSystem);
+		const uint32 client2 = addClient(&serverSystem);
+		const uint32 event1 = addEvent(&serverSystem);
+		const uint32 event2 = addEvent(&serverSystem);
+		subscribe(&serverSystem, client1, event1);
+		subscribe(&serverSystem, client1, event2);
+		subscribe(&serverSystem, client2, event1);
+		subscribe(&serverSystem, client2, event2);
+		unsubscribe(&serverSystem, client2, event2);
+		emitEvent(&serverSystem, event2);
+	}
+	ret 0;
+}
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

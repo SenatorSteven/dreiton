@@ -116,6 +116,8 @@ INITSERVERSYSTEM(){
 
 
 
+	/*!*/
+
 	(*serverSystem).registrationEventFd = 0;
 	(*serverSystem).registrationEpollFd = 0;
 	(*serverSystem).replyEventFd = 0;
@@ -123,6 +125,15 @@ INITSERVERSYSTEM(){
 	*((*serverSystem).fdCopy + 0) = 0;
 	*((*serverSystem).fdCopy + 1) = 0;
 	*((*serverSystem).fdCopy + 2) = 0;
+	(*serverSystem).baseEvent = 0;
+
+
+
+	/*!*/
+
+	(*serverSystem).eventStart = NULL;
+	(*serverSystem).eventSize = 0;
+	(*serverSystem).eventAllocated = 0;
 
 
 
@@ -408,7 +419,7 @@ SERVERREPLYLOOP(){
 								struct epoll_event event;
 								(*serverSystem).replyEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
 								event.events = EPOLLIN;
-								event.data.fd = (*serverSystem).replyEventFd;
+								event.data.fd = (*serverSystem).replyEventFd; /*! what data to pass? */
 								epoll_ctl((*serverSystem).registrationEpollFd, EPOLL_CTL_ADD, (*serverSystem).replyEventFd, &event); /*! errors? */
 							}
 
@@ -470,6 +481,97 @@ SERVERREPLYLOOP(){
 		ret serverSystem;
 	}
 }
+
+
+
+
+
+
+
+
+
+#define EMITEVENT() /*-*/ bool  emitEvent(ServerSystem *const serverSystem, const uint32 extension, const uint32 eventType)
+
+EMITEVENT(){
+	uint32 realEventType;
+	ServerEvent *event;
+	EventSubscription *current;
+	EventSubscription *wall;
+	ServerClient *clientStart;
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	if(!extension or extension >= (*serverSystem).serverExtensionAllocated or !eventType){
+		ret false;
+	}
+	realEventType = (*((*serverSystem).serverExtensionStart + extension)).serverExtensionBaseEvent + eventType;
+	if(realEventType >= (*serverSystem).eventAllocated){
+		ret false;
+	}
+	success = false;
+	event = (*serverSystem).eventStart + realEventType;
+	current = (*event).subscriptionStart;
+	wall = current + (*event).subscriptionAllocated;
+	clientStart = (*serverSystem).serverClientStart;
+	jmp emitEventLoop;
+	emitEventLoop:{
+		if(current < wall){
+			ServerClient *const serverClient = clientStart + (*current).clientOffset;
+			if(isValidServerClient(serverSystem, serverClient)){
+				Header *const header = (*serverClient).shmStart;
+				uint32 eventCurrentWriter = (*header).eventCurrentWriter;
+				uint32 eventSize = (*header).eventSize;
+				uint32 eventPayloadSize = 0 * sizeof(uint8);
+				uint64 response = ((uint64)eventCurrentWriter << 32) | 123123; /*! what do we return beyond the slot? */
+				EventSlot *const eventSlot = (*serverClient).eventSlotStart + eventCurrentWriter;
+				GenericEvent *const event = (*serverClient).eventCurrent;
+
+
+
+				/*! handle space in a safer way */
+
+				if((uint8 *)(*serverClient).eventCurrent >= (uint8 *)(*serverClient).eventStart + eventSize){
+					(*serverClient).eventCurrent = (*serverClient).eventStart;
+				}elif((uint8 *)(*serverClient).eventCurrent + sizeof(GenericEvent) + eventPayloadSize > (uint8 *)(*serverClient).eventStart + eventSize){
+					(*serverClient).eventCurrent = (*serverClient).eventStart;
+				}
+
+
+
+				(*eventSlot).eventStartOffset = (uint8 *)event - (uint8 *)(*serverClient).eventStart;
+				(*eventSlot).eventSize = sizeof(GenericEvent);
+				(*event).eventType = eventType;
+				(*event).extension = extension;
+				(*event).payloadStartOffset = !!eventPayloadSize * sizeof(GenericEvent);
+				(*event).payloadSize = eventPayloadSize;
+				(*serverClient).eventCurrent += sizeof(GenericEvent) + eventPayloadSize;
+				fprintf(stdout, "sending event   to   client %04u, event   slot @ %04u, sending data @ %04u %04u %04u %04u\n", (*current).clientOffset, eventCurrentWriter, (*event).eventType, (*event).extension, (*event).payloadStartOffset, (*event).payloadSize);
+				write((*serverClient).serverClientEventWriteFd, &response, sizeof(response)); /*! errors? */
+				(*header).eventCurrentWriter = (eventCurrentWriter + 1) % (*header).eventSlotSize;
+				success = true;
+			}
+			inc current;
+			jmp emitEventLoop;
+		}
+		jmp emergencyExit;
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+
+
+
+
+
+
+
+
+
 SERVEREVENTLOOP(){
 
 
@@ -512,18 +614,9 @@ SERVEREVENTLOOP(){
 		jmp parseEventLoop;
 		parseEventLoop:{
 			if(eventCurrent < eventWall){
-				const int fd = (*eventCurrent).data.fd;
-
-
-
-#ifdef a
-				if(fd != /*! local-to-the-server event fd */){
-					jmp eventLoop;
-				}
-#endif
-
-
-
+				const uint64 data = (*eventCurrent).data.u64;
+				const int fd = data;
+				const uint32 extension = data >> 32;
 				if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
 					if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP)){
 
@@ -533,6 +626,7 @@ SERVEREVENTLOOP(){
 
 
 
+						/*! exit to where? */
 					}
 
 
@@ -541,37 +635,41 @@ SERVEREVENTLOOP(){
 
 
 
+					/*! exit to where? */
 				}
 				if((*eventCurrent).events & EPOLLIN){
 					jmp readGeneratedEventLoop;
 					readGeneratedEventLoop:{
 						uint64 message;
 						int returnValue = read(fd, &message, sizeof(message));
+
+
+
 						if(returnValue > 0){
 
-
-
 							/*!*/
-
-
 
 						}elif(returnValue == -1){
 
-
-
 							/*!*/
-
-
 
 						}else{
 
-
-
 							/*!*/
 
-
-
 						}
+
+
+
+						if(extension and extension < (*serverSystem).serverExtensionAllocated){
+							ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extension;
+							if((*serverExtension).serverExtensionEventFd == fd){
+								emitEvent(serverSystem, extension, message);
+							}
+						}
+
+
+
 					}
 				}
 				inc eventCurrent;
@@ -696,7 +794,7 @@ SERVERREGISTRATIONLOOP(){
 		{
 			struct epoll_event event;
 			event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
-			event.data.fd = serverRequestReadFd;
+			event.data.fd = serverRequestReadFd; /*! what data to pass? */
 			epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_ADD, serverRequestReadFd, &event); /*! errors? */
 		}
 
@@ -706,7 +804,7 @@ SERVERREGISTRATIONLOOP(){
 			struct epoll_event event;
 			(*serverSystem).registrationEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
 			event.events = EPOLLIN;
-			event.data.fd = (*serverSystem).registrationEventFd;
+			event.data.fd = (*serverSystem).registrationEventFd; /*! what data to pass? */
 			epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_ADD, (*serverSystem).registrationEventFd, &event); /*! errors? */
 		}
 		{
@@ -867,6 +965,19 @@ INSERTSERVERCLIENT(){
 		(*serverClient).serverClientReplyWriteFd = clientReplyWriteFd;
 		(*serverClient).serverClientEventWriteFd = clientEventWriteFd;
 		(*serverClient).clientId = clientId;
+
+
+
+		/*!*/
+
+		(*serverClient).subscriptionStart = NULL;
+		(*serverClient).subscriptionSize = 0;
+		(*serverClient).subscriptionAllocated = 0;
+		(*serverClient)._eventStart = NULL;
+		(*serverClient)._eventSize = 0;
+
+
+
 		memcpy(shmStart, &header, sizeof(Header));
 		inc (*serverSystem).serverClientAllocated;
 		ret true;
@@ -881,56 +992,288 @@ INSERTSERVERCLIENT(){
 
 
 
-#define UNPACKREQUESTITEMS() /*-*/ bool  unpackRequestItems(ServerSystem *const serverSystem, const GenericRequest *const request, const uint32 itemAmount, const void **itemStartReturn, uint32 *itemSizeReturn)
+#define SUBSCRIBE() /*-*/ bool  subscribe(ServerSystem *const serverSystem, ServerClient *const client, const uint32 extension, uint32 eventMask, uint8 *const statusReturn)
 
-UNPACKREQUESTITEMS();
-
-UNPACKREQUESTITEMS(){
-	void *payloadStart;
-	uint32 amount;
-	uint32 *sizeCurrent;
-	uint32 *sizeWall;
-	uint8 *pointerCurrent;
+uint64 getBitAmount(uint64 variable){
+	variable = variable - ((variable >> 1) & b4(0101010101010101, 0101010101010101, 0101010101010101, 0101010101010101));
+	variable = (variable & b4(0011001100110011, 0011001100110011, 0011001100110011, 0011001100110011)) + ((variable >> 2) & b4(0011001100110011, 0011001100110011, 0011001100110011, 0011001100110011));
+	variable = (variable + (variable >> 4)) & b4(0000111100001111, 0000111100001111, 0000111100001111, 0000111100001111);
+	variable = variable + (variable >> 8);
+	variable = variable + (variable >> 16);
+	variable = variable + (variable >> 32);
+	ret variable & b(01111111);
+}
+SUBSCRIBE(){
+	const uint32 blockSize = 16; /*!*/
+	ServerExtension *serverExtension;
+	ServerExtensionDescriptor *serverExtensionDescriptor;
+	uint32 eventType;
+	uint32 baseEvent;
 	if(!serverSystem){
 		ret false;
 	}
-	if(!request or !(*request).payloadStartOffset or !(*request).payloadSize or !itemAmount or !itemStartReturn or !itemSizeReturn){
+	if((*serverSystem).eventAllocated < 2 or !isValidServerClient(serverSystem, client) or !extension or extension >= (*serverSystem).serverExtensionAllocated or !eventMask or !statusReturn){
 		ret false;
 	}
-	payloadStart = (uint8 *)request + (*request).payloadStartOffset;
-	amount = *(uint32 *)payloadStart;
-	if(itemAmount > amount){
+	serverExtension = (*serverSystem).serverExtensionStart + extension;
+	if(!(*serverExtension).serverExtensionHandle){
 		ret false;
 	}
-	sizeCurrent = (uint32 *)payloadStart + 1;
-	sizeWall = sizeCurrent + itemAmount;
-	pointerCurrent = (void *)(sizeCurrent + amount);
-	/*! {
-		fprintf(stdout, "request @ ?\n");
-	} */
-	jmp unpackRequestItemLoop;
-	unpackRequestItemLoop:{
-		if(sizeCurrent < sizeWall){
-			/*! {
-				uint i;
-				fprintf(stdout, "\tvalue @ %u\n", *sizeCurrent);
-				fprintf(stdout, "\tdata @");
-				for(i = 0; i < *sizeCurrent; inc i){
-					fprintf(stdout, " %u", *(pointerCurrent + i));
-				}
-				fprintf(stdout, "\n");
-			} */
-			*itemStartReturn = pointerCurrent;
-			*itemSizeReturn = *sizeCurrent;
-			inc itemStartReturn;
-			inc itemSizeReturn;
-			pointerCurrent += (*sizeCurrent + (sizeof(uint32) - 1)) & ~(sizeof(uint32) - 1);
-			inc sizeCurrent;
-			jmp unpackRequestItemLoop;
+	serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
+	eventType = 0;
+	baseEvent = (*serverExtension).serverExtensionBaseEvent;
+
+
+
+	/*! get bit amount to allocate subscriptions once? */
+	(void)getBitAmount;
+
+	/*! do a complete O(n) before the bit loop to allocate etc? */
+
+	/*! use this later to allocate once for the amount of event types possible to be enumarated per this client */
+
+	{
+		uint32 eventMaskCopy = eventMask;
+		uint64 largestEventType = 1;
+		jmp findLargestEventTypeLoop;
+		findLargestEventTypeLoop:{
+			if(eventMaskCopy >>= 1){
+				inc largestEventType;
+				jmp findLargestEventTypeLoop;
+			}
 		}
-		/*! {
-			fprintf(stdout, "\n");
-		} */
+	}
+
+
+
+	jmp bitLoop;
+	bitLoop:{
+		if(eventMask){
+			uint32 lowestBit = (eventMask & -eventMask) >> eventType;
+			jmp advanceEventType;
+			advanceEventType:{
+				uint32 realEventType;
+				if(lowestBit){
+					inc eventType;
+					lowestBit >>= 1;
+					jmp advanceEventType;
+				}
+				realEventType = baseEvent + eventType;
+				if(realEventType >= (*client)._eventSize or !*((*client)._eventStart + realEventType)){
+					if(realEventType < (*client)._eventSize and *((*client)._eventStart + realEventType)){
+						*statusReturn |= SUCCESS_REPLY_STATUS;
+					}else{
+						ServerEvent *const event = (*serverSystem).eventStart + realEventType;
+						if((*client).subscriptionAllocated == (*client).subscriptionSize){
+							void *temp;
+							(*client).subscriptionSize += blockSize;
+							temp = realloc((*client).subscriptionStart, (*client).subscriptionSize * sizeof(ClientSubscription));
+							if(!temp){
+								(*client).subscriptionSize -= blockSize;
+								ret false;
+							}
+							(*client).subscriptionStart = temp;
+						}
+						if(realEventType >= (*client)._eventSize){
+							const uint size = realEventType + 1;
+							void *temp;
+							temp = realloc((*client)._eventStart, size * sizeof(uint32));
+							if(!temp){
+								ret false;
+							}
+							memset((uint8 *)temp + (*client)._eventSize, 0, size - (*client)._eventSize);
+							(*client)._eventStart = temp;
+							(*client)._eventSize = size;
+						}
+						if((*event).subscriptionAllocated == (*event).subscriptionSize){
+							void *temp;
+							(*event).subscriptionSize += blockSize;
+							temp = realloc((*event).subscriptionStart, (*event).subscriptionSize * sizeof(EventSubscription));
+							if(!temp){
+								(*event).subscriptionSize -= blockSize;
+								ret false;
+							}
+							(*event).subscriptionStart = temp;
+						}
+						if((*serverExtensionDescriptor).incrementServerExtensionDescriptorEventCounter){
+							if((*(*serverExtensionDescriptor).incrementServerExtensionDescriptorEventCounter)(eventType)){
+								ClientSubscription *const clientSubscription = (*client).subscriptionStart + (*client).subscriptionAllocated;
+								EventSubscription *const eventSubscription = (*event).subscriptionStart + (*event).subscriptionAllocated;
+								(*clientSubscription).eventType = realEventType;
+								(*clientSubscription).eventSubscriptionOffset = (*event).subscriptionAllocated;
+								(*eventSubscription).clientOffset = client - (*serverSystem).serverClientStart;
+								(*eventSubscription).clientSubscriptionOffset = (*client).subscriptionAllocated;
+								inc (*client).subscriptionAllocated;
+								inc (*event).subscriptionAllocated;
+								*((*client)._eventStart + realEventType) = (*event).subscriptionAllocated;
+								*statusReturn |= UPDATED_REPLY_STATUS;
+								fprintf(stdout, "subscribed\n");
+							}
+						}
+					}
+				}
+				eventMask &= eventMask - 1;
+				jmp bitLoop;
+			}
+		}
+		ret true;
+	}
+}
+
+
+
+#define UNSUBSCRIBE() /*-*/ bool  unsubscribe(ServerSystem *const serverSystem, ServerClient *const client, const uint32 extension, uint32 eventMask, uint8 *const statusReturn)
+
+UNSUBSCRIBE(){
+	ServerExtension *serverExtension;
+	ServerExtensionDescriptor *serverExtensionDescriptor;
+	uint32 eventType;
+	uint32 baseEvent;
+	if(!serverSystem){
+		ret false;
+	}
+	if((*serverSystem).eventAllocated < 2 or !isValidServerClient(serverSystem, client) or !extension or extension >= (*serverSystem).serverExtensionAllocated or !eventMask or !statusReturn){
+		ret false;
+	}
+	serverExtension = (*serverSystem).serverExtensionStart + extension;
+	if(!(*serverExtension).serverExtensionHandle){
+		ret false;
+	}
+	serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
+	eventType = 0;
+	baseEvent = (*serverExtension).serverExtensionBaseEvent;
+	jmp bitLoop;
+	bitLoop:{
+		if(eventMask){
+			uint32 lowestBit = (eventMask & -eventMask) >> eventType;
+			jmp advanceEventType;
+			advanceEventType:{
+				uint32 realEventType;
+				if(lowestBit){
+					inc eventType;
+					lowestBit >>= 1;
+					jmp advanceEventType;
+				}
+				realEventType = baseEvent + eventType;
+				if(realEventType < (*client)._eventSize){
+					ServerEvent *const event = (*serverSystem).eventStart + realEventType;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+					fprintf(stdout, "event size from unsub is %u\n", (*client)._eventSize);
+
+
+
+					if(realEventType < (*serverSystem).eventAllocated){
+						uint32 eventSubscriptionOffset = *((*client)._eventStart + realEventType);
+						if(!eventSubscriptionOffset){
+							*statusReturn |= SUCCESS_REPLY_STATUS;
+						}else{
+							dec eventSubscriptionOffset;
+
+
+
+
+
+
+
+
+
+							if((*serverExtensionDescriptor).decrementServerExtensionDescriptorEventCounter){
+								if((*(*serverExtensionDescriptor).decrementServerExtensionDescriptorEventCounter)(eventType)){
+
+
+
+
+
+
+
+
+
+									const uint32 clientSubscriptionOffset = (*((*event).subscriptionStart + eventSubscriptionOffset)).clientSubscriptionOffset;
+									const uint32 lastClientSubscriptionOffset = (*client).subscriptionAllocated - 1;
+									const uint32 lastEventSubscriptionOffset = (*event).subscriptionAllocated - 1;
+
+
+
+									if(clientSubscriptionOffset != lastClientSubscriptionOffset){
+										const ClientSubscription lastClientSubscription = *((*client).subscriptionStart + lastClientSubscriptionOffset);
+										*((*client).subscriptionStart + clientSubscriptionOffset) = lastClientSubscription;
+										*((*client)._eventStart + lastClientSubscription.eventType) = clientSubscriptionOffset;
+										(*((*((*serverSystem).eventStart + lastClientSubscription.eventType)).subscriptionStart + lastClientSubscription.eventSubscriptionOffset)).clientSubscriptionOffset = clientSubscriptionOffset;
+									}
+
+
+
+									if(eventSubscriptionOffset != lastEventSubscriptionOffset){
+										const EventSubscription lastEventSubscription = *((*event).subscriptionStart + lastEventSubscriptionOffset);
+										*((*event).subscriptionStart + eventSubscriptionOffset) = lastEventSubscription;
+										(*((*((*serverSystem).serverClientStart + lastEventSubscription.clientOffset)).subscriptionStart + lastEventSubscription.clientSubscriptionOffset)).eventSubscriptionOffset = eventSubscriptionOffset;
+									}
+
+
+
+									dec (*client).subscriptionAllocated;
+									dec (*event).subscriptionAllocated;
+
+
+
+									*((*client)._eventStart + realEventType) = 0;
+
+
+
+
+
+
+
+
+
+									*statusReturn |= UPDATED_REPLY_STATUS;
+									fprintf(stdout, "unsubscribed\n");
+								}
+							}
+
+
+
+
+
+
+
+
+
+						}
+					}
+
+
+
+
+
+
+
+
+
+				}
+				eventMask &= eventMask - 1;
+				jmp bitLoop;
+			}
+		}
 		ret true;
 	}
 }
@@ -953,6 +1296,15 @@ PARSESERVERCLIENTREQUESTS(){
 	uint32 requestSlotSize;
 	uint32 replyCurrentWriter;
 	uint32 replySize;
+
+
+
+	/*!*/
+
+	uint32 replySlotSize;
+
+
+
 	bool success;
 	if(!serverSystem){
 		ret false;
@@ -974,6 +1326,15 @@ PARSESERVERCLIENTREQUESTS(){
 	requestSlotSize = (*header).requestSlotSize;
 	replyCurrentWriter = (*header).replyCurrentWriter;
 	replySize = (*header).replySize;
+
+
+
+	/*!*/
+
+	replySlotSize = (*header).replySlotSize;
+
+
+
 	success = false;
 	jmp parseServerClientRequestLoop;
 	parseServerClientRequestLoop:{
@@ -985,6 +1346,7 @@ PARSESERVERCLIENTREQUESTS(){
 			uint8 status;
 			uint32 replyPayloadSize;
 			uint32 extensionId; /*! temporary variable for the enable extension request */
+			uint32 extensionBaseEvent; /*! temporary variable for the enable extension request */
 			jmp processRequest;
 			processRequest:{
 				RequestSlot *const requestSlot = (*serverClient).requestSlotStart + requestCurrentReader;
@@ -992,7 +1354,6 @@ PARSESERVERCLIENTREQUESTS(){
 				uint32 payloadStartOffset;
 				uint32 payloadSize;
 				uint32 itemAmount;
-				fprintf(stdout, "\nparsing request from client...\n");
 				if((*requestSlot).requestSize != sizeof(GenericRequest) or (*requestSlot).requestStartOffset + (*requestSlot).requestSize > (*header).requestSize or (*requestSlot).requestStartOffset + (*requestSlot).requestSize + (*request).payloadSize > (*header).requestSize){
 					requestCurrentReader = (requestCurrentReader + 1) % requestSlotSize;
 					jmp sendBadRequest;
@@ -1007,11 +1368,10 @@ PARSESERVERCLIENTREQUESTS(){
 				if(payloadStartOffset and payloadSize){
 					itemAmount = *(uint32 *)((uint8 *)request + payloadStartOffset);
 				}
+				fprintf(stdout, "parsing request from client %04u, request slot @ %04u, parsed  data @ %04u %04u %04u %04u %04u %04u\n", (uint32)(serverClient - (*serverSystem).serverClientStart), requestCurrentReader, (*request).requestType, (*request).extension, (*request).sendReply, (*request).token, (*request).payloadStartOffset, (*request).payloadSize);
 				requestCurrentReader = (requestCurrentReader + 1) % requestSlotSize;
 				status = NONE_REPLY_STATUS;
 				replyPayloadSize = 0 * sizeof(uint8);
-				fprintf(stdout, "\trequest slot @ %u\n", (*requestSlot).requestStartOffset);
-				fprintf(stdout, "\tparsed  data @ %u %u %u %u %u %u\n", (*request).requestType, (*request).extension, (*request).sendReply, (*request).token, (*request).payloadStartOffset, (*request).payloadSize);
 				if(extension){
 					ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extension;
 					ServerExtensionDescriptor *serverExtensionDescriptor;
@@ -1019,10 +1379,10 @@ PARSESERVERCLIENTREQUESTS(){
 						jmp sendBadRequest;
 					}
 					serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
-					if(!(*serverExtensionDescriptor).parseExtensionRequest){
+					if(!(*serverExtensionDescriptor).parseServerExtensionDescriptorRequest){
 						jmp sendBadRequest;
 					}
-					if(!(*(*serverExtensionDescriptor).parseExtensionRequest)(request, itemAmount, &status, &replyPayloadSize)){
+					if(!(*(*serverExtensionDescriptor).parseServerExtensionDescriptorRequest)(request, itemAmount, &status, &replyPayloadSize)){
 						jmp sendBadRequest;
 					}
 				}else{
@@ -1065,17 +1425,18 @@ PARSESERVERCLIENTREQUESTS(){
 						to ENABLE_EXTENSION_SERVER_REQUEST_TYPE:{
 							if(itemAmount == ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT){
 								Database *const database = (*serverSystem).database;
-								if((*database).owner == (*serverClient).clientId){
-									EnableExtensionServerRequest enableExtensionServerRequest;
-									unpackRequestItems(serverSystem, request, 1, (void *)&enableExtensionServerRequest.pathStart, &enableExtensionServerRequest.pathSize);
+								EnableExtensionServerRequest enableExtensionServerRequest;
+								if(unpackRequest(request, ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT, &enableExtensionServerRequest)){
 									if(!*(enableExtensionServerRequest.pathStart + enableExtensionServerRequest.pathSize - 1)){
 										if(loadServerExtension(serverSystem, (*database).owner == (*serverClient).clientId, enableExtensionServerRequest.pathStart, &extensionId)){
 											const ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extensionId;
 											const ServerExtensionDescriptor *const serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
 											if((*(*serverExtensionDescriptor).initServerExtensionDescriptorSystem)()){
+												(*(*serverExtensionDescriptor).setServerExtensionDescriptorEventFd)((*serverExtension).serverExtensionEventFd);
 												if((*serverExtension).serverExtensionReferenceCount == 1){
 													status |= UPDATED_REPLY_STATUS;
 												}
+												extensionBaseEvent = (*serverExtension).serverExtensionBaseEvent;
 												status |= SUCCESS_REPLY_STATUS;
 												replyPayloadSize = 2 * sizeof(uint32);
 											}
@@ -1091,6 +1452,28 @@ PARSESERVERCLIENTREQUESTS(){
 								if((*database).owner == (*serverClient).clientId){
 									(*database).owner = SEALED_SERVER_OWNER;
 									status |= SUCCESS_REPLY_STATUS;
+								}
+							}
+							brk;
+						}
+						to APPLY_FOR_EVENT_SERVER_REQUEST_TYPE:{
+							if(itemAmount == APPLY_FOR_EVENT_SERVER_REQUEST_ITEM_AMOUNT){
+								ApplyForEventServerRequest applyForEventServerRequest;
+								if(unpackRequest(request, APPLY_FOR_EVENT_SERVER_REQUEST_ITEM_AMOUNT, &applyForEventServerRequest)){
+									const uint32 extension = *(uint32 *)applyForEventServerRequest.extensionStart;
+									const uint32 eventMask = *(uint32 *)applyForEventServerRequest.eventMaskStart;
+									subscribe(serverSystem, serverClient, extension, eventMask, &status);
+								}
+							}
+							brk;
+						}
+						to WITHDRAW_FROM_EVENT_SERVER_REQUEST_TYPE:{
+							if(itemAmount == WITHDRAW_FROM_EVENT_SERVER_REQUEST_ITEM_AMOUNT){
+								WithdrawFromEventServerRequest withdrawFromEventServerRequest;
+								if(unpackRequest(request, WITHDRAW_FROM_EVENT_SERVER_REQUEST_ITEM_AMOUNT, &withdrawFromEventServerRequest)){
+									const uint32 extension = *(uint32 *)withdrawFromEventServerRequest.extensionStart;
+									const uint32 eventMask = *(uint32 *)withdrawFromEventServerRequest.eventMaskStart;
+									unsubscribe(serverSystem, serverClient, extension, eventMask, &status);
 								}
 							}
 							brk;
@@ -1122,7 +1505,7 @@ PARSESERVERCLIENTREQUESTS(){
 
 
 
-					replyCurrentWriter = (replyCurrentWriter + 1) % replySize;
+					replyCurrentWriter = (replyCurrentWriter + 1) % replySlotSize;
 					if(status & SUCCESS_REPLY_STATUS){
 						if(extension){
 							ServerExtension *const serverExtension = (*serverSystem).serverExtensionStart + extension;
@@ -1131,10 +1514,10 @@ PARSESERVERCLIENTREQUESTS(){
 								jmp sendBadRequest;
 							}
 							serverExtensionDescriptor = (*serverExtension).serverExtensionDescriptor;
-							if(!(*serverExtensionDescriptor).parseExtensionReply){
+							if(!(*serverExtensionDescriptor).parseServerExtensionDescriptorReply){
 								jmp sendBadRequest;
 							}
-							if(!(*(*serverExtensionDescriptor).parseExtensionReply)(requestType, reply)){
+							if(!(*(*serverExtensionDescriptor).parseServerExtensionDescriptorReply)(requestType, reply)){
 								jmp sendBadRequest;
 							}
 						}else{
@@ -1155,11 +1538,14 @@ PARSESERVERCLIENTREQUESTS(){
 									brk;
 								}
 								to ENABLE_EXTENSION_SERVER_REPLY_TYPE:{
-									(*(EnableExtensionServerReply *)reply).extensionId = extensionId;
-									(*(EnableExtensionServerReply *)reply).baseEvent = 0; /*! use a base variable and then increment by the amount of extension events, but increment on request */
+									(*(EnableExtensionServerReply *)reply).extension = extensionId;
+									(*(EnableExtensionServerReply *)reply).baseEvent = extensionBaseEvent;
 									brk;
 								}
 								to SEAL_OWNERSHIP_SERVER_REPLY_TYPE:{
+									brk;
+								}
+								to APPLY_FOR_EVENT_SERVER_REPLY_TYPE:{
 									brk;
 								}
 								off:{
@@ -1177,9 +1563,7 @@ PARSESERVERCLIENTREQUESTS(){
 					(*reply).payloadStartOffset = !!replyPayloadSize * sizeof(GenericReply);
 					(*reply).payloadSize = replyPayloadSize;
 					(*serverClient).replyCurrent += sizeof(GenericReply) + replyPayloadSize;
-					fprintf(stdout, "\nsending reply   to   client...\n");
-					fprintf(stdout, "\treply   slot @ %u\n", (*replySlot).replyStartOffset);
-					fprintf(stdout, "\tsending back @ %u %u %u %u %u %u\n", (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize);
+					fprintf(stdout, "sending reply   to   client %04u, reply   slot @ %04u, sending back @ %04u %04u %04u %04u %04u %04u\n", (uint32)(serverClient - (*serverSystem).serverClientStart), (*replySlot).replyStartOffset, (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize);
 					write((*serverClient).serverClientReplyWriteFd, &response, sizeof(response)); /*! errors? */
 					success = true;
 				}
@@ -1187,7 +1571,7 @@ PARSESERVERCLIENTREQUESTS(){
 				jmp parseServerClientRequestLoop;
 				sendBadRequest:{
 					const uint64 response = 0; /*! do something better? */
-					fprintf(stdout, "\tsending back  bad response\n");
+					fprintf(stdout, "sending back  bad response\n");
 					write((*serverClient).serverClientReplyWriteFd, &response, sizeof(response)); /*! errors? */
 					inc current;
 					jmp parseServerClientRequestLoop;
@@ -1205,6 +1589,17 @@ PARSESERVERCLIENTREQUESTS(){
 		ret true;
 	}
 }
+
+
+
+/*!*/
+
+bool roundUpToMultiple(const uint64 number, const uint64 multiple){
+	ret (number + multiple - 1) / multiple * multiple;
+}
+
+
+
 LOADSERVEREXTENSION(){
 	void *serverExtensionHandle;
 	ServerExtensionDescriptor *serverExtensionDescriptor;
@@ -1247,7 +1642,7 @@ LOADSERVEREXTENSION(){
 	if(!serverExtensionDescriptor){
 		jmp emergencyExit;
 	}
-	if((*serverExtensionDescriptor).descriptorSize != sizeof(ServerExtensionDescriptor) or (*serverExtensionDescriptor).protocolVersion > SERVER_PROTOCOL_VERSION or !(*serverExtensionDescriptor).nameSize or !(*serverExtensionDescriptor).name or !(*serverExtensionDescriptor).initServerExtensionDescriptorSystem or !(*serverExtensionDescriptor).parseExtensionRequest or !(*serverExtensionDescriptor).parseExtensionReply or !(*serverExtensionDescriptor).finiServerExtensionDescriptorSystem){
+	if((*serverExtensionDescriptor).descriptorSize != sizeof(ServerExtensionDescriptor) or (*serverExtensionDescriptor).protocolVersion > SERVER_PROTOCOL_VERSION or !(*serverExtensionDescriptor).extensionNameSize or !(*serverExtensionDescriptor).extensionName or !(*serverExtensionDescriptor).authorNameSize or !(*serverExtensionDescriptor).authorName or !(*serverExtensionDescriptor).initServerExtensionDescriptorSystem or !(*serverExtensionDescriptor).setServerExtensionDescriptorEventFd or !(*serverExtensionDescriptor).incrementServerExtensionDescriptorEventCounter or !(*serverExtensionDescriptor).decrementServerExtensionDescriptorEventCounter or !(*serverExtensionDescriptor).parseServerExtensionDescriptorRequest or !(*serverExtensionDescriptor).parseServerExtensionDescriptorReply or !(*serverExtensionDescriptor).parseServerExtensionDescriptorEvent or !(*serverExtensionDescriptor).finiServerExtensionDescriptorSystem){
 		jmp emergencyExit;
 	}
 
@@ -1278,9 +1673,58 @@ LOADSERVEREXTENSION(){
 			}
 		}
 		serverExtension = (*serverSystem).serverExtensionStart + (*serverSystem).serverExtensionAllocated;
+		{
+			const uint32 blockSize = 16; /*!*/
+			uint amount = (*serverExtensionDescriptor).eventAmount;
+			if((*serverSystem).eventAllocated + amount > (*serverSystem).eventSize){
+				uint addedAmount;
+				void *temp;
+				if(!blockSize){
+					jmp emergencyExit;
+				}
+				addedAmount = roundUpToMultiple((*serverSystem).eventAllocated + amount + !!(*serverSystem).eventAllocated, blockSize) - (*serverSystem).eventSize;
+				(*serverSystem).eventSize += addedAmount;
+				temp = realloc((*serverSystem).eventStart, (*serverSystem).eventSize * sizeof(ServerEvent));
+				if(!temp){
+					(*serverSystem).eventSize -= addedAmount;
+					jmp emergencyExit;
+				}
+				(*serverSystem).eventStart = temp;
+				if(!(*serverSystem).eventAllocated){
+					inc (*serverSystem).eventAllocated;
+				}
+			}
+			{
+				ServerEvent *current = (*serverSystem).eventStart + (*serverSystem).eventAllocated;
+				ServerEvent *const wall = current + amount;
+				jmp setEventLoop;
+				setEventLoop:{
+					if(current < wall){
+						(*current).subscriptionStart = NULL;
+						(*current).subscriptionSize = 0;
+						(*current).subscriptionAllocated = 0;
+						inc current;
+						jmp setEventLoop;
+					}
+				}
+			}
+		}
+		if(!(*serverSystem).baseEvent){
+			inc (*serverSystem).baseEvent;
+		}
 		(*serverExtension).serverExtensionHandle = serverExtensionHandle;
 		(*serverExtension).serverExtensionDescriptor = serverExtensionDescriptor;
 		(*serverExtension).serverExtensionReferenceCount = 1;
+		(*serverExtension).serverExtensionEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+		(*serverExtension).serverExtensionBaseEvent = (*serverSystem).baseEvent - 1;
+		(*serverSystem).baseEvent += (*(*serverExtension).serverExtensionDescriptor).eventAmount;
+		(*serverSystem).eventAllocated += (*(*serverExtension).serverExtensionDescriptor).eventAmount;
+		if((*serverSystem).eventEpollFd){
+			struct epoll_event event;
+			event.events = EPOLLIN;
+			event.data.u64 = ((uint64)(*serverSystem).serverExtensionAllocated << 32) | (*serverExtension).serverExtensionEventFd;
+			epoll_ctl((*serverSystem).eventEpollFd, EPOLL_CTL_ADD, (*serverExtension).serverExtensionEventFd, &event); /*! errors? */
+		}
 		*extensionIdReturn = (*serverSystem).serverExtensionAllocated;
 		inc (*serverSystem).serverExtensionAllocated;
 		success = true;
@@ -1345,7 +1789,9 @@ REMOVESERVERCLIENT(){
 	if(!isValidServerClient(serverSystem, serverClient)){
 		ret false;
 	}
-	epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_DEL, (*serverClient).serverRequestReadFd, NULL); /*! errors? */
+	if((*serverSystem).replyEpollFd){
+		epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_DEL, (*serverClient).serverRequestReadFd, NULL); /*! errors? */
+	}
 	shmctl((*serverClient).shmId, IPC_RMID, NULL); /*! errors? */
 	shmdt((*serverClient).shmStart); /*! errors? */
 	close((*serverClient).serverRequestReadFd); /*! on signal interrupt? */
@@ -1429,7 +1875,7 @@ QUITSERVERREPLYLOOPTHREAD(){
 		(*serverSystem).signalEventFd = signalEventFd;
 	}
 	event.events = EPOLLIN;
-	event.data.fd = signalEventFd;
+	event.data.fd = signalEventFd; /*! what data to pass? */
 	value = 1;
 	epoll_ctl((*serverSystem).replyEpollFd, EPOLL_CTL_ADD, signalEventFd, &event); /*! errors? */
 	(*serverSystem).replyLoopRunning = false;
@@ -1452,7 +1898,7 @@ QUITSERVEREVENTLOOPTHREAD(){
 		(*serverSystem).signalEventFd = signalEventFd;
 	}
 	event.events = EPOLLIN;
-	event.data.fd = signalEventFd;
+	event.data.fd = signalEventFd; /*! what data to pass? */
 	value = 1;
 	epoll_ctl((*serverSystem).eventEpollFd, EPOLL_CTL_ADD, signalEventFd, &event); /*! errors? */
 	(*serverSystem).eventLoopRunning = false;
@@ -1527,6 +1973,12 @@ REMOVEALLSERVEREXTENSIONS(){
 
 			/*! make sure to use a stack for this one */
 
+
+
+			if((*serverSystem).eventEpollFd){
+				epoll_ctl((*serverSystem).eventEpollFd, EPOLL_CTL_DEL, (*current).serverExtensionEventFd, NULL); /*! errors? */
+			}
+			close((*current).serverExtensionEventFd);
 			dlclose((*current).serverExtensionHandle);
 
 
@@ -1601,7 +2053,7 @@ FINISERVERSYSTEM(){
 
 
 
-	/*! deal with these later */
+	/*!*/
 
 	if((*serverSystem).registrationEventFd){
 		close((*serverSystem).registrationEventFd);
@@ -1619,6 +2071,15 @@ FINISERVERSYSTEM(){
 	*((*serverSystem).fdCopy + 0) = 0;
 	*((*serverSystem).fdCopy + 1) = 0;
 	*((*serverSystem).fdCopy + 2) = 0;
+	(*serverSystem).baseEvent = 0;
+
+
+
+	/*!*/
+
+	(*serverSystem).eventStart = NULL;
+	(*serverSystem).eventSize = 0;
+	(*serverSystem).eventAllocated = 0;
 
 
 

@@ -38,8 +38,9 @@ SOFTWARE. */
 #define CONNECTTOSERVER() /*----------------------*/ bool  connectToServer(ServerConnectionSystem *const serverConnectionSystem)
 #define SENDSERVERREQUEST() /*--------------------*/ bool  sendServerRequest(ServerConnectionSystem *const serverConnectionSystem, const uint8 requestType, const uint8 extension, void *const request, const uint itemAmount, uint32 *const tokenReturn)
 #define WAITFORSERVERREPLY() /*-------------------*/ bool  waitForServerReply(ServerConnectionSystem *const serverConnectionSystem, const uint32 token, void *const replyReturn)
-#define WAITFORSERVEREVENT() /*-------------------*/ bool  waitForServerEvent(ServerConnectionSystem *const serverConnectionSystem, GenericEvent *const eventReturn)
 #define FLUSHSERVERBUFFER() /*--------------------*/ bool  flushServerBuffer(ServerConnectionSystem *const serverConnectionSystem)
+#define WAITFORSERVEREVENT() /*-------------------*/ bool  waitForServerEvent(ServerConnectionSystem *const serverConnectionSystem, void *const eventReturn)
+#define PACKSERVERREQUEST() /*--------------------*/ bool  packServerRequest(GenericRequest *const request, const uint32 itemAmount, void *const structStart)
 #define DISCONNECTFROMSERVER() /*-----------------*/ bool  disconnectFromServer(ServerConnectionSystem *const serverConnectionSystem)
 #define FINISERVERCONNECTION() /*-----------------*/ bool  finiServerConnection(ServerConnectionSystem *const serverConnectionSystem)
 
@@ -83,8 +84,9 @@ SETSERVERCONNECTIONSERVERCHANNELPATH();
 CONNECTTOSERVER();
 SENDSERVERREQUEST();
 WAITFORSERVERREPLY();
-WAITFORSERVEREVENT();
 FLUSHSERVERBUFFER();
+WAITFORSERVEREVENT();
+PACKSERVERREQUEST();
 DISCONNECTFROMSERVER();
 FINISERVERCONNECTION();
 

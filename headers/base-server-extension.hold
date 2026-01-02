@@ -34,6 +34,8 @@ SOFTWARE. */
 #define BASE_PROTOCOL_VERSION /*---------------------*/ (1)
 #define BASE_EXTENSION_VERSION /*--------------------*/ (1)
 #define BASE_EXTENSION_NAME /*-----------------------*/ ("base")
+#define BASE_AUTHOR_NAME /*--------------------------*/ ("senator")
+#define BASE_EVENT_AMOUNT /*-------------------------*/ (1)
 
 #define NONE_BASE_REQUEST_TYPE /*--------------------*/ (0)
 #define GET_MAGIC_NUMBER_BASE_REQUEST_TYPE /*--------*/ (1)
@@ -47,8 +49,10 @@ SOFTWARE. */
 #define SET_MAGIC_NUMBER_BASE_REPLY_TYPE /*----------*/ (2)
 
 #define NONE_BASE_EVENT_TYPE /*----------------------*/ (0)
+#define MAGIC_NUMBER_CHANGED_BASE_EVENT_TYPE /*------*/ (1)
 
 #define NONE_BASE_EVENT_TYPE_MASK /*-----------------*/ (b(0))
+#define MAGIC_NUMBER_CHANGED_BASE_EVENT_TYPE_MASK /*-*/ (b(1))
 
 def struct{
 	uint8 /*--------*/ pad0[1];
@@ -68,6 +72,11 @@ def struct{
 def struct{
 	GenericReply /*-*/ reply;
 } SetMagicNumberBaseReply;
+
+def struct{
+	GenericEvent /*-*/ event;
+	uint32 /*-------*/ magicNumber;
+} MagicNumberChangedBaseEvent;
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED

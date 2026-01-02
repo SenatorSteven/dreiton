@@ -33,12 +33,19 @@ SOFTWARE. */
 
 #define CLIENT_PROTOCOL_VERSION /*-*/ (1)
 
+/*! implement client extensions */
+
+/*! create #defines for each version, as well as a struct with the version appended or something equivalent for ease of access of the elements later */
+
 def struct{
 	uint32 /*-------*/ descriptorSize;
 	uint32 /*-------*/ protocolVersion;
 	uint32 /*-------*/ extensionVersion;
-	uint32 /*-------*/ nameSize;
-	const char * /*-*/ name;
+	uint32 /*-------*/ extensionNameSize;
+	const char * /*-*/ extensionName;
+	uint8 /*--------*/ pad0[4];
+	uint32 /*-------*/ authorNameSize;
+	const char * /*-*/ authorName;
 	bool /*---------*/ (*initClientExtensionDescriptorSystem)(void);
 	bool /*---------*/ (*finiClientExtensionDescriptorSystem)(void);
 } ClientExtensionDescriptor;

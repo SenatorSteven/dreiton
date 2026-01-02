@@ -31,43 +31,47 @@ SOFTWARE. */
 #include "headers/cold/cold.hold"
 #endif
 
-#define SERVER_PROTOCOL_VERSION /*---------------------*/ (1)
+#define SERVER_PROTOCOL_VERSION /*------------------------*/ (1)
 
-#define NONE_SERVER_EXTENSION /*-----------------------*/ (0)
+#define NONE_SERVER_EXTENSION /*--------------------------*/ (0)
 
-#define NONE_SERVER_REQUEST_TYPE /*--------------------*/ (0)
-#define NO_OPERATION_SERVER_REQUEST_TYPE /*------------*/ (1)
-#define SYNC_SERVER_REQUEST_TYPE /*--------------------*/ (2)
-#define CLAIM_OWNERSHIP_SERVER_REQUEST_TYPE /*---------*/ (3)
-#define CLOSE_ON_IDLE_SERVER_REQUEST_TYPE /*-----------*/ (4)
-#define ENABLE_EXTENSION_SERVER_REQUEST_TYPE /*--------*/ (5)
-#define SEAL_OWNERSHIP_SERVER_REQUEST_TYPE /*----------*/ (6)
+#define NONE_SERVER_REQUEST_TYPE /*-----------------------*/ (0)
+#define NO_OPERATION_SERVER_REQUEST_TYPE /*---------------*/ (1)
+#define SYNC_SERVER_REQUEST_TYPE /*-----------------------*/ (2)
+#define CLAIM_OWNERSHIP_SERVER_REQUEST_TYPE /*------------*/ (3)
+#define CLOSE_ON_IDLE_SERVER_REQUEST_TYPE /*--------------*/ (4)
+#define ENABLE_EXTENSION_SERVER_REQUEST_TYPE /*-----------*/ (5)
+#define SEAL_OWNERSHIP_SERVER_REQUEST_TYPE /*-------------*/ (6)
+#define APPLY_FOR_EVENT_SERVER_REQUEST_TYPE /*------------*/ (7)
+#define WITHDRAW_FROM_EVENT_SERVER_REQUEST_TYPE /*--------*/ (8)
 
-#define NONE_SERVER_REQUEST_ITEM_AMOUNT /*-------------*/ (0)
-#define NO_OPERATION_SERVER_REQUEST_ITEM_AMOUNT /*-----*/ (0)
-#define SYNC_SERVER_REQUEST_ITEM_AMOUNT /*-------------*/ (0)
-#define CLAIM_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT /*--*/ (0)
-#define CLOSE_ON_IDLE_SERVER_REQUEST_ITEM_AMOUNT /*----*/ (0)
-#define ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT /*-*/ (1)
-#define SEAL_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT /*---*/ (0)
+#define NONE_SERVER_REQUEST_ITEM_AMOUNT /*----------------*/ (0)
+#define NO_OPERATION_SERVER_REQUEST_ITEM_AMOUNT /*--------*/ (0)
+#define SYNC_SERVER_REQUEST_ITEM_AMOUNT /*----------------*/ (0)
+#define CLAIM_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT /*-----*/ (0)
+#define CLOSE_ON_IDLE_SERVER_REQUEST_ITEM_AMOUNT /*-------*/ (0)
+#define ENABLE_EXTENSION_SERVER_REQUEST_ITEM_AMOUNT /*----*/ (1)
+#define SEAL_OWNERSHIP_SERVER_REQUEST_ITEM_AMOUNT /*------*/ (0)
+#define APPLY_FOR_EVENT_SERVER_REQUEST_ITEM_AMOUNT /*-----*/ (2)
+#define WITHDRAW_FROM_EVENT_SERVER_REQUEST_ITEM_AMOUNT /*-*/ (2)
 
-#define NONE_SERVER_REPLY_TYPE /*----------------------*/ (0)
-#define NO_OPERATION_SERVER_REPLY_TYPE /*--------------*/ (1)
-#define SYNC_SERVER_REPLY_TYPE /*----------------------*/ (2)
-#define CLAIM_OWNERSHIP_SERVER_REPLY_TYPE /*-----------*/ (3)
-#define CLOSE_ON_IDLE_SERVER_REPLY_TYPE /*-------------*/ (4)
-#define ENABLE_EXTENSION_SERVER_REPLY_TYPE /*----------*/ (5)
-#define SEAL_OWNERSHIP_SERVER_REPLY_TYPE /*------------*/ (6)
+#define NONE_SERVER_REPLY_TYPE /*-------------------------*/ (0)
+#define NO_OPERATION_SERVER_REPLY_TYPE /*-----------------*/ (1)
+#define SYNC_SERVER_REPLY_TYPE /*-------------------------*/ (2)
+#define CLAIM_OWNERSHIP_SERVER_REPLY_TYPE /*--------------*/ (3)
+#define CLOSE_ON_IDLE_SERVER_REPLY_TYPE /*----------------*/ (4)
+#define ENABLE_EXTENSION_SERVER_REPLY_TYPE /*-------------*/ (5)
+#define SEAL_OWNERSHIP_SERVER_REPLY_TYPE /*---------------*/ (6)
+#define APPLY_FOR_EVENT_SERVER_REPLY_TYPE /*--------------*/ (7)
+#define WITHDRAW_FROM_EVENT_SERVER_REPLY_TYPE /*----------*/ (8)
 
-#define NONE_REPLY_STATUS /*---------------------------*/ (b(00))
-#define SUCCESS_REPLY_STATUS /*------------------------*/ (b(01))
-#define UPDATED_REPLY_STATUS /*------------------------*/ (b(10))
+#define NONE_REPLY_STATUS /*------------------------------*/ (b(00))
+#define SUCCESS_REPLY_STATUS /*---------------------------*/ (b(01))
+#define UPDATED_REPLY_STATUS /*---------------------------*/ (b(10))
 
-#define NONE_SERVER_EVENT_TYPE /*----------------------*/ (0)
-#define TIME_SERVER_EVENT_TYPE /*----------------------*/ (1)
+#define NONE_SERVER_EVENT_TYPE /*-------------------------*/ (0)
 
-#define NONE_SERVER_EVENT_TYPE_MASK /*-----------------*/ (b(0))
-#define TIME_SERVER_EVENT_TYPE_MASK /*-----------------*/ (b(1))
+#define NONE_SERVER_EVENT_TYPE_MASK /*--------------------*/ (b(0))
 
 def struct{
 	uint8 /*--------*/ requestType;
@@ -124,6 +128,20 @@ def struct{
 } SealOwnershipServerRequest;
 
 def struct{
+	uint32 /*-------*/ extensionSize;
+	uint32 /*-------*/ eventMaskSize;
+	uint32 * /*-----*/ extensionStart;
+	uint32 * /*-----*/ eventMaskStart;
+} ApplyForEventServerRequest;
+
+def struct{
+	uint32 /*-------*/ extensionSize;
+	uint32 /*-------*/ eventMaskSize;
+	uint32 * /*-----*/ extensionStart;
+	uint32 * /*-----*/ eventMaskStart;
+} WithdrawFromEventServerRequest;
+
+def struct{
 	GenericReply /*-*/ reply;
 } NoOperationServerReply;
 
@@ -141,7 +159,7 @@ def struct{
 
 def struct{
 	GenericReply /*-*/ reply;
-	uint32 /*-------*/ extensionId;
+	uint32 /*-------*/ extension;
 	uint32 /*-------*/ baseEvent;
 } EnableExtensionServerReply;
 
@@ -149,28 +167,73 @@ def struct{
 	GenericReply /*-*/ reply;
 } SealOwnershipServerReply;
 
-
-
-#ifdef a
 def struct{
-	uint32 /*-------*/ eventSize;
-	uint8 /*--------*/ eventType;
-} TimeServerEvent;
-#endif
+	GenericReply /*-*/ reply;
+} ApplyForEventServerReply;
 
+def struct{
+	GenericReply /*-*/ reply;
+} WithdrawFromEventServerReply;
 
+/*! create #defines for each extension descriptor version, as well as a struct with the version appended or something equivalent for ease of access of the elements later */
 
 def struct{
 	uint32 /*-------*/ descriptorSize;
 	uint32 /*-------*/ protocolVersion;
 	uint32 /*-------*/ extensionVersion;
-	uint32 /*-------*/ nameSize;
-	const char * /*-*/ name;
+	uint32 /*-------*/ extensionNameSize;
+	uint32 /*-------*/ authorNameSize;
+	uint32 /*-------*/ eventAmount;
+	const char * /*-*/ extensionName;
+	const char * /*-*/ authorName;
 	bool /*---------*/ (*initServerExtensionDescriptorSystem)(void);
-	bool /*---------*/ (*parseExtensionRequest)(const GenericRequest *const request, const uint32 itemAmount, uint8 *const statusReturn, uint32 *const payloadSizeReturn);
-	bool /*---------*/ (*parseExtensionReply)(const uint8 replyType, GenericReply *const replyReturn);
+	bool /*---------*/ (*setServerExtensionDescriptorEventFd)(const int fd);
+	bool /*---------*/ (*incrementServerExtensionDescriptorEventCounter)(const uint32 eventType);
+	bool /*---------*/ (*decrementServerExtensionDescriptorEventCounter)(const uint32 eventType);
+	bool /*---------*/ (*parseServerExtensionDescriptorRequest)(const GenericRequest *const request, const uint32 itemAmount, uint8 *const statusReturn, uint32 *const payloadSizeReturn);
+	bool /*---------*/ (*parseServerExtensionDescriptorReply)(const uint8 replyType, GenericReply *const replyReturn);
+	bool /*---------*/ (*parseServerExtensionDescriptorEvent)(void);
 	bool /*---------*/ (*finiServerExtensionDescriptorSystem)(void);
 } ServerExtensionDescriptor;
+
+#define UNPACKREQUEST() /*-----------------------------*/ local bool  unpackRequest(const GenericRequest *const request, const uint32 itemAmount, void *const structStartReturn)
+
+UNPACKREQUEST(){
+	void *requestPayloadStart;
+	uint32 *requestSizeCurrent;
+	uint32 *requestSizeWall;
+	uint8 *requestPointerCurrent;
+	uint32 *structSizeCurrent;
+	void **structPointerCurrent;
+	if(!request or !(*request).payloadStartOffset or !(*request).payloadSize){
+		ret false;
+	}
+	requestPayloadStart = (uint8 *)request + (*request).payloadStartOffset;
+	if(itemAmount != *(uint32 *)requestPayloadStart or !itemAmount != !structStartReturn){
+		ret false;
+	}
+	if(!itemAmount){
+		ret true;
+	}
+	requestSizeCurrent = (uint32 *)requestPayloadStart + 1;
+	requestSizeWall = requestSizeCurrent + itemAmount;
+	requestPointerCurrent = (void *)(requestSizeCurrent + itemAmount);
+	structSizeCurrent = structStartReturn;
+	structPointerCurrent = (void *)(structSizeCurrent + itemAmount + (itemAmount % 2));
+	jmp unpackRequestItemLoop;
+	unpackRequestItemLoop:{
+		if(requestSizeCurrent < requestSizeWall){
+			*structSizeCurrent = *requestSizeCurrent;
+			*structPointerCurrent = requestPointerCurrent;
+			inc structSizeCurrent;
+			inc structPointerCurrent;
+			requestPointerCurrent += (*requestSizeCurrent + (sizeof(uint32) - 1)) & ~(sizeof(uint32) - 1);
+			inc requestSizeCurrent;
+			jmp unpackRequestItemLoop;
+		}
+		ret true;
+	}
+}
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED
