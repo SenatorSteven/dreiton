@@ -1,0 +1,96 @@
+
+/*! dreiton-helpers.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "headers/cold/cold.hold"
+#include "headers/dreiton-protocol.hold"
+#include "headers/dreiton-transport.hold"
+#include "headers/dreiton.hold"
+#include "headers/dreiton-helpers.hold"
+
+REQUESTDREITONNOOPERATION(){
+	ret sendDreitonRequest(dreiton, NO_OPERATION_DREITON_REQUEST_TYPE, 0, NULL, NO_OPERATION_DREITON_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+REQUESTDREITONSYNC(){
+	ret sendDreitonRequest(dreiton, SYNC_DREITON_REQUEST_TYPE, 0, NULL, SYNC_DREITON_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+REQUESTDREITONCLAIMOWNERSHIP(){
+	ret sendDreitonRequest(dreiton, CLAIM_OWNERSHIP_DREITON_REQUEST_TYPE, 0, NULL, CLAIM_OWNERSHIP_DREITON_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+REQUESTDREITONCLOSEONIDLE(){
+	ret sendDreitonRequest(dreiton, CLOSE_ON_IDLE_DREITON_REQUEST_TYPE, 0, NULL, CLOSE_ON_IDLE_DREITON_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+REQUESTDREITONENABLEEXTENSION(){
+	EnableExtensionDreitonRequest enableExtensionDreitonRequest;
+	enableExtensionDreitonRequest.pathSize = pathSize;
+	enableExtensionDreitonRequest.pathStart = (void *)pathStart;
+	ret sendDreitonRequest(dreiton, ENABLE_EXTENSION_DREITON_REQUEST_TYPE, NONE_DREITON_EXTENSION, &enableExtensionDreitonRequest, ENABLE_EXTENSION_DREITON_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+REQUESTDREITONSEALOWNERSHIP(){
+	ret sendDreitonRequest(dreiton, SEAL_OWNERSHIP_DREITON_REQUEST_TYPE, 0, NULL, SEAL_OWNERSHIP_DREITON_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+REQUESTDREITONAPPLYFOREVENT(){
+	ApplyForEventDreitonRequest applyForEventDreitonRequest;
+	applyForEventDreitonRequest.extensionSize = sizeof(uint32);
+	applyForEventDreitonRequest.extensionStart = (void *)&extension;
+	applyForEventDreitonRequest.eventMaskSize = sizeof(uint32);
+	applyForEventDreitonRequest.eventMaskStart = (void *)&eventMask;
+	ret sendDreitonRequest(dreiton, APPLY_FOR_EVENT_DREITON_REQUEST_TYPE, NONE_DREITON_EXTENSION, &applyForEventDreitonRequest, APPLY_FOR_EVENT_DREITON_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+REQUESTDREITONWITHDRAWFROMEVENT(){
+	WithdrawFromEventDreitonRequest withdrawFromEventDreitonRequest;
+	withdrawFromEventDreitonRequest.extensionSize = sizeof(uint32);
+	withdrawFromEventDreitonRequest.extensionStart = (void *)&extension;
+	withdrawFromEventDreitonRequest.eventMaskSize = sizeof(uint32);
+	withdrawFromEventDreitonRequest.eventMaskStart = (void *)&eventMask;
+	ret sendDreitonRequest(dreiton, WITHDRAW_FROM_EVENT_DREITON_REQUEST_TYPE, NONE_DREITON_EXTENSION, &withdrawFromEventDreitonRequest, WITHDRAW_FROM_EVENT_DREITON_REQUEST_ITEM_AMOUNT, tokenReturn);
+}
+WAITFORDREITONNOOPERATIONREPLY(){
+	ret waitForDreitonReply(dreiton, token, reply);
+}
+WAITFORDREITONSYNCREPLY(){
+	ret waitForDreitonReply(dreiton, token, reply);
+}
+WAITFORDREITONCLAIMOWNERSHIPREPLY(){
+	ret waitForDreitonReply(dreiton, token, reply);
+}
+WAITFORDREITONCLOSEONIDLEREPLY(){
+	ret waitForDreitonReply(dreiton, token, reply);
+}
+WAITFORDREITONENABLEEXTENSIONREPLY(){
+	ret waitForDreitonReply(dreiton, token, reply);
+}
+WAITFORDREITONSEALOWNERSHIPREPLY(){
+	ret waitForDreitonReply(dreiton, token, reply);
+}
+WAITFORDREITONAPPLYFOREVENTREPLY(){
+	ret waitForDreitonReply(dreiton, token, reply);
+}
+WAITFORDREITONWITHDRAWFROMEVENTREPLY(){
+	ret waitForDreitonReply(dreiton, token, reply);
+}
+

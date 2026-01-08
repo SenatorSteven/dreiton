@@ -1,0 +1,734 @@
+
+/*!
+	decouple the client from the transport, currently shm.
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*! dreiton.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#include <fcntl.h>
+#include <stdint.h>
+#include <stdio.h> /*! remove later */
+#include <stdlib.h> /*! remove later */
+#include <string.h> /*! remove later */
+#include <unistd.h>
+#include <sys/epoll.h>
+#include <sys/shm.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+
+#include "headers/cold/cold.hold"
+#include "headers/dreiton-protocol.hold"
+#include "headers/dreiton-transport.hold"
+#include "headers/dreiton-codec.hold"
+#include "headers/dreiton.hold"
+
+
+
+
+
+
+
+
+
+/*! remove later */
+
+#define SHM_NONE /*--------------------*/ (0)
+#define NONE_EPOLL_FLAG /*-------------*/ (0)
+#define NONE_SOCKET_PROTOCOL /*--------*/ (0)
+#define EPOLL_CREATE1_FAILURE /*-------*/ (-1)
+#define INFINITE_EPOLL_WAIT_TIMEOUT /*-*/ (-1)
+#define SOCKET_FAILURE /*--------------*/ (-1)
+#define CONNECT_FAILURE /*-------------*/ (-1)
+#define SHMAT_FAILURE /*---------------*/ ((void *)-1)
+#define EPOLL_CTL_FAILURE /*-----------*/ (-1)
+#define RECV_FAILURE /*----------------*/ (-1)
+#define FCNTL_FAILURE /*---------------*/ (-1)
+
+local bool receiveFd(const int socket, const uint fdSize, int *const fdReturn){
+	uint controlMessageBufferSize;
+	char *controlMessageBuffer;
+	char mandatoryPayloadByte;
+	struct iovec payload;
+	struct msghdr messageHeader = {0};
+	struct cmsghdr *controlMessageHeader;
+	if(!socket or !fdSize or !fdReturn){
+		ret false;
+	}
+	controlMessageBufferSize = CMSG_SPACE(fdSize * sizeof(int));
+	if(!(controlMessageBuffer = malloc(controlMessageBufferSize))){
+		ret false;
+	}
+	payload.iov_base = &mandatoryPayloadByte;
+	payload.iov_len = 1;
+	messageHeader.msg_iov = &payload;
+	messageHeader.msg_iovlen = 1;
+	messageHeader.msg_control = controlMessageBuffer;
+	messageHeader.msg_controllen = controlMessageBufferSize;
+	if(recvmsg(socket, &messageHeader, 0) == -1){
+		free(controlMessageBuffer);
+		ret false;
+	}
+	controlMessageHeader = CMSG_FIRSTHDR(&messageHeader);
+	if(!controlMessageHeader or (*controlMessageHeader).cmsg_level != SOL_SOCKET or (*controlMessageHeader).cmsg_type != SCM_RIGHTS){
+		free(controlMessageBuffer);
+		ret false;
+	}
+	memcpy(fdReturn, CMSG_DATA(controlMessageHeader), fdSize * sizeof(int)); /*! replace with toolkit function */
+	free(controlMessageBuffer);
+	ret true;
+}
+
+
+
+
+
+
+
+
+
+INITDREITON(){
+	if(!dreiton){
+		ret false;
+	}
+	(*dreiton).serverChannelPath = NULL;
+	(*dreiton).shmStart = NULL;
+	(*dreiton).requestSlotStart = NULL;
+	(*dreiton).replySlotStart = NULL;
+	(*dreiton).eventSlotStart = NULL;
+	(*dreiton).requestStart = NULL;
+	(*dreiton).requestCurrent = NULL;
+	(*dreiton).replyStart = NULL;
+	(*dreiton).replyCurrent = NULL;
+	(*dreiton).eventStart = NULL;
+	(*dreiton).eventCurrent = NULL;
+	(*dreiton).replyEpollFd = 0;
+	(*dreiton).eventEpollFd = 0;
+	(*dreiton).requestWriteFd = 0;
+	(*dreiton).replyReadFd = 0;
+	(*dreiton).eventReadFd = 0;
+	(*dreiton).currentToken = 0;
+	(*dreiton).lastTokenRead = 0;
+	(*dreiton).tokenBacklogSize = 0;
+	(*dreiton).requestAmount = 0;
+	ret true;
+}
+SETDREITONSERVERCHANNELPATH(){
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+	success = false;
+	if(serverChannelPath == (*dreiton).serverChannelPath){
+		jmp emergencyExit;
+	}
+	(*dreiton).serverChannelPath = serverChannelPath;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CONNECTTODREITON(){
+
+
+
+	/*! what happens when things don't go our way? */
+
+
+
+	int replyEpollFd;
+	int eventEpollFd;
+	int socketConnection;
+	struct sockaddr_un address;
+	int requestWriteFd;
+	int replyReadFd;
+	int eventReadFd;
+	int shmId;
+	DreitonShmHeader *shmStart;
+	struct epoll_event event;
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+	replyEpollFd = 0;
+	eventEpollFd = 0;
+	socketConnection = 0;
+	requestWriteFd = 0;
+	replyReadFd = 0;
+	eventReadFd = 0;
+	success = false;
+	replyEpollFd = epoll_create1(NONE_EPOLL_FLAG); /*! check for surprise errors */
+	if(replyEpollFd == EPOLL_CREATE1_FAILURE){
+		replyEpollFd = 0;
+		jmp emergencyExit;
+	}
+	eventEpollFd = epoll_create1(NONE_EPOLL_FLAG); /*! check for surprise errors */
+	if(eventEpollFd == EPOLL_CREATE1_FAILURE){
+		eventEpollFd = 0;
+		jmp emergencyExit;
+	}
+	socketConnection = socket(AF_UNIX, SOCK_STREAM, NONE_SOCKET_PROTOCOL); /*! check for surprise errors */
+	if(socketConnection == SOCKET_FAILURE){
+		socketConnection = 0;
+		jmp emergencyExit;
+	}
+	address.sun_family = AF_UNIX;
+	strcpy(address.sun_path, (*dreiton).serverChannelPath); /*! replace with toolkit function */
+	if(connect(socketConnection, (void *)&address, sizeof(address)) == CONNECT_FAILURE){
+		jmp emergencyExit;
+	}
+	{
+		int fd[3];
+		if(!receiveFd(socketConnection, countof(fd), fd)){
+			jmp emergencyExit;
+		}
+		requestWriteFd = *(fd + 0);
+		replyReadFd = *(fd + 1);
+		eventReadFd = *(fd + 2);
+	}
+	{
+		const int flag = fcntl(replyReadFd, F_GETFL, 0); /*! errors? */
+		int returnValue;
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		returnValue = fcntl(replyReadFd, F_SETFL, flag | O_NONBLOCK); /*! errors? */
+		if(returnValue == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
+	{
+		const int flag = fcntl(eventReadFd, F_GETFL, 0); /*! errors? */
+		int returnValue;
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		returnValue = fcntl(eventReadFd, F_SETFL, flag | O_NONBLOCK); /*! errors? */
+		if(returnValue == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
+	event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
+	event.data.fd = replyReadFd;
+	if(epoll_ctl(replyEpollFd, EPOLL_CTL_ADD, replyReadFd, &event) == EPOLL_CTL_FAILURE){
+		jmp emergencyExit;
+	}
+	event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
+	event.data.fd = eventReadFd;
+	if(epoll_ctl(eventEpollFd, EPOLL_CTL_ADD, eventReadFd, &event) == EPOLL_CTL_FAILURE){
+		jmp emergencyExit;
+	}
+	if(recv(socketConnection, &shmId, sizeof(shmId), 0) == RECV_FAILURE){ /*! this fails? what do? */
+		jmp emergencyExit;
+	}
+	if(!shmId){
+		jmp emergencyExit;
+	}
+	shmStart = shmat(shmId, NULL, SHM_NONE);
+	if(shmStart == SHMAT_FAILURE){
+		jmp emergencyExit;
+	}
+	(*dreiton).shmStart = shmStart;
+	(*dreiton).requestSlotStart = (void *)((uint8 *)shmStart + (*shmStart).requestSlotStartOffset);
+	(*dreiton).replySlotStart = (void *)((uint8 *)shmStart + (*shmStart).replySlotStartOffset);
+	(*dreiton).eventSlotStart = (void *)((uint8 *)shmStart + (*shmStart).eventSlotStartOffset);
+	(*dreiton).requestStart = (void *)((uint8 *)shmStart + (*shmStart).requestStartOffset);
+	(*dreiton).requestCurrent = (*dreiton).requestStart;
+	(*dreiton).replyStart = (void *)((uint8 *)shmStart + (*shmStart).replyStartOffset);
+	(*dreiton).replyCurrent = (*dreiton).replyStart;
+	(*dreiton).eventStart = (void *)((uint8 *)shmStart + (*shmStart).eventStartOffset);
+	(*dreiton).eventCurrent = (*dreiton).eventStart;
+	(*dreiton).clientId = (*shmStart).clientId;
+	(*dreiton).replyEpollFd = replyEpollFd;
+	(*dreiton).eventEpollFd = eventEpollFd;
+	(*dreiton).requestWriteFd = requestWriteFd;
+	(*dreiton).replyReadFd = replyReadFd;
+	(*dreiton).eventReadFd = eventReadFd;
+	(*dreiton).currentToken = 0;
+	(*dreiton).lastTokenRead = 0;
+	(*dreiton).tokenBacklogSize = 0;
+	(*dreiton).requestAmount = 0;
+	(*dreiton).hasError = false;
+	fprintf(stdout, "connected on %i\n", shmId);
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(socketConnection) /*-*/ close(socketConnection); /*! on signal interrupt? */
+		if(!success){
+			if(eventEpollFd) /*---*/ close(eventEpollFd); /*! on signal interrupt? */
+			if(replyEpollFd) /*---*/ close(replyEpollFd); /*! on signal interrupt? */
+			if(eventReadFd) /*----*/ close(eventReadFd); /*! on signal interrupt? */
+			if(replyReadFd) /*----*/ close(replyReadFd); /*! on signal interrupt? */
+			if(requestWriteFd) /*-*/ close(requestWriteFd); /*! on signal interrupt? */
+			ret false;
+		}
+		ret true;
+	}
+}
+SENDDREITONREQUEST(){
+	DreitonShmHeader *header;
+	uint32 payloadSize;
+	uint32 currentToken;
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+	success = false;
+	if((*dreiton).hasError){
+		ret false;
+	}
+	header = (*dreiton).shmStart;
+
+
+
+	/*!
+		but... surely we have to wait until a slot is open to write a request if we just flushed, right?
+
+		this is gonna be a rough issue to deal with. you should with epoll but... what do you do with the reply? copy to local buffer?
+
+		the requestCurrent pointer is now also in the mix.
+	*/
+
+
+
+	payloadSize = 0;
+	if(request and itemAmount){
+		uint32 *current = request;
+		uint32 *const wall = current + itemAmount;
+		payloadSize += sizeof(uint32) + itemAmount * sizeof(uint32);
+		jmp calculatePayloadSizeLoop;
+		calculatePayloadSizeLoop:{
+			if(current < wall){
+				payloadSize += (*current + (sizeof(uint32) - 1)) & ~(sizeof(uint32) - 1);
+				inc current;
+				jmp calculatePayloadSizeLoop;
+			}
+		}
+	}
+	if(sizeof(GenericDreitonRequest) + payloadSize > (*header).requestSize){
+		jmp emergencyExit;
+	}
+
+
+
+	/*! we do not know if there is space to put this at the start of the pool. keep track of that. wrap around will be so fun. */
+
+	if((uint8 *)(*dreiton).requestCurrent >= (uint8 *)(*dreiton).requestStart + (*header).requestSize){
+		(*dreiton).requestCurrent = (*dreiton).requestStart;
+	}elif((uint8 *)(*dreiton).requestCurrent + sizeof(GenericDreitonRequest) + payloadSize > (uint8 *)(*dreiton).requestStart + (*header).requestSize){
+		(*dreiton).requestCurrent = (*dreiton).requestStart;
+	}
+
+
+
+	/*! there may be requests in the shm, and the request amount will be reset. we should check the size actually allocated in the shm. */
+
+	if((*dreiton).requestAmount == (*header).requestSlotSize){
+		if(!flushDreitonBuffer(dreiton)){
+			if((*dreiton).requestAmount){
+				jmp emergencyExit;
+			}
+		}
+	}
+
+
+
+	{
+		DreitonShmRequestSlot *const requestSlot = (*dreiton).requestSlotStart + (*header).requestCurrentWriter;
+		GenericDreitonRequest *const requestCurrent = (*dreiton).requestCurrent;
+
+		currentToken = (*dreiton).currentToken + 1;
+		if(!currentToken){
+			currentToken = 1;
+		}
+
+		(*requestSlot).requestStartOffset = (uint8 *)requestCurrent - (uint8 *)(*dreiton).requestStart;
+		(*requestSlot).requestSize = sizeof(GenericDreitonRequest);
+		(*requestCurrent).token = currentToken;
+		(*requestCurrent).requestType = requestType;
+		(*requestCurrent).extension = extension;
+		(*requestCurrent).sendReply = !!tokenReturn;
+		(*requestCurrent).payloadStartOffset = !!payloadSize * sizeof(GenericDreitonRequest);
+		(*requestCurrent).payloadSize = payloadSize;
+
+		/*! fprintf(stdout, "request slot @ %04u   sending request with %04u %04u %04u %04u %04u %04u\n", (*requestSlot).requestStartOffset, (*requestCurrent).requestType, (*requestCurrent).extension, (*requestCurrent).sendReply, (*requestCurrent).token, (*requestCurrent).payloadStartOffset, (*requestCurrent).payloadSize); */
+		packDreitonMessage(requestCurrent, itemAmount, request);
+
+		(*dreiton).requestCurrent += sizeof(GenericDreitonRequest) + payloadSize;
+
+		(*header).requestCurrentWriter = ((*header).requestCurrentWriter + 1) % (*header).requestSlotSize;
+		(*dreiton).currentToken = currentToken;
+	}
+
+	inc (*dreiton).requestAmount;
+	inc (*dreiton).tokenBacklogSize;
+	if(tokenReturn){
+		*tokenReturn = currentToken;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAITFORDREITONREPLY(){
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+	success = false;
+	if(!(*dreiton).replyEpollFd or (*dreiton).hasError or !token){
+		jmp emergencyExit;
+	}
+
+
+
+	/*! wrap around? special values like lastTokenRead == 0? */
+
+	/*! O(n) on weird catching of the replies is lame. */
+
+	if(token < (*dreiton).lastTokenRead){
+		uint32 current = 0;
+		uint32 wall = (*dreiton).tokenBacklogSize;
+		DreitonShmHeader *const header = (*dreiton).shmStart;
+		DreitonShmReplySlot *const replySlotStart = (*dreiton).replySlotStart;
+		uint32 replyCurrentReader = (*header).replyCurrentReader;
+		GenericDreitonReply *const replyStart = (*dreiton).replyStart;
+		uint32 replySlotSize = (*header).replySlotSize;
+		jmp readPastReplyLoop;
+		readPastReplyLoop:{
+			if(current < wall){
+				GenericDreitonReply *const reply = (void *)((uint8 *)replyStart + (*(replySlotStart + replyCurrentReader)).replyStartOffset);
+				if((*reply).token == token){
+					/*! fprintf(stdout, "reply   slot @ %04u   got reply with %04u %04u %04u %04u %04u %04u\n", replyCurrentReader, (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize); */
+					if(replyReturn){
+						*(GenericDreitonReply *)replyReturn = *reply;
+						memcpy((uint8 *)replyReturn + sizeof(GenericDreitonReply), (uint8 *)reply + (*reply).payloadStartOffset, (*reply).payloadSize);
+					}
+					(*reply).token = 0;
+					if(!current){
+						replyCurrentReader = (replyCurrentReader + 1) % replySlotSize;
+						dec (*dreiton).tokenBacklogSize;
+						inc current;
+						jmp removeOldestReplyLoop;
+						removeOldestReplyLoop:{
+							if(current < wall){
+								GenericDreitonReply *const reply = (void *)((uint8 *)replyStart + (*(replySlotStart + replyCurrentReader)).replyStartOffset);
+								if(!(*reply).token){
+									replyCurrentReader = (replyCurrentReader + 1) % replySlotSize;
+									dec (*dreiton).tokenBacklogSize;
+									inc current;
+									jmp removeOldestReplyLoop;
+								}
+							}
+							(*header).replyCurrentReader = replyCurrentReader;
+						}
+					}
+					ret true; /*!*/
+				}
+				replyCurrentReader = (replyCurrentReader + 1) % replySlotSize;
+				inc current;
+				jmp readPastReplyLoop;
+			}
+			fprintf(stdout, "failure to find previously received reply\n");
+			jmp emergencyExit;
+		}
+	}
+
+
+
+	jmp waitForDreitonReplyLoop;
+	waitForDreitonReplyLoop:{
+		struct epoll_event epollEventStart[1];
+		int epollEventAmount;
+		uint64 response;
+		uint32 replyToken;
+		uint32 replySlot;
+		int returnValue;
+		epollEventAmount = epoll_wait((*dreiton).replyEpollFd, epollEventStart, countof(epollEventStart), INFINITE_EPOLL_WAIT_TIMEOUT);
+		if(epollEventAmount){ /*! handle errors here */
+			/*! handle errors here */
+		}
+		if((*epollEventStart).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+			if((*epollEventStart).events & (EPOLLRDHUP | EPOLLHUP)){
+				fprintf(stdout, "reply failed because dreiton shut off (hangup)\n");
+				(*dreiton).hasError = true;
+				jmp emergencyExit;
+			}
+			fprintf(stdout, "reply failed because dreiton shut off (error)\n");
+			(*dreiton).hasError = true;
+			jmp emergencyExit;
+		}
+		if((*epollEventStart).events & EPOLLIN){
+			returnValue = read((*dreiton).replyReadFd, &response, sizeof(response));
+			if(returnValue > 0){
+
+				/*!*/
+
+			}elif(returnValue == -1){
+
+				/*!*/
+
+			}else{
+
+				/*!*/
+
+			}
+			if(!response){
+				jmp emergencyExit;
+			}
+			replyToken = response;
+			(*dreiton).lastTokenRead = replyToken; /*! on wrap around? */
+			if(replyToken < token){
+				jmp waitForDreitonReplyLoop;
+			}
+			if(replyToken > token){
+				/*! possible failure point, go back to check the arrived tokens expecting there to not be a valid response for this one */
+			}
+			replySlot = response >> 32;
+			{
+				DreitonShmHeader *const header = (*dreiton).shmStart;
+				GenericDreitonReply *const reply = (void *)((uint8 *)(*dreiton).replyStart + (*((*dreiton).replySlotStart + replySlot)).replyStartOffset);
+				/*! fprintf(stdout, "reply   slot @ %04u   got reply with %04u %04u %04u %04u %04u %04u\n", replySlot, (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize); */
+				if(replyReturn){
+					*(GenericDreitonReply *)replyReturn = *reply;
+					memcpy((uint8 *)replyReturn + sizeof(GenericDreitonReply), (uint8 *)reply + (*reply).payloadStartOffset, (*reply).payloadSize);
+				}
+				(*reply).token = 0;
+				if(!(*((*dreiton).replyStart + (*header).replyCurrentReader)).token){
+					(*header).replyCurrentReader = ((*header).replyCurrentReader + 1) % (*header).replySlotSize;
+					dec (*dreiton).tokenBacklogSize;
+				}
+			}
+			success = true;
+			jmp emergencyExit;
+		}
+		jmp waitForDreitonReplyLoop;
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+FLUSHDREITONBUFFER(){
+	uint64 message;
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+
+	/*! should this be responsible for anything else? */
+
+	if(!(*dreiton).requestWriteFd or !(*dreiton).requestAmount or (*dreiton).hasError){
+		jmp emergencyExit;
+	}
+	message = (*dreiton).clientId;
+	message = (message << 32) | (*dreiton).requestAmount; /*! add generation? */
+	write((*dreiton).requestWriteFd, &message, sizeof(message)); /*! errors? */
+	(*dreiton).requestAmount = 0;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAITFORDREITONEVENT(){
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+	success = false;
+	if(!(*dreiton).eventEpollFd or (*dreiton).hasError){
+		jmp emergencyExit;
+	}
+	jmp waitForDreitonEventLoop;
+	waitForDreitonEventLoop:{
+		struct epoll_event epollEventStart[1];
+		int epollEventAmount;
+		uint64 response;
+		int returnValue;
+		uint32 eventSlot;
+		epollEventAmount = epoll_wait((*dreiton).eventEpollFd, epollEventStart, countof(epollEventStart), INFINITE_EPOLL_WAIT_TIMEOUT);
+		if(epollEventAmount){ /*! handle errors here */
+			/*! handle errors here */
+		}
+		if((*epollEventStart).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+			if((*epollEventStart).events & (EPOLLRDHUP | EPOLLHUP)){
+				fprintf(stdout, "event failed because the server shut off (hangup)\n");
+				(*dreiton).hasError = true;
+				jmp emergencyExit;
+			}
+			fprintf(stdout, "event failed because the server shut off (error)\n");
+			(*dreiton).hasError = true;
+			jmp emergencyExit;
+		}
+		if((*epollEventStart).events & EPOLLIN){
+			returnValue = read((*dreiton).eventReadFd, &response, sizeof(response));
+			if(returnValue > 0){
+
+				/*!*/
+
+			}elif(returnValue == -1){
+
+				/*!*/
+
+			}else{
+
+				/*!*/
+
+			}
+			if(!response){
+				jmp emergencyExit;
+			}
+			eventSlot = response >> 32;
+			{
+				DreitonShmHeader *const header = (*dreiton).shmStart;
+				GenericDreitonEvent *const event = (void *)((uint8 *)(*dreiton).eventStart + (*((*dreiton).eventSlotStart + eventSlot)).eventStartOffset);
+				/*! fprintf(stdout, "event   slot @ %04u   got event with %04u %04u %04u %04u\n", eventSlot, (*event).eventType, (*event).extension, (*event).payloadStartOffset, (*event).payloadSize); */
+				if(eventReturn){
+					*(GenericDreitonEvent *)eventReturn = *event;
+					memcpy((uint8 *)eventReturn + sizeof(GenericDreitonEvent), (uint8 *)event + (*event).payloadStartOffset, (*event).payloadSize);
+				}
+				(*header).eventCurrentReader = ((*header).eventCurrentReader + 1) % (*header).eventSlotSize;
+			}
+			success = true;
+			jmp emergencyExit;
+		}
+		jmp waitForDreitonEventLoop;
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+DISCONNECTFROMDREITON(){
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+	success = false;
+
+
+
+/*! update this */
+
+	if(!(*dreiton).eventStart or !(*dreiton).replyStart or !(*dreiton).requestSlotStart or !(*dreiton).shmStart or !(*dreiton).eventEpollFd or !(*dreiton).replyEpollFd or !(*dreiton).eventReadFd or !(*dreiton).replyReadFd or !(*dreiton).requestWriteFd){
+		jmp emergencyExit;
+	}
+
+
+
+	if(!(*dreiton).hasError){
+		const uint64 requestAmount = 0;
+		struct epoll_event epollEventStart[1];
+		write((*dreiton).requestWriteFd, &requestAmount, sizeof(requestAmount)); /*! errors? */
+		epoll_wait((*dreiton).replyEpollFd, epollEventStart, countof(epollEventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
+	}
+	shmdt((*dreiton).shmStart); /*! errors? */
+	close((*dreiton).eventEpollFd); /*! errors? */
+	close((*dreiton).replyEpollFd); /*! errors? */
+	close((*dreiton).eventReadFd); /*! errors? */
+	close((*dreiton).replyReadFd); /*! errors? */
+	close((*dreiton).requestWriteFd); /*! errors? */
+	(*dreiton).hasError = false;
+	(*dreiton).requestAmount = 0;
+	(*dreiton).tokenBacklogSize = 0;
+	(*dreiton).lastTokenRead = 0;
+	(*dreiton).currentToken = 0;
+	(*dreiton).eventReadFd = 0;
+	(*dreiton).replyReadFd = 0;
+	(*dreiton).requestWriteFd = 0;
+	(*dreiton).eventEpollFd = 0;
+	(*dreiton).replyEpollFd = 0;
+	(*dreiton).clientId = 0;
+	(*dreiton).eventCurrent = NULL;
+	(*dreiton).eventStart = NULL;
+	(*dreiton).replyCurrent = NULL;
+	(*dreiton).replyStart = NULL;
+	(*dreiton).requestCurrent = NULL;
+	(*dreiton).requestStart = NULL;
+	(*dreiton).eventSlotStart = NULL;
+	(*dreiton).replySlotStart = NULL;
+	(*dreiton).requestSlotStart = NULL;
+	(*dreiton).shmStart = NULL;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+FINIDREITON(){
+	if(!dreiton){
+		ret false;
+	}
+	if(!disconnectFromDreiton(dreiton)){
+		ret false;
+	}
+	(*dreiton).serverChannelPath = NULL;
+	ret true;
+}
+

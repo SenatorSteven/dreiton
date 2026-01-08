@@ -1,5 +1,5 @@
 
-/*! return-values.hold
+/*! dreiton-base-extension-helpers.hold
 
 MIT License
 
@@ -23,31 +23,23 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#ifndef RETURN_VALUES_HOLD
-#define RETURN_VALUES_HOLD
+#ifndef DREITON_BASE_EXTENSION_HELPERS_HOLD
+#define DREITON_BASE_EXTENSION_HELPERS_HOLD
 
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
 #include "headers/cold/cold.hold"
 #endif
 
-#define SHM_NONE /*--------------------*/ (0)
-#define NONE_EPOLL_FLAG /*-------------*/ (0)
-#define NONE_SOCKET_PROTOCOL /*--------*/ (0)
-#define EPOLL_CREATE1_FAILURE /*-------*/ (-1)
-#define INFINITE_EPOLL_WAIT_TIMEOUT /*-*/ (-1)
-#define READ_FAILURE /*----------------*/ (-1)
-#define PTHREAD_CREATE_SUCCESS /*------*/ (0)
-#define SOCKET_FAILURE /*--------------*/ (-1)
-#define CONNECT_FAILURE /*-------------*/ (-1)
-#define EVENTFD_FAILURE /*-------------*/ (-1)
-#define PIPE_FAILURE /*----------------*/ (-1)
-#define SHMGET_FAILURE /*--------------*/ (-1)
-#define SHMAT_FAILURE /*---------------*/ ((void *)-1)
-#define EPOLL_CTL_FAILURE /*-----------*/ (-1)
-#define RECV_FAILURE /*----------------*/ (-1)
-#define SENDMSG_FAILURE /*-------------*/ (-1)
-#define FCNTL_FAILURE /*---------------*/ (-1)
+#define REQUESTDREITONBASEGETMAGICNUMBER() /*------*/ bool  requestDreitonBaseGetMagicNumber(Dreiton *const dreiton, const uint32 extension, uint32 *const tokenReturn)
+#define REQUESTDREITONBASESETMAGICNUMBER() /*------*/ bool  requestDreitonBaseSetMagicNumber(Dreiton *const dreiton, const uint32 extension, const uint32 magicNumber, uint32 *const tokenReturn)
+#define WAITFORDREITONBASEGETMAGICNUMBERREPLY() /*-*/ bool  waitForDreitonBaseGetMagicNumberReply(Dreiton *const dreiton, const uint32 token, GetMagicNumberDreitonBaseReply *const reply)
+#define WAITFORDREITONBASESETMAGICNUMBERREPLY() /*-*/ bool  waitForDreitonBaseSetMagicNumberReply(Dreiton *const dreiton, const uint32 token, SetMagicNumberDreitonBaseReply *const reply)
+
+REQUESTDREITONBASEGETMAGICNUMBER();
+REQUESTDREITONBASESETMAGICNUMBER();
+WAITFORDREITONBASEGETMAGICNUMBERREPLY();
+WAITFORDREITONBASESETMAGICNUMBERREPLY();
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED

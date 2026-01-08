@@ -1,0 +1,74 @@
+
+/*! dreiton-helpers.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef DREITON_HELPERS_HOLD
+#define DREITON_HELPERS_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+#define REQUESTDREITONNOOPERATION() /*------------*/ bool  requestDreitonNoOperation(Dreiton *const dreiton, uint32 *const tokenReturn)
+#define REQUESTDREITONSYNC() /*-------------------*/ bool  requestDreitonSync(Dreiton *const dreiton, uint32 *const tokenReturn)
+#define REQUESTDREITONCLAIMOWNERSHIP() /*---------*/ bool  requestDreitonClaimOwnership(Dreiton *const dreiton, uint32 *const tokenReturn)
+#define REQUESTDREITONCLOSEONIDLE() /*------------*/ bool  requestDreitonCloseOnIdle(Dreiton *const dreiton, uint32 *const tokenReturn)
+#define REQUESTDREITONENABLEEXTENSION() /*--------*/ bool  requestDreitonEnableExtension(Dreiton *const dreiton, const uint32 pathSize, const char *const pathStart, uint32 *const tokenReturn)
+#define REQUESTDREITONSEALOWNERSHIP() /*----------*/ bool  requestDreitonSealOwnership(Dreiton *const dreiton, uint32 *const tokenReturn)
+#define REQUESTDREITONAPPLYFOREVENT() /*----------*/ bool  requestDreitonApplyForEvent(Dreiton *const dreiton, const uint32 extension, const uint32 eventMask, uint32 *const tokenReturn)
+#define REQUESTDREITONWITHDRAWFROMEVENT() /*------*/ bool  requestDreitonWithdrawFromEvent(Dreiton *const dreiton, const uint32 extension, const uint32 eventMask, uint32 *const tokenReturn)
+#define WAITFORDREITONNOOPERATIONREPLY() /*-------*/ bool  waitForDreitonNoOperationReply(Dreiton *const dreiton, const uint32 token, NoOperationDreitonReply *const reply)
+#define WAITFORDREITONSYNCREPLY() /*--------------*/ bool  waitForDreitonSyncReply(Dreiton *const dreiton, const uint32 token, SyncDreitonReply *const reply)
+#define WAITFORDREITONCLAIMOWNERSHIPREPLY() /*----*/ bool  waitForDreitonClaimOwnershipReply(Dreiton *const dreiton, const uint32 token, ClaimOwnershipDreitonReply *const reply)
+#define WAITFORDREITONCLOSEONIDLEREPLY() /*-------*/ bool  waitForDreitonCloseOnIdleReply(Dreiton *const dreiton, const uint32 token, CloseOnIdleDreitonReply *const reply)
+#define WAITFORDREITONENABLEEXTENSIONREPLY() /*---*/ bool  waitForDreitonEnableExtensionReply(Dreiton *const dreiton, const uint32 token, EnableExtensionDreitonReply *const reply)
+#define WAITFORDREITONSEALOWNERSHIPREPLY() /*-----*/ bool  waitForDreitonSealOwnershipReply(Dreiton *const dreiton, const uint32 token, SealOwnershipDreitonReply *const reply)
+#define WAITFORDREITONAPPLYFOREVENTREPLY() /*-----*/ bool  waitForDreitonApplyForEventReply(Dreiton *const dreiton, const uint32 token, ApplyForEventDreitonReply *const reply)
+#define WAITFORDREITONWITHDRAWFROMEVENTREPLY() /*-*/ bool  waitForDreitonWithdrawFromEventReply(Dreiton *const dreiton, const uint32 token, WithdrawFromEventDreitonReply *const reply)
+
+REQUESTDREITONNOOPERATION();
+REQUESTDREITONSYNC();
+REQUESTDREITONCLAIMOWNERSHIP();
+REQUESTDREITONCLOSEONIDLE();
+REQUESTDREITONENABLEEXTENSION();
+REQUESTDREITONSEALOWNERSHIP();
+REQUESTDREITONAPPLYFOREVENT();
+REQUESTDREITONWITHDRAWFROMEVENT();
+WAITFORDREITONNOOPERATIONREPLY();
+WAITFORDREITONSYNCREPLY();
+WAITFORDREITONCLAIMOWNERSHIPREPLY();
+WAITFORDREITONCLOSEONIDLEREPLY();
+WAITFORDREITONENABLEEXTENSIONREPLY();
+WAITFORDREITONSEALOWNERSHIPREPLY();
+WAITFORDREITONAPPLYFOREVENTREPLY();
+WAITFORDREITONWITHDRAWFROMEVENTREPLY();
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+

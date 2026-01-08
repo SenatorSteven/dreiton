@@ -1,0 +1,228 @@
+
+/*!
+	keep replies lossless and events lossy. if the buffer fills up, lose events but do not lose replies.
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*! dreiton-protocol.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef DREITON_PROTOCOL_HOLD
+#define DREITON_PROTOCOL_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+#define DREITON_PROTOCOL_VERSION /*------------------------*/ (1)
+
+#define NONE_DREITON_ENDIANNESS /*-------------------------*/ (0)
+#define HOST_DREITON_ENDIANNESS /*-------------------------*/ (1)
+#define LITTLE_DREITON_ENDIANNESS /*-----------------------*/ (2)
+#define BIG_DREITON_ENDIANNESS /*--------------------------*/ (3)
+
+#define DREITON_ENDIANNESS /*------------------------------*/ (LITTLE_DREITON_ENDIANNESS)
+
+#define NONE_DREITON_EXTENSION /*--------------------------*/ (0)
+
+#define NONE_DREITON_REQUEST_TYPE /*-----------------------*/ (0)
+#define NO_OPERATION_DREITON_REQUEST_TYPE /*---------------*/ (1)
+#define SYNC_DREITON_REQUEST_TYPE /*-----------------------*/ (2)
+#define CLAIM_OWNERSHIP_DREITON_REQUEST_TYPE /*------------*/ (3)
+#define CLOSE_ON_IDLE_DREITON_REQUEST_TYPE /*--------------*/ (4)
+#define ENABLE_EXTENSION_DREITON_REQUEST_TYPE /*-----------*/ (5)
+#define SEAL_OWNERSHIP_DREITON_REQUEST_TYPE /*-------------*/ (6)
+#define APPLY_FOR_EVENT_DREITON_REQUEST_TYPE /*------------*/ (7)
+#define WITHDRAW_FROM_EVENT_DREITON_REQUEST_TYPE /*--------*/ (8)
+
+#define NONE_DREITON_REQUEST_ITEM_AMOUNT /*----------------*/ (0)
+#define NO_OPERATION_DREITON_REQUEST_ITEM_AMOUNT /*--------*/ (0)
+#define SYNC_DREITON_REQUEST_ITEM_AMOUNT /*----------------*/ (0)
+#define CLAIM_OWNERSHIP_DREITON_REQUEST_ITEM_AMOUNT /*-----*/ (0)
+#define CLOSE_ON_IDLE_DREITON_REQUEST_ITEM_AMOUNT /*-------*/ (0)
+#define ENABLE_EXTENSION_DREITON_REQUEST_ITEM_AMOUNT /*----*/ (1)
+#define SEAL_OWNERSHIP_DREITON_REQUEST_ITEM_AMOUNT /*------*/ (0)
+#define APPLY_FOR_EVENT_DREITON_REQUEST_ITEM_AMOUNT /*-----*/ (2)
+#define WITHDRAW_FROM_EVENT_DREITON_REQUEST_ITEM_AMOUNT /*-*/ (2)
+
+#define NONE_DREITON_REPLY_TYPE /*-------------------------*/ (0)
+#define NO_OPERATION_DREITON_REPLY_TYPE /*-----------------*/ (1)
+#define SYNC_DREITON_REPLY_TYPE /*-------------------------*/ (2)
+#define CLAIM_OWNERSHIP_DREITON_REPLY_TYPE /*--------------*/ (3)
+#define CLOSE_ON_IDLE_DREITON_REPLY_TYPE /*----------------*/ (4)
+#define ENABLE_EXTENSION_DREITON_REPLY_TYPE /*-------------*/ (5)
+#define SEAL_OWNERSHIP_DREITON_REPLY_TYPE /*---------------*/ (6)
+#define APPLY_FOR_EVENT_DREITON_REPLY_TYPE /*--------------*/ (7)
+#define WITHDRAW_FROM_EVENT_DREITON_REPLY_TYPE /*----------*/ (8)
+
+#define NONE_DREITON_REPLY_STATUS /*-----------------------*/ (b(00))
+#define SUCCESS_DREITON_REPLY_STATUS /*--------------------*/ (b(01))
+#define UPDATED_DREITON_REPLY_STATUS /*--------------------*/ (b(10))
+
+#define NONE_DREITON_EVENT_TYPE /*-------------------------*/ (0)
+
+#define NONE_DREITON_EVENT_TYPE_MASK /*--------------------*/ (b(0))
+
+def struct{
+	uint8 /*---------------*/ messageType;
+	uint8 /*---------------*/ extension;
+	uint8 /*---------------*/ pad0[6];
+	uint32 /*--------------*/ payloadStartOffset;
+	uint32 /*--------------*/ payloadSize;
+} GenericDreitonMessage;
+
+def struct{
+	uint8 /*---------------*/ requestType;
+	uint8 /*---------------*/ extension;
+	bool /*----------------*/ sendReply;
+	uint8 /*---------------*/ pad0[1];
+	uint32 /*--------------*/ token;
+	uint32 /*--------------*/ payloadStartOffset;
+	uint32 /*--------------*/ payloadSize;
+} GenericDreitonRequest;
+
+def struct{
+	uint8 /*---------------*/ replyType;
+	uint8 /*---------------*/ extension;
+	uint8 /*---------------*/ status;
+	uint8 /*---------------*/ pad0[1];
+	uint32 /*--------------*/ token;
+	uint32 /*--------------*/ payloadStartOffset;
+	uint32 /*--------------*/ payloadSize;
+} GenericDreitonReply;
+
+def struct{
+	uint8 /*---------------*/ eventType;
+	uint8 /*---------------*/ extension;
+	uint8 /*---------------*/ pad0[6];
+	uint32 /*--------------*/ payloadStartOffset;
+	uint32 /*--------------*/ payloadSize;
+} GenericDreitonEvent;
+
+def struct{
+	uint8 /*---------------*/ pad0[1];
+} NoOperationDreitonRequest;
+
+def struct{
+	uint8 /*---------------*/ pad0[1];
+} SyncDreitonRequest;
+
+def struct{
+	uint8 /*---------------*/ pad0[1];
+} ClaimOwnershipDreitonRequest;
+
+def struct{
+	uint8 /*---------------*/ pad0[1];
+} CloseOnIdleDreitonRequest;
+
+def struct{
+	uint32 /*--------------*/ pathSize;
+	uint8 /*---------------*/ pad0[4];
+	char * /*--------------*/ pathStart;
+} EnableExtensionDreitonRequest;
+
+def struct{
+	uint8 /*---------------*/ pad0[1];
+} SealOwnershipDreitonRequest;
+
+def struct{
+	uint32 /*--------------*/ extensionSize;
+	uint32 /*--------------*/ eventMaskSize;
+	uint32 * /*------------*/ extensionStart;
+	uint32 * /*------------*/ eventMaskStart;
+} ApplyForEventDreitonRequest;
+
+def struct{
+	uint32 /*--------------*/ extensionSize;
+	uint32 /*--------------*/ eventMaskSize;
+	uint32 * /*------------*/ extensionStart;
+	uint32 * /*------------*/ eventMaskStart;
+} WithdrawFromEventDreitonRequest;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+} NoOperationDreitonReply;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+} SyncDreitonReply;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+} ClaimOwnershipDreitonReply;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+} CloseOnIdleDreitonReply;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+	uint32 /*--------------*/ extension;
+} EnableExtensionDreitonReply;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+} SealOwnershipDreitonReply;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+} ApplyForEventDreitonReply;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+} WithdrawFromEventDreitonReply;
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+

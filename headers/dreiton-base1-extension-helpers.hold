@@ -1,5 +1,5 @@
 
-/*! client-api.hold
+/*! dreiton-base-extension-helpers.hold
 
 MIT License
 
@@ -23,32 +23,23 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#ifndef CLIENT_API_HOLD
-#define CLIENT_API_HOLD
+#ifndef DREITON_BASE_EXTENSION_HELPERS_HOLD
+#define DREITON_BASE_EXTENSION_HELPERS_HOLD
 
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
 #include "headers/cold/cold.hold"
 #endif
 
-#define CLIENT_PROTOCOL_VERSION /*-*/ (1)
+#define REQUESTDREITONBASEGETMAGICNUMBER() /*------*/ bool  requestDreitonBaseGetMagicNumber(Dreiton *const dreiton, const uint32 extension, uint32 *const tokenReturn)
+#define REQUESTDREITONBASESETMAGICNUMBER() /*------*/ bool  requestDreitonBaseSetMagicNumber(Dreiton *const dreiton, const uint32 extension, const uint32 magicNumber, uint32 *const tokenReturn)
+#define WAITFORDREITONBASEGETMAGICNUMBERREPLY() /*-*/ bool  waitForDreitonBaseGetMagicNumberReply(Dreiton *const dreiton, const uint32 token, GetMagicNumberDreitonBaseReply *const reply)
+#define WAITFORDREITONBASESETMAGICNUMBERREPLY() /*-*/ bool  waitForDreitonBaseSetMagicNumberReply(Dreiton *const dreiton, const uint32 token, SetMagicNumberDreitonBaseReply *const reply)
 
-/*! implement client extensions */
-
-/*! create #defines for each version, as well as a struct with the version appended or something equivalent for ease of access of the elements later */
-
-def struct{
-	uint32 /*-------*/ descriptorSize;
-	uint32 /*-------*/ protocolVersion;
-	uint32 /*-------*/ extensionVersion;
-	uint32 /*-------*/ extensionNameSize;
-	const char * /*-*/ extensionName;
-	uint8 /*--------*/ pad0[4];
-	uint32 /*-------*/ authorNameSize;
-	const char * /*-*/ authorName;
-	bool /*---------*/ (*initClientExtensionDescriptorSystem)(void);
-	bool /*---------*/ (*finiClientExtensionDescriptorSystem)(void);
-} ClientExtensionDescriptor;
+REQUESTDREITONBASEGETMAGICNUMBER();
+REQUESTDREITONBASESETMAGICNUMBER();
+WAITFORDREITONBASEGETMAGICNUMBERREPLY();
+WAITFORDREITONBASESETMAGICNUMBERREPLY();
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED

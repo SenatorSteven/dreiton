@@ -65,35 +65,33 @@ SOFTWARE. */
 #include <stdio.h>
 
 #include "headers/cold/cold.hold"
-#include "headers/server-api.hold"
-#include "headers/systems/server-system.hold"
-#include "headers/base-server-extension.hold"
+#include "headers/dreiton-protocol.hold"
+#include "headers/dreiton-transport.hold"
+#include "headers/dreiton-extension.hold"
+#include "headers/dreiton-core.hold"
+#include "headers/server.hold"
 
-local ServerSystem /*-*/ serverSystem;
-local Database /*-----*/ database;
+local const char * /*--------*/ serverName;
+local DreitonCore /*---------*/ dreitonCore;
+local DreitonCoreDatabase /*-*/ database;
 
 void signalHandler(const int signal){
 	if(signal == SIGINT){
 		fprintf(stdout, "\n");
-		quitServerRegistrationLoopThread(&serverSystem);
-		quitServerEventLoopThread(&serverSystem);
-		quitServerReplyLoopThread(&serverSystem);
+		quitDreitonCoreRegistrationLoopThread(&dreitonCore);
+		quitDreitonCoreEventLoopThread(&dreitonCore);
+		quitDreitonCoreReplyLoopThread(&dreitonCore);
 	}
 	if(signal == SIGPIPE){
 		fprintf(stderr, "\tpipe error\n");
 	}
 	ret;
 }
-int main(void){
-
-
-
-	/*! remove later */
-
-	(void)unpackRequest;
-
-
-
+int main(const int argumentSize, const char *const *const argumentStart){
+	if(argumentSize != 2){
+		ret 0;
+	}
+	serverName = *(argumentStart + 1);
 	/*!setSignals:*/{
 		struct sigaction s;
 		s.sa_handler = signalHandler;
@@ -102,28 +100,34 @@ int main(void){
 		sigaction(SIGINT , &s, NULL);
 		sigaction(SIGPIPE, &s, NULL);
 	}
-	initServerSystem(&serverSystem);
-	setServerServerChannelPath(&serverSystem, "/dev/shm/registration-form");
-	setServerClientChannelPath(&serverSystem, "/dev/shm/client-writer");
-	setServerDatabase(&serverSystem, &database);
-	setServerOwner(&serverSystem, NONE_SERVER_OWNER);
-	setServerExtensionBlockSize(&serverSystem, 16);
-	setServerClientBlockSize(&serverSystem, 16);
-	bootServerReplyLoopThread(&serverSystem);
-	bootServerEventLoopThread(&serverSystem);
-	bootServerRegistrationLoopThread(&serverSystem);
+	fprintf(stdout, "starting dreiton core @ \'%s\'\n", serverName);
 
 
 
-	/*! a */
+	/*! actually use the server name */
 
-	awaitServerRegistrationLoopThreadExit(&serverSystem);
-	awaitServerEventLoopThreadExit(&serverSystem);
-	awaitServerReplyLoopThreadExit(&serverSystem);
+	initDreitonCore(&dreitonCore);
+	setDreitonCoreServerChannelPath(&dreitonCore, "/dev/shm/registration-form");
+	setDreitonCoreClientChannelPath(&dreitonCore, "/dev/shm/client-writer");
+	setDreitonCoreDatabase(&dreitonCore, &database);
+	setDreitonCoreOwner(&dreitonCore, NONE_DREITON_CORE_OWNER);
+	setDreitonCoreExtensionBlockSize(&dreitonCore, 16);
+	setDreitonCoreClientBlockSize(&dreitonCore, 16);
+	bootDreitonCoreReplyLoopThread(&dreitonCore);
+	bootDreitonCoreEventLoopThread(&dreitonCore);
+	bootDreitonCoreRegistrationLoopThread(&dreitonCore);
 
 
 
-	finiServerSystem(&serverSystem);
+	/*! all clients closing and turning the hint on will still cause us to not exit the program. fix. */
+
+	awaitDreitonCoreRegistrationLoopThreadExit(&dreitonCore);
+	awaitDreitonCoreEventLoopThreadExit(&dreitonCore);
+	awaitDreitonCoreReplyLoopThreadExit(&dreitonCore);
+
+
+
+	finiDreitonCore(&dreitonCore);
 	ret 0;
 }
 

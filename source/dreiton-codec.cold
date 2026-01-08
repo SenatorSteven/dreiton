@@ -1,0 +1,115 @@
+
+/*! dreiton-codec.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#include <stdint.h>
+#include <string.h>
+
+#include "headers/cold/cold.hold"
+#include "headers/dreiton-protocol.hold"
+#include "headers/dreiton-codec.hold"
+
+#define LITTLEENDIANVARIABLETRANSFORM() /*-*/ local inline void  littleEndianVariableTransform(const void *const source, void *const destination)
+
+LITTLEENDIANVARIABLETRANSFORM();
+
+PACKDREITONMESSAGE(){
+	void *messagePayloadStart;
+	uint32 *messageSizeCurrent;
+	uint32 *messageSizeWall;
+	uint8 *messagePointerCurrent;
+	uint32 *structSizeCurrent;
+	void **structPointerCurrent;
+	if(!message or !(*(GenericDreitonMessage *)message).payloadStartOffset or !(*(GenericDreitonMessage *)message).payloadSize or !itemAmount or !structStart){
+		ret false;
+	}
+	messagePayloadStart = (uint8 *)message + (*(GenericDreitonMessage *)message).payloadStartOffset;
+	messageSizeCurrent = (uint32 *)messagePayloadStart + 1;
+	messageSizeWall = messageSizeCurrent + itemAmount;
+	messagePointerCurrent = (void *)(messageSizeCurrent + itemAmount);
+	structSizeCurrent = structStart;
+	structPointerCurrent = (void *)(structSizeCurrent + itemAmount + itemAmount % 2);
+	littleEndianVariableTransform(&itemAmount, messagePayloadStart);
+	jmp packDreitonMessageItemLoop;
+	packDreitonMessageItemLoop:{
+		if(messageSizeCurrent < messageSizeWall){
+			littleEndianVariableTransform(structSizeCurrent, messageSizeCurrent);
+			memcpy(messagePointerCurrent, *structPointerCurrent, *structSizeCurrent * sizeof(uint8)); /*! replace later */
+			inc structSizeCurrent;
+			inc structPointerCurrent;
+			messagePointerCurrent += (*messageSizeCurrent + (sizeof(uint32) - 1)) & ~(sizeof(uint32) - 1);
+			inc messageSizeCurrent;
+			jmp packDreitonMessageItemLoop;
+		}
+		ret true;
+	}
+}
+UNPACKDREITONMESSAGE(){
+	uint32 localItemAmount;
+	void *messagePayloadStart;
+	uint32 *messageSizeCurrent;
+	uint32 *messageSizeWall;
+	uint8 *messagePointerCurrent;
+	uint32 *structSizeCurrent;
+	void **structPointerCurrent;
+	if(!message or !(*(GenericDreitonMessage *)message).payloadStartOffset or !(*(GenericDreitonMessage *)message).payloadSize){
+		ret false;
+	}
+	messagePayloadStart = (uint8 *)message + (*(GenericDreitonMessage *)message).payloadStartOffset;
+	littleEndianVariableTransform(messagePayloadStart, &localItemAmount);
+	if(itemAmount != localItemAmount or !itemAmount != !structStartReturn){
+		ret false;
+	}
+	if(!itemAmount){
+		ret true;
+	}
+	messageSizeCurrent = (uint32 *)messagePayloadStart + 1;
+	messageSizeWall = messageSizeCurrent + itemAmount;
+	messagePointerCurrent = (void *)(messageSizeCurrent + itemAmount);
+	structSizeCurrent = structStartReturn;
+	structPointerCurrent = (void *)(structSizeCurrent + itemAmount + itemAmount % 2);
+	jmp unpackDreitonMessageItemLoop;
+	unpackDreitonMessageItemLoop:{
+		if(messageSizeCurrent < messageSizeWall){
+			littleEndianVariableTransform(messageSizeCurrent, structSizeCurrent);
+			*structPointerCurrent = messagePointerCurrent;
+			inc structSizeCurrent;
+			inc structPointerCurrent;
+			messagePointerCurrent += (*messageSizeCurrent + (sizeof(uint32) - 1)) & ~(sizeof(uint32) - 1);
+			inc messageSizeCurrent;
+			jmp unpackDreitonMessageItemLoop;
+		}
+		ret true;
+	}
+}
+LITTLEENDIANVARIABLETRANSFORM(){
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+	*(uint32 *)destination = *(uint32 *)source;
+#else
+	const uint32 s = *(uint32 *)source;
+	*(uint32 *)destination = ((s & 0x000000FF) << 24) | ((s & 0x0000FF00) << 8) | ((s & 0x00FF0000) >> 8) | ((s & 0xFF000000) >> 24);
+#endif
+	ret;
+}
+

@@ -1,31 +1,5 @@
 
 #ifdef a
-#include <stdio.h>
-#include <stdint.h>
-#include "repositories/cold-repository/cold.hold"
-
-int main(void){
-	uint16 reply = 0;
-	uint16 size = 128;
-	uint16 highest = 0;
-	for(;;){
-		inc reply;
-		if(!reply){
-			inc reply;
-		}
-		if(reply >= size){
-			reply = 1;
-		}
-		if(reply > highest or reply + size - 2 <= highest){
-			highest = reply;
-		}
-		fprintf(stdout, "highest: %u\n", highest);
-	}
-	ret 0;
-}
-#endif
-
-#ifdef a
 	/*!blockAllSignals:*/{
 		sigset_t signalSet;
 		sigfillset(&signalSet);
@@ -90,19 +64,24 @@ SOFTWARE. */
 #include <stdio.h>
 
 #include "headers/cold/cold.hold"
-#include "headers/client-api.hold"
-#include "headers/server-api.hold"
-#include "headers/base-server-extension.hold"
-#include "headers/systems/server-system.hold"
-#include "headers/systems/client-system.hold"
+#include "headers/dreiton-protocol.hold"
+#include "headers/dreiton-transport.hold"
+#include "headers/dreiton.hold"
+#include "headers/dreiton-helpers.hold"
+#include "headers/dreiton-base-extension.hold"
+#include "headers/dreiton-base-extension-helpers.hold"
+#include "headers/client.hold"
 
-#include "headers/client-system-helpers.hold"
-#include "headers/base-server-extension-helpers.hold"
+def struct{ /*! basic but pretty bad solution to the event problem. use a proper way to copy an event over regardless of payload size. */
+	GenericDreitonEvent /*-*/ event;
+	uint8 /*---------------*/ payload[256];
+} EventContainer;
 
-local ServerConnectionSystem /*---*/ _serverConnectionSystem;
-local ServerConnectionSystem * /*-*/ serverConnectionSystem;
-local GenericEvent /*-------------*/ event;
-local uint32 /*-------------------*/ baseServerExtension;
+local Dreiton /*--------*/ _dreiton;
+local Dreiton * /*------*/ dreiton;
+local uint32 /*---------*/ dreitonBaseExtension;
+local uint32 /*---------*/ dreitonBase1Extension;
+local EventContainer /*-*/ eventContainer;
 
 void signalHandler(const int signal){
 	if(signal == SIGINT){
@@ -114,18 +93,10 @@ void signalHandler(const int signal){
 	ret;
 }
 int main(void){
-
-
-
-	/*! remove later */
-
-	(void)unpackRequest;
-
-
-
 	{
-		serverConnectionSystem = &_serverConnectionSystem;
-		baseServerExtension = 0;
+		dreiton = &_dreiton;
+		dreitonBaseExtension = 0;
+		dreitonBase1Extension = 0;
 	}
 	/*!setSignals:*/{
 		struct sigaction s;
@@ -135,78 +106,123 @@ int main(void){
 		sigaction(SIGINT , &s, NULL);
 		sigaction(SIGPIPE, &s, NULL);
 	}
-	initServerConnection(serverConnectionSystem);
-	setServerConnectionServerChannelPath(serverConnectionSystem, "/dev/shm/registration-form");
-	if(!connectToServer(serverConnectionSystem)){
-		fprintf(stdout, "failed serverConnectionSystem\n");
+	initDreiton(dreiton);
+	setDreitonServerChannelPath(dreiton, "/dev/shm/registration-form");
+	if(!connectToDreiton(dreiton)){
+		fprintf(stdout, "failed dreiton\n");
 		ret 0;
 	}
 	{
 		uint32 token;
-		ClaimOwnershipServerReply claimOwnershipServerReply;
-		requestServerClaimOwnership(serverConnectionSystem, &token);
-		flushServerBuffer(serverConnectionSystem);
-		waitForServerReply(serverConnectionSystem, token, &claimOwnershipServerReply);
-		if(claimOwnershipServerReply.reply.status & SUCCESS_REPLY_STATUS){
-			/*! requestServerCloseOnIdle(serverConnectionSystem, &token); */
+		ClaimOwnershipDreitonReply claimOwnershipDreitonReply;
+		requestDreitonClaimOwnership(dreiton, &token);
+		flushDreitonBuffer(dreiton);
+		waitForDreitonReply(dreiton, token, &claimOwnershipDreitonReply);
+		if(claimOwnershipDreitonReply.reply.status & SUCCESS_DREITON_REPLY_STATUS){
+			/*! requestDreitonCloseOnIdle(dreiton, &token); */
 		}
 		{
-			#define PATH /*-*/ "/tmp/base-server-extension/output/base-server-extension.so"
-			EnableExtensionServerReply enableExtensionServerReply;
-			requestServerEnableExtension(serverConnectionSystem, lengthof(PATH) + 1, PATH, &token);
-			flushServerBuffer(serverConnectionSystem);
-			waitForServerReply(serverConnectionSystem, token, &enableExtensionServerReply);
-			baseServerExtension = enableExtensionServerReply.extension;
+			#define PATH /*-*/ "/tmp/dreiton-base-extension/output/libdreiton-base-extension.so"
+			EnableExtensionDreitonReply enableExtensionDreitonReply;
+			requestDreitonEnableExtension(dreiton, lengthof(PATH) + 1, PATH, &token);
+			flushDreitonBuffer(dreiton);
+			waitForDreitonReply(dreiton, token, &enableExtensionDreitonReply);
+			dreitonBaseExtension = enableExtensionDreitonReply.extension;
 			#undef  PATH
 		}
-		if(claimOwnershipServerReply.reply.status & SUCCESS_REPLY_STATUS){
-			requestServerSealOwnership(serverConnectionSystem, &token);
-			flushServerBuffer(serverConnectionSystem);
+		{
+			#define PATH /*-*/ "/tmp/dreiton-base1-extension/output/libdreiton-base1-extension.so"
+			EnableExtensionDreitonReply enableExtensionDreitonReply;
+			requestDreitonEnableExtension(dreiton, lengthof(PATH) + 1, PATH, &token);
+			flushDreitonBuffer(dreiton);
+			waitForDreitonReply(dreiton, token, &enableExtensionDreitonReply);
+			dreitonBase1Extension = enableExtensionDreitonReply.extension;
+			#undef  PATH
+		}
+		if(claimOwnershipDreitonReply.reply.status & SUCCESS_DREITON_REPLY_STATUS){
+			requestDreitonSealOwnership(dreiton, &token);
+			flushDreitonBuffer(dreiton);
 		}
 	}
-	requestServerApplyForEvent(serverConnectionSystem, baseServerExtension, MAGIC_NUMBER_CHANGED_BASE_EVENT_TYPE_MASK, NULL);
-	/*! requestServerWithdrawFromEvent(serverConnectionSystem, baseServerExtension, MAGIC_NUMBER_CHANGED_BASE_EVENT_TYPE_MASK, NULL); */
+	requestDreitonApplyForEvent(dreiton, dreitonBase1Extension, MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE_MASK, NULL);
+	requestDreitonApplyForEvent(dreiton, dreitonBaseExtension, MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE_MASK, NULL);
 	{
 		const uint32 magicNumber = 123;
 		uint32 token;
-		GetMagicNumberBaseReply getMagicNumberBaseReply;
-		requestBaseSetMagicNumber(serverConnectionSystem, baseServerExtension, magicNumber, NULL);
-		requestBaseGetMagicNumber(serverConnectionSystem, baseServerExtension, &token);
-		flushServerBuffer(serverConnectionSystem);
-		waitForBaseGetMagicNumberReply(serverConnectionSystem, token, &getMagicNumberBaseReply);
-		fprintf(stdout, "we got the %s number back (%u)\n", getMagicNumberBaseReply.magicNumber == magicNumber? "right" : "wrong", getMagicNumberBaseReply.magicNumber);
+		GetMagicNumberDreitonBaseReply getMagicNumberDreitonBaseReply;
+		requestDreitonBaseSetMagicNumber(dreiton, dreitonBaseExtension, magicNumber, NULL);
+		requestDreitonBaseGetMagicNumber(dreiton, dreitonBaseExtension, &token);
+		flushDreitonBuffer(dreiton);
+		waitForDreitonBaseGetMagicNumberReply(dreiton, token, &getMagicNumberDreitonBaseReply);
+		fprintf(stdout, "we got the %s number back (%u)\n", getMagicNumberDreitonBaseReply.magicNumber == magicNumber? "right" : "wrong", getMagicNumberDreitonBaseReply.magicNumber);
+	}
+	{
+		const uint32 magicNumber = 1234;
+		uint32 token;
+		GetMagicNumberDreitonBaseReply getMagicNumberDreitonBaseReply;
+		requestDreitonBaseSetMagicNumber(dreiton, dreitonBase1Extension, magicNumber, NULL);
+		requestDreitonBaseGetMagicNumber(dreiton, dreitonBase1Extension, &token);
+		flushDreitonBuffer(dreiton);
+		waitForDreitonBaseGetMagicNumberReply(dreiton, token, &getMagicNumberDreitonBaseReply);
+		fprintf(stdout, "we got the %s number back (%u)\n", getMagicNumberDreitonBaseReply.magicNumber == magicNumber? "right" : "wrong", getMagicNumberDreitonBaseReply.magicNumber);
 		jmp eventLoop;
 	}
 	eventLoop:{
-		flushServerBuffer(serverConnectionSystem);
-		if(!waitForServerEvent(serverConnectionSystem, &event)){
-			if((*serverConnectionSystem).hasError){
+		flushDreitonBuffer(dreiton);
+		if(!waitForDreitonEvent(dreiton, &eventContainer)){
+			if((*dreiton).hasError){
 				jmp emergencyExit;
 			}
 			jmp eventLoop;
 		}
-
-
-
-		/*! print event packet here */
-
-
-
-		jmp switchEvent;
+		if(!eventContainer.event.extension){
+			jmp switchEvent;
+		}
+		if(eventContainer.event.extension == dreitonBaseExtension){
+			jmp switchBaseExtensionEvent;
+		}
+		if(eventContainer.event.extension == dreitonBase1Extension){
+			jmp switchBase1ExtensionEvent;
+		}
+		jmp eventLoop;
 	}
 	switchEvent:{
-		switch(event.eventType){
-			to NONE_SERVER_EVENT_TYPE: /*-*/ jmp eventLoop;
-			off: /*-----------------------*/ jmp eventLoop;
+		switch(eventContainer.event.eventType){
+			to NONE_DREITON_EVENT_TYPE: /*----------------------*/ fprintf(stdout, "got \"none\" event\n"); /*----------------------*/ jmp eventLoop;
+			off: /*---------------------------------------------*/ fprintf(stdout, "got other event\n"); /*-------------------------*/ jmp eventLoop;
 		}
+	}
+	switchBaseExtensionEvent:{
+		switch(eventContainer.event.eventType){
+			to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ fprintf(stdout, "got \"none\" base event\n"); /*-----------------*/ jmp eventLoop;
+			to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ fprintf(stdout, "got \"magic number changed\" base event\n"); /*-*/ jmp magicNumberChangedEvent;
+			off: /*---------------------------------------------*/ fprintf(stdout, "got other base event\n"); /*--------------------*/ jmp eventLoop;
+		}
+	}
+	switchBase1ExtensionEvent:{
+		switch(eventContainer.event.eventType){
+			to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ fprintf(stdout, "got \"none\" base1 event\n"); /*-----------------*/ jmp eventLoop;
+			to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ fprintf(stdout, "got \"magic number changed\" base1 event\n"); /*-*/ jmp magicNumberChangedEvent1;
+			off: /*---------------------------------------------*/ fprintf(stdout, "got other base1 event\n"); /*--------------------*/ jmp eventLoop;
+		}
+	}
+	magicNumberChangedEvent:{
+		MagicNumberChangedDreitonBaseEvent *const event = (void *)&eventContainer;
+		fprintf(stdout, "new magic number: %u\n", (*event).magicNumber);
+		jmp eventLoop;
+	}
+	magicNumberChangedEvent1:{
+		MagicNumberChangedDreitonBaseEvent *const event = (void *)&eventContainer;
+		fprintf(stdout, "new magic number: %u\n", (*event).magicNumber);
+		jmp eventLoop;
 	}
 	emergencyExit:{
 		uint32 token;
-		requestServerSync(serverConnectionSystem, &token);
-		flushServerBuffer(serverConnectionSystem);
-		waitForServerReply(serverConnectionSystem, token, NULL);
-		disconnectFromServer(serverConnectionSystem);
-		finiServerConnection(serverConnectionSystem);
+		requestDreitonSync(dreiton, &token);
+		flushDreitonBuffer(dreiton);
+		waitForDreitonReply(dreiton, token, NULL);
+		disconnectFromDreiton(dreiton);
+		finiDreiton(dreiton);
 		fprintf(stdout, "done\n");
 		ret 0;
 	}

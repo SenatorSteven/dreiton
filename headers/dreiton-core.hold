@@ -1,0 +1,243 @@
+
+/*! dreiton-core.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef DREITON_CORE_HOLD
+#define DREITON_CORE_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+#define DreitonCore /*----------------------------------*/ DreitonCore
+
+#define NONE_DREITON_CORE_OWNER /*----------------------*/ (0)
+#define SEALED_DREITON_CORE_OWNER /*--------------------*/ (0xFFFFFFFF)
+
+#define INITDREITONCORE() /*----------------------------*/ bool                initDreitonCore(DreitonCore *const dreitonCore)
+#define SETDREITONCORESERVERCHANNELPATH() /*------------*/ bool                setDreitonCoreServerChannelPath(DreitonCore *const dreitonCore, const char *const serverChannelPath)
+#define SETDREITONCORECLIENTCHANNELPATH() /*------------*/ bool                setDreitonCoreClientChannelPath(DreitonCore *const dreitonCore, const char *const clientChannelPath)
+#define SETDREITONCOREDATABASE() /*---------------------*/ bool                setDreitonCoreDatabase(DreitonCore *const dreitonCore, DreitonCoreDatabase *const database)
+#define SETDREITONCOREOWNER() /*------------------------*/ bool                setDreitonCoreOwner(DreitonCore *const dreitonCore, const uint32 owner)
+#define SETDREITONCOREEXTENSIONBLOCKSIZE() /*-----------*/ bool                setDreitonCoreExtensionBlockSize(DreitonCore *const dreitonCore, const uint serverExtensionBlockSize)
+#define SETDREITONCORECLIENTBLOCKSIZE() /*--------------*/ bool                setDreitonCoreClientBlockSize(DreitonCore *const dreitonCore, const uint clientBlockSize)
+#define BOOTDREITONCOREREPLYLOOPTHREAD() /*-------------*/ bool                bootDreitonCoreReplyLoopThread(DreitonCore *const dreitonCore)
+#define BOOTDREITONCOREEVENTLOOPTHREAD() /*-------------*/ bool                bootDreitonCoreEventLoopThread(DreitonCore *const dreitonCore)
+#define BOOTDREITONCOREREGISTRATIONLOOPTHREAD() /*------*/ bool                bootDreitonCoreRegistrationLoopThread(DreitonCore *const dreitonCore)
+#define DREITONCOREREPLYLOOP() /*-----------------------*/ void *              dreitonCoreReplyLoop(void *const arg)
+#define DREITONCOREEVENTLOOP() /*-----------------------*/ void *              dreitonCoreEventLoop(void *const arg)
+#define DREITONCOREREGISTRATIONLOOP() /*----------------*/ void *              dreitonCoreRegistrationLoop(void *const arg)
+#define INSERTDREITONCORECLIENT() /*--------------------*/ bool                insertDreitonCoreClient(DreitonCore *const dreitonCore, const int requestReadFd, const int replyWriteFd, const int eventWriteFd)
+#define PARSEDREITONCORECLIENTREQUESTS() /*-------------*/ bool                parseDreitonCoreClientRequests(DreitonCore *const dreitonCore, DreitonCoreClient *const client, const uint8 requestAmount)
+#define LOADDREITONCOREEXTENSION() /*-------------------*/ bool                loadDreitonCoreExtension(DreitonCore *const dreitonCore, const bool force, const char *const path, uint32 *const extensionIdReturn)
+#define SUBSCRIBETODREITONCOREEVENT() /*----------------*/ bool                subscribeToDreitonCoreEvent(DreitonCore *const dreitonCore, DreitonCoreClient *const client, const uint32 extension, uint32 eventMask, uint8 *const statusReturn)
+#define EMITDREITONCOREEVENT() /*-----------------------*/ bool                emitDreitonCoreEvent(DreitonCore *const dreitonCore, const uint32 extension, const uint32 eventType)
+#define UNSUBSCRIBEFROMDREITONCOREEVENT() /*------------*/ bool                unsubscribeFromDreitonCoreEvent(DreitonCore *const dreitonCore, DreitonCoreClient *const client, const uint32 extension, uint32 eventMask, uint8 *const statusReturn)
+#define UNLOADDREITONCOREEXTENSION() /*-----------------*/ bool                unloadDreitonCoreExtension(DreitonCore *const dreitonCore, const uint32 extension, const bool force)
+#define REMOVEDREITONCORECLIENT() /*--------------------*/ bool                removeDreitonCoreClient(DreitonCore *const dreitonCore, DreitonCoreClient *const client)
+#define REMOVEALLDREITONCORECLIENTS() /*----------------*/ bool                removeAllDreitonCoreClients(DreitonCore *const dreitonCore)
+#define QUITDREITONCOREREGISTRATIONLOOPTHREAD() /*------*/ bool                quitDreitonCoreRegistrationLoopThread(DreitonCore *const dreitonCore)
+#define QUITDREITONCOREEVENTLOOPTHREAD() /*-------------*/ bool                quitDreitonCoreEventLoopThread(DreitonCore *const dreitonCore)
+#define QUITDREITONCOREREPLYLOOPTHREAD() /*-------------*/ bool                quitDreitonCoreReplyLoopThread(DreitonCore *const dreitonCore)
+#define AWAITDREITONCOREREGISTRATIONLOOPTHREADEXIT() /*-*/ bool                awaitDreitonCoreRegistrationLoopThreadExit(DreitonCore *const dreitonCore)
+#define AWAITDREITONCOREEVENTLOOPTHREADEXIT() /*--------*/ bool                awaitDreitonCoreEventLoopThreadExit(DreitonCore *const dreitonCore)
+#define AWAITDREITONCOREREPLYLOOPTHREADEXIT() /*--------*/ bool                awaitDreitonCoreReplyLoopThreadExit(DreitonCore *const dreitonCore)
+#define REMOVEALLDREITONCOREEXTENSIONS() /*-------------*/ bool                removeAllDreitonCoreExtensions(DreitonCore *const dreitonCore)
+#define ISVALIDDREITONCORECLIENT() /*-------------------*/ bool                isValidDreitonCoreClient(DreitonCore *const dreitonCore, DreitonCoreClient *const client)
+#define FINDDREITONCORECLIENTFD() /*--------------------*/ DreitonCoreClient * findDreitonCoreClientFd(DreitonCore *const dreitonCore, const int fd)
+#define FINDDREITONCORECLIENTFDID() /*------------------*/ DreitonCoreClient * findDreitonCoreClientFdId(DreitonCore *const dreitonCore, const int fd, const uint32 id)
+#define FINIDREITONCORE() /*----------------------------*/ bool                finiDreitonCore(DreitonCore *const dreitonCore)
+
+def struct{
+	uint32 /*---------------------------*/ owner;
+	bool /*-----------------------------*/ closeOnIdle;
+	uint8 /*----------------------------*/ pad0[3];
+} DreitonCoreDatabase;
+
+def struct{
+	uint32 /*---------------------------*/ extension;
+	uint32 /*---------------------------*/ eventType;
+	uint32 /*---------------------------*/ eventSubscriptionOffset;
+} DreitonCoreClientSubscription;
+
+def struct{
+	DreitonShmHeader * /*---------------*/ shmStart;
+	DreitonShmRequestSlot * /*----------*/ requestSlotStart;
+	DreitonShmReplySlot * /*------------*/ replySlotStart;
+	DreitonShmEventSlot * /*------------*/ eventSlotStart;
+	GenericDreitonRequest * /*----------*/ requestStart;
+	GenericDreitonRequest * /*----------*/ requestCurrent;
+	GenericDreitonReply * /*------------*/ replyStart;
+	GenericDreitonReply * /*------------*/ replyCurrent;
+	GenericDreitonEvent * /*------------*/ eventStart;
+	GenericDreitonEvent * /*------------*/ eventCurrent;
+	int32 /*----------------------------*/ shmId;
+	int32 /*----------------------------*/ requestReadFd;
+	int32 /*----------------------------*/ replyWriteFd;
+	int32 /*----------------------------*/ eventWriteFd;
+	uint32 /*---------------------------*/ clientId;
+	uint8 /*----------------------------*/ pad0[4];
+
+
+
+	/*!*/
+
+	DreitonCoreClientSubscription * /*--*/ subscriptionStart;
+	uint32 * /*-------------------------*/ eventOffsetStart;
+	uint32 /*---------------------------*/ subscriptionSize;
+	uint32 /*---------------------------*/ subscriptionAllocated;
+	uint32 /*---------------------------*/ eventOffsetSize;
+	uint8 /*----------------------------*/ pad1[4];
+
+
+
+} DreitonCoreClient;
+
+def struct{
+	void * /*---------------------------*/ extensionHandle;
+	DreitonExtensionDescriptor * /*-----*/ extensionDescriptor;
+	uint32 /*---------------------------*/ extensionReferenceCount;
+	int32 /*----------------------------*/ extensionReadFd;
+	int32 /*----------------------------*/ extensionWriteFd;
+	uint32 /*---------------------------*/ extensionBaseEvent;
+} DreitonCoreExtension;
+
+def struct{
+	uint32 /*---------------------------*/ clientOffset;
+	uint32 /*---------------------------*/ clientSubscriptionOffset;
+} DreitonCoreEventSubscription;
+
+def struct{
+	DreitonCoreEventSubscription * /*---*/ subscriptionStart;
+	uint32 /*---------------------------*/ subscriptionSize;
+	uint32 /*---------------------------*/ subscriptionAllocated;
+} DreitonCoreEvent;
+
+def struct{
+	const char * /*---------------------*/ serverChannelPath;
+	const char * /*---------------------*/ clientChannelPath;
+	DreitonCoreDatabase * /*------------*/ database;
+	DreitonCoreClient * /*--------------*/ clientStart;
+	DreitonCoreExtension * /*-----------*/ extensionStart;
+	DreitonCoreEvent * /*---------------*/ eventStart;
+	uint32 /*---------------------------*/ clientSize;
+	uint32 /*---------------------------*/ clientAllocated;
+	uint32 /*---------------------------*/ clientBlockSize;
+	uint32 /*---------------------------*/ extensionSize;
+	uint32 /*---------------------------*/ extensionAllocated;
+	uint32 /*---------------------------*/ extensionBlockSize;
+	uint32 /*---------------------------*/ eventSize;
+	uint32 /*---------------------------*/ eventAllocated;
+	uint32 /*---------------------------*/ baseEvent;
+	int32 /*----------------------------*/ replyEpollFd;
+	int32 /*----------------------------*/ eventEpollFd;
+	int32 /*----------------------------*/ signalEventFd;
+	bool /*-----------------------------*/ replyLoopRunning;
+	bool /*-----------------------------*/ eventLoopRunning;
+	bool /*-----------------------------*/ registrationLoopRunning;
+	bool /*-----------------------------*/ replyLoopThreadCreated;
+	bool /*-----------------------------*/ eventLoopThreadCreated;
+	bool /*-----------------------------*/ registrationLoopThreadCreated;
+	uint8 /*----------------------------*/ pad0[2];
+	pthread_t /*------------------------*/ replyLoopThread;
+	pthread_t /*------------------------*/ eventLoopThread;
+	pthread_t /*------------------------*/ registrationLoopThread;
+
+
+
+	/*!*/
+
+	int32 /*----------------------------*/ registrationEventFd;
+	int32 /*----------------------------*/ registrationEpollFd;
+	int32 /*----------------------------*/ replyEventFd;
+	int32 /*----------------------------*/ fdCopy[3];
+
+
+
+#ifdef a
+	/*! not implemented */
+
+	DreitonCoreExtensionRingBuffer * /*-*/ extensionRingBufferStart;
+	uint32 /*---------------------------*/ eExtensionRingBufferSize;
+	uint32 /*---------------------------*/ extensionRingBufferAllocated;
+	uint32 /*---------------------------*/ extensionRingBufferBlockSize;
+#endif
+
+
+
+} DreitonCore;
+
+#ifdef a
+def struct{
+	uint32 /*---------------------------*/ eventSlotStart;
+	uint32 /*---------------------------*/ eventSlotSize;
+	uint32 /*---------------------------*/ eventStart;
+	uint32 /*---------------------------*/ eventSize;
+	uint32 /*---------------------------*/ eventCurrentWriter;
+	uint32 /*---------------------------*/ eventCurrentReader;
+} DreitonCoreExtensionRingBuffer;
+#endif
+
+INITDREITONCORE();
+SETDREITONCORESERVERCHANNELPATH();
+SETDREITONCORECLIENTCHANNELPATH();
+SETDREITONCOREDATABASE();
+SETDREITONCOREOWNER();
+SETDREITONCOREEXTENSIONBLOCKSIZE();
+SETDREITONCORECLIENTBLOCKSIZE();
+BOOTDREITONCOREREPLYLOOPTHREAD();
+BOOTDREITONCOREEVENTLOOPTHREAD();
+BOOTDREITONCOREREGISTRATIONLOOPTHREAD();
+DREITONCOREREPLYLOOP();
+DREITONCOREEVENTLOOP();
+DREITONCOREREGISTRATIONLOOP();
+INSERTDREITONCORECLIENT();
+PARSEDREITONCORECLIENTREQUESTS();
+LOADDREITONCOREEXTENSION();
+SUBSCRIBETODREITONCOREEVENT();
+EMITDREITONCOREEVENT();
+UNSUBSCRIBEFROMDREITONCOREEVENT();
+UNLOADDREITONCOREEXTENSION();
+REMOVEDREITONCORECLIENT();
+REMOVEALLDREITONCORECLIENTS();
+QUITDREITONCOREREGISTRATIONLOOPTHREAD();
+QUITDREITONCOREEVENTLOOPTHREAD();
+QUITDREITONCOREREPLYLOOPTHREAD();
+AWAITDREITONCOREREGISTRATIONLOOPTHREADEXIT();
+AWAITDREITONCOREEVENTLOOPTHREADEXIT();
+AWAITDREITONCOREREPLYLOOPTHREADEXIT();
+REMOVEALLDREITONCOREEXTENSIONS();
+ISVALIDDREITONCORECLIENT();
+FINDDREITONCORECLIENTFD();
+FINDDREITONCORECLIENTFDID();
+FINIDREITONCORE();
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+

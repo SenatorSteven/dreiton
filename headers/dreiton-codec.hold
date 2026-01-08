@@ -1,5 +1,5 @@
 
-/*! send-fd.hold
+/*! dreiton-codec.hold
 
 MIT License
 
@@ -23,47 +23,19 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#ifndef SEND_HOLD
-#define SEND_HOLD
+#ifndef DREITON_CODEC_HOLD
+#define DREITON_CODEC_HOLD
 
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
 #include "headers/cold/cold.hold"
 #endif
 
-bool sendFd(const int socket, const int *const fd, const uint fdSize){
-	uint controlMessageBufferSize;
-	char *controlMessageBuffer;
-	char mandatoryPayloadByte;
-	struct iovec payload;
-	struct msghdr messageHeader = {0};
-	struct cmsghdr *controlMessageHeader;
-	if(!socket or !fd or !fdSize){
-		ret false;
-	}
-	controlMessageBufferSize = CMSG_SPACE(fdSize * sizeof(int));
-	if(!(controlMessageBuffer = malloc(controlMessageBufferSize))){
-		ret false;
-	}
-	mandatoryPayloadByte = 1;
-	payload.iov_base = &mandatoryPayloadByte;
-	payload.iov_len = 1;
-	messageHeader.msg_iov = &payload;
-	messageHeader.msg_iovlen = 1;
-	messageHeader.msg_control = controlMessageBuffer;
-	messageHeader.msg_controllen = controlMessageBufferSize;
-	controlMessageHeader = CMSG_FIRSTHDR(&messageHeader);
-	(*controlMessageHeader).cmsg_level = SOL_SOCKET;
-	(*controlMessageHeader).cmsg_type = SCM_RIGHTS;
-	(*controlMessageHeader).cmsg_len = CMSG_LEN(fdSize * sizeof(int));
-	memcpy(CMSG_DATA(controlMessageHeader), fd, fdSize * sizeof(int)); /*! replace with toolkit function */
-	if(sendmsg(socket, &messageHeader, 0) == SENDMSG_FAILURE){
-		free(controlMessageBuffer);
-		ret false;
-	}
-	free(controlMessageBuffer);
-	ret true;
-}
+#define PACKDREITONMESSAGE() /*---*/ bool  packDreitonMessage(const void *const message, const uint32 itemAmount, void *const structStart)
+#define UNPACKDREITONMESSAGE() /*-*/ bool  unpackDreitonMessage(const void *const message, const uint32 itemAmount, void *const structStartReturn)
+
+PACKDREITONMESSAGE();
+UNPACKDREITONMESSAGE();
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED

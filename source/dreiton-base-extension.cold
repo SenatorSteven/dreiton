@@ -1,0 +1,188 @@
+
+/*! dreiton-base-extension.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#include <stdint.h>
+#include <unistd.h>
+
+#include "headers/cold/cold.hold"
+#include "headers/dreiton-protocol.hold"
+#include "headers/dreiton-codec.hold"
+#include "headers/dreiton-extension.hold"
+#include "headers/dreiton-base-extension.hold"
+
+#define INITDREITONEXTENSIONDESCRIPTOR() /*------------------*/ bool  initDreitonExtensionDescriptor(void)
+#define SETDREITONEXTENSIONDESCRIPTOREVENTFD() /*------------*/ bool  setDreitonExtensionDescriptorEventFd(const int fd)
+#define INCREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER() /*-*/ bool  incrementDreitonExtensionDescriptorEventCounter(const uint32 eventType)
+#define DECREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER() /*-*/ bool  decrementDreitonExtensionDescriptorEventCounter(const uint32 eventType)
+#define PARSEDREITONEXTENSIONDESCRIPTORREQUEST() /*----------*/ bool  parseDreitonExtensionDescriptorRequest(const GenericDreitonRequest *const request, const uint32 itemAmount, uint8 *const statusReturn, uint32 *const payloadSizeReturn)
+#define PARSEDREITONEXTENSIONDESCRIPTORREPLY() /*------------*/ bool  parseDreitonExtensionDescriptorReply(const uint8 replyType, GenericDreitonReply *const replyReturn)
+#define PARSEDREITONEXTENSIONDESCRIPTOREVENT() /*------------*/ bool  parseDreitonExtensionDescriptorEvent(void)
+#define FINIDREITONEXTENSIONDESCRIPTOR() /*------------------*/ bool  finiDreitonExtensionDescriptor(void)
+
+def struct{
+	uint32 /*-*/ writeFd;
+	uint32 /*-*/ magicNumberChangedEventClientAmount;
+	uint32 /*-*/ magicNumber;
+} Database;
+
+INITDREITONEXTENSIONDESCRIPTOR();
+SETDREITONEXTENSIONDESCRIPTOREVENTFD();
+INCREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER();
+DECREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER();
+PARSEDREITONEXTENSIONDESCRIPTORREQUEST();
+PARSEDREITONEXTENSIONDESCRIPTORREPLY();
+PARSEDREITONEXTENSIONDESCRIPTOREVENT();
+FINIDREITONEXTENSIONDESCRIPTOR();
+
+local Database /*-------------*/ database;
+
+DreitonExtensionDescriptor /*-*/ dreitonExtensionDescriptor = {
+	  sizeof(DreitonExtensionDescriptor)
+	, DREITON_BASE_PROTOCOL_VERSION
+	, DREITON_BASE_EXTENSION_VERSION
+	, lengthof(DREITON_BASE_EXTENSION_NAME)
+	, lengthof(DREITON_BASE_AUTHOR_NAME)
+	, DREITON_BASE_EVENT_AMOUNT
+	, DREITON_BASE_EXTENSION_NAME
+	, DREITON_BASE_AUTHOR_NAME
+	, &initDreitonExtensionDescriptor
+	, &setDreitonExtensionDescriptorEventFd
+	, &incrementDreitonExtensionDescriptorEventCounter
+	, &decrementDreitonExtensionDescriptorEventCounter
+	, &parseDreitonExtensionDescriptorRequest
+	, &parseDreitonExtensionDescriptorReply
+	, &parseDreitonExtensionDescriptorEvent
+	, &finiDreitonExtensionDescriptor
+};
+
+INITDREITONEXTENSIONDESCRIPTOR(){
+	database.writeFd = 0;
+	database.magicNumberChangedEventClientAmount = 0;
+	database.magicNumber = 0;
+	ret true;
+}
+SETDREITONEXTENSIONDESCRIPTOREVENTFD(){
+	database.writeFd = fd;
+	ret true;
+}
+INCREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER(){
+	switch(eventType){
+		to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ /*---------------------------------------------*/ ret false;
+		to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ inc database.magicNumberChangedEventClientAmount; ret true;
+		off: /*---------------------------------------------*/ /*---------------------------------------------*/ ret false;
+	}
+}
+DECREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER(){
+	switch(eventType){
+		to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ /*---------------------------------------------*/ ret false;
+		to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ dec database.magicNumberChangedEventClientAmount; ret true;
+		off: /*---------------------------------------------*/ /*---------------------------------------------*/ ret false;
+	}
+}
+
+
+
+bool notifyDreitonForEvent(const int fd){
+	const uint64 value = 1;
+	write(fd, &value, sizeof(value));
+	ret true;
+}
+
+
+
+PARSEDREITONEXTENSIONDESCRIPTORREQUEST(){
+	uint8 requestType;
+	if(!request or !statusReturn or !payloadSizeReturn){
+		ret false;
+	}
+	requestType = (*request).requestType;
+	switch(requestType){
+		to NONE_DREITON_BASE_REQUEST_TYPE:{
+			ret false;
+		}
+		to GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE:{
+			if(itemAmount == GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT){
+				*statusReturn |= SUCCESS_DREITON_REPLY_STATUS;
+				*payloadSizeReturn = 1 * sizeof(uint32);
+			}
+			ret true;
+		}
+		to SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE:{
+			if(itemAmount == SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT){
+				SetMagicNumberDreitonBaseRequest setMagicNumberDreitonBaseRequest;
+				if(unpackDreitonMessage(request, SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT, &setMagicNumberDreitonBaseRequest)){
+					const uint32 magicNumber = *(uint32 *)setMagicNumberDreitonBaseRequest.magicNumberStart;
+					if(database.magicNumberChangedEventClientAmount and magicNumber != database.magicNumber){
+						notifyDreitonForEvent(database.writeFd);
+						*statusReturn |= UPDATED_DREITON_REPLY_STATUS;
+					}
+					database.magicNumber = magicNumber;
+					*statusReturn |= SUCCESS_DREITON_REPLY_STATUS;
+				}
+			}
+			ret true;
+		}
+		off:{
+			ret false;
+		}
+	}
+}
+PARSEDREITONEXTENSIONDESCRIPTORREPLY(){
+	if(!replyReturn){
+		ret false;
+	}
+	switch(replyType){
+		to NONE_DREITON_BASE_REPLY_TYPE:{
+			ret false;
+		}
+		to GET_MAGIC_NUMBER_DREITON_BASE_REPLY_TYPE:{
+			(*(GetMagicNumberDreitonBaseReply *)replyReturn).magicNumber = database.magicNumber;
+			ret true;
+		}
+		to SET_MAGIC_NUMBER_DREITON_BASE_REPLY_TYPE:{
+			ret true;
+		}
+		off:{
+			ret false;
+		}
+	}
+}
+PARSEDREITONEXTENSIONDESCRIPTOREVENT(){
+
+
+
+	/*!*/
+
+
+
+	ret true;
+}
+FINIDREITONEXTENSIONDESCRIPTOR(){
+	database.magicNumber = 0;
+	database.magicNumberChangedEventClientAmount = 0;
+	database.writeFd = 0;
+	ret true;
+}
+

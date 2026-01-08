@@ -1,0 +1,88 @@
+
+/*! dreiton-base-extension.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef DREITON_BASE_EXTENSION_HOLD
+#define DREITON_BASE_EXTENSION_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+#define DREITON_BASE_PROTOCOL_VERSION /*---------------------*/ (1)
+#define DREITON_BASE_EXTENSION_VERSION /*--------------------*/ (1)
+#define DREITON_BASE_EXTENSION_NAME /*-----------------------*/ ("base")
+#define DREITON_BASE_AUTHOR_NAME /*--------------------------*/ ("senator")
+#define DREITON_BASE_EVENT_AMOUNT /*-------------------------*/ (1)
+
+#define NONE_DREITON_BASE_REQUEST_TYPE /*--------------------*/ (0)
+#define GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE /*--------*/ (1)
+#define SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE /*--------*/ (2)
+
+#define NONE_DREITON_BASE_REQUEST_ITEM_AMOUNT /*-------------*/ (0)
+#define GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT /*-*/ (0)
+#define SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT /*-*/ (1)
+
+#define NONE_DREITON_BASE_REPLY_TYPE /*----------------------*/ (0)
+#define GET_MAGIC_NUMBER_DREITON_BASE_REPLY_TYPE /*----------*/ (1)
+#define SET_MAGIC_NUMBER_DREITON_BASE_REPLY_TYPE /*----------*/ (2)
+
+#define NONE_DREITON_BASE_EVENT_TYPE /*----------------------*/ (0)
+#define MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE /*------*/ (1)
+
+#define NONE_DREITON_BASE_EVENT_TYPE_MASK /*-----------------*/ (b(0))
+#define MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE_MASK /*-*/ (b(1))
+
+def struct{
+	uint8 /*---------------*/ pad0[1];
+} GetMagicNumberDreitonBaseRequest;
+
+def struct{
+	uint32 /*--------------*/ magicNumberSize;
+	uint8 /*---------------*/ pad0[4];
+	uint32 * /*------------*/ magicNumberStart;
+} SetMagicNumberDreitonBaseRequest;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+	uint32 /*--------------*/ magicNumber;
+} GetMagicNumberDreitonBaseReply;
+
+def struct{
+	GenericDreitonReply /*-*/ reply;
+} SetMagicNumberDreitonBaseReply;
+
+def struct{
+	GenericDreitonEvent /*-*/ event;
+	uint32 /*--------------*/ magicNumber;
+} MagicNumberChangedDreitonBaseEvent;
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+

@@ -1,0 +1,107 @@
+
+/*!
+	make it more generic to allow for tcp and udp as well as shm.
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*! dreiton-transport.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef DREITON_TRANSPORT_HOLD
+#define DREITON_TRANSPORT_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+def struct{
+	uint32 /*-*/ requestSlotStartOffset;
+	uint32 /*-*/ requestSlotSize;
+	uint32 /*-*/ requestStartOffset;
+	uint32 /*-*/ requestSize;
+	uint32 /*-*/ requestCurrentWriter;
+	uint32 /*-*/ requestCurrentReader;
+	uint32 /*-*/ replySlotStartOffset;
+	uint32 /*-*/ replySlotSize;
+	uint32 /*-*/ replyStartOffset;
+	uint32 /*-*/ replySize;
+	uint32 /*-*/ replyCurrentWriter;
+	uint32 /*-*/ replyCurrentReader;
+	uint32 /*-*/ eventSlotStartOffset;
+	uint32 /*-*/ eventSlotSize;
+	uint32 /*-*/ eventStartOffset;
+	uint32 /*-*/ eventSize;
+	uint32 /*-*/ eventCurrentWriter;
+	uint32 /*-*/ eventCurrentReader;
+	uint32 /*-*/ clientId;
+} DreitonShmHeader;
+
+def struct{
+	uint32 /*-*/ requestStartOffset;
+	uint32 /*-*/ requestSize;
+} DreitonShmRequestSlot;
+
+def struct{
+	uint32 /*-*/ replyStartOffset;
+	uint32 /*-*/ replySize;
+} DreitonShmReplySlot;
+
+def struct{
+	uint32 /*-*/ eventStartOffset;
+	uint32 /*-*/ eventSize;
+} DreitonShmEventSlot;
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+
