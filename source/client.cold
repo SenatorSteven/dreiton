@@ -144,8 +144,8 @@ int main(void){
 			flushDreitonBuffer(dreiton);
 		}
 	}
-	requestDreitonApplyForEvent(dreiton, dreitonBase1Extension, MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE_MASK, NULL);
 	requestDreitonApplyForEvent(dreiton, dreitonBaseExtension, MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE_MASK, NULL);
+	requestDreitonApplyForEvent(dreiton, dreitonBase1Extension, MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE_MASK, NULL);
 	{
 		const uint32 magicNumber = 123;
 		uint32 token;

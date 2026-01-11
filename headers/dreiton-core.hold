@@ -66,6 +66,7 @@ SOFTWARE. */
 #define AWAITDREITONCOREREPLYLOOPTHREADEXIT() /*--------*/ bool                awaitDreitonCoreReplyLoopThreadExit(DreitonCore *const dreitonCore)
 #define REMOVEALLDREITONCOREEXTENSIONS() /*-------------*/ bool                removeAllDreitonCoreExtensions(DreitonCore *const dreitonCore)
 #define ISVALIDDREITONCORECLIENT() /*-------------------*/ bool                isValidDreitonCoreClient(DreitonCore *const dreitonCore, DreitonCoreClient *const client)
+#define ISVALIDDREITONCOREEXTENSION() /*----------------*/ bool                isValidDreitonCoreExtension(DreitonCore *const dreitonCore, const uint32 extension)
 #define FINDDREITONCORECLIENTFD() /*--------------------*/ DreitonCoreClient * findDreitonCoreClientFd(DreitonCore *const dreitonCore, const int fd)
 #define FINDDREITONCORECLIENTFDID() /*------------------*/ DreitonCoreClient * findDreitonCoreClientFdId(DreitonCore *const dreitonCore, const int fd, const uint32 id)
 #define FINIDREITONCORE() /*----------------------------*/ bool                finiDreitonCore(DreitonCore *const dreitonCore)
@@ -230,6 +231,7 @@ AWAITDREITONCOREEVENTLOOPTHREADEXIT();
 AWAITDREITONCOREREPLYLOOPTHREADEXIT();
 REMOVEALLDREITONCOREEXTENSIONS();
 ISVALIDDREITONCORECLIENT();
+ISVALIDDREITONCOREEXTENSION();
 FINDDREITONCORECLIENTFD();
 FINDDREITONCORECLIENTFDID();
 FINIDREITONCORE();

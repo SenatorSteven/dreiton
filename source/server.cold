@@ -1,38 +1,4 @@
 
-#ifdef a
-	/*!blockAllSignals:*/{
-		sigset_t signalSet;
-		sigfillset(&signalSet);
-		pthread_sigmask(SIG_BLOCK, &signalSet, NULL);
-	}
-#endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*! server.cold
 
 MIT License
@@ -63,6 +29,9 @@ SOFTWARE. */
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "headers/cold/cold.hold"
 #include "headers/dreiton-protocol.hold"
@@ -71,34 +40,38 @@ SOFTWARE. */
 #include "headers/dreiton-core.hold"
 #include "headers/server.hold"
 
+def struct{
+	void /*--*/ (*handler)(const int signal);
+	int32 /*-*/ signal;
+	uint8 /*-*/ pad0[4];
+} SignalHandler;
+
 local const char * /*--------*/ serverName;
 local DreitonCore /*---------*/ dreitonCore;
 local DreitonCoreDatabase /*-*/ database;
 
-void signalHandler(const int signal){
-	if(signal == SIGINT){
-		fprintf(stdout, "\n");
-		quitDreitonCoreRegistrationLoopThread(&dreitonCore);
-		quitDreitonCoreEventLoopThread(&dreitonCore);
-		quitDreitonCoreReplyLoopThread(&dreitonCore);
-	}
-	if(signal == SIGPIPE){
-		fprintf(stderr, "\tpipe error\n");
-	}
-	ret;
-}
+#define BOOTSIGNALTHREAD() /*-------*/ bool   bootSignalThread(const uint64 signalHandlerSize, const SignalHandler *const signalHandlerStart)
+#define SIGNALMAIN() /*-------------*/ void * signalMain(void *const arg)
+#define INTERRUPTSIGNALHANDLER() /*-*/ void   interruptSignalHandler(const int signal)
+#define PIPESIGNALHANDLER() /*------*/ void   pipeSignalHandler(const int signal)
+
+BOOTSIGNALTHREAD();
+SIGNALMAIN();
+INTERRUPTSIGNALHANDLER();
+PIPESIGNALHANDLER();
+
 int main(const int argumentSize, const char *const *const argumentStart){
 	if(argumentSize != 2){
 		ret 0;
 	}
 	serverName = *(argumentStart + 1);
-	/*!setSignals:*/{
-		struct sigaction s;
-		s.sa_handler = signalHandler;
-		s.sa_flags = SA_RESTART;
-		sigemptyset(&s.sa_mask);
-		sigaction(SIGINT , &s, NULL);
-		sigaction(SIGPIPE, &s, NULL);
+	{
+		SignalHandler signalHandler[2];
+		(*(signalHandler + 0)).handler = &interruptSignalHandler;
+		(*(signalHandler + 0)).signal = SIGINT;
+		(*(signalHandler + 1)).handler = &pipeSignalHandler;
+		(*(signalHandler + 1)).signal = SIGPIPE;
+		bootSignalThread(countof(signalHandler), signalHandler);
 	}
 	fprintf(stdout, "starting dreiton core @ \'%s\'\n", serverName);
 
@@ -122,12 +95,122 @@ int main(const int argumentSize, const char *const *const argumentStart){
 	/*! all clients closing and turning the hint on will still cause us to not exit the program. fix. */
 
 	awaitDreitonCoreRegistrationLoopThreadExit(&dreitonCore);
-	awaitDreitonCoreEventLoopThreadExit(&dreitonCore);
 	awaitDreitonCoreReplyLoopThreadExit(&dreitonCore);
+	awaitDreitonCoreEventLoopThreadExit(&dreitonCore);
 
 
 
 	finiDreitonCore(&dreitonCore);
 	ret 0;
+}
+BOOTSIGNALTHREAD(){
+	#define PTHREAD_CREATE_FAILURE /*-*/ (-1)
+	sigset_t blockSet;
+	if(!signalHandlerSize){
+		sigfillset(&blockSet);
+		pthread_sigmask(SIG_BLOCK, &blockSet, NULL);
+	}else{
+		void *data;
+		pthread_t thread;
+		if(!signalHandlerStart){
+			ret false;
+		}
+		data = malloc(1 * sizeof(uint64) + signalHandlerSize * sizeof(SignalHandler));
+		if(!data){
+			ret false;
+		}
+		*(uint64 *)data = signalHandlerSize;
+		memcpy((uint64 *)data + 1, signalHandlerStart, signalHandlerSize * sizeof(SignalHandler));
+		sigfillset(&blockSet);
+		pthread_sigmask(SIG_BLOCK, &blockSet, NULL);
+		if(pthread_create(&thread, NULL, &signalMain, data) == PTHREAD_CREATE_FAILURE){
+			free(data);
+			ret false;
+		}
+	}
+	ret true;
+}
+SIGNALMAIN(){
+	#define SIGWAIT_FAILURE /*-*/ (-1)
+	#define SIGMIN /*----------*/ (0)
+	#define SIGMAX /*----------*/ (64)
+	void (*handler[SIGMAX])(const int signal);
+	sigset_t waitSet;
+	if(!arg){
+		ret NULL;
+	}
+	jmp setHandlers;
+	setHandlers:{
+		void (**handlerCurrent)(const int signal) = handler + SIGMIN;
+		void (*const *const handlerWall)(const int signal) = handler + SIGMAX;
+		jmp setHandlerLoop;
+		setHandlerLoop:{
+			if(handlerCurrent < handlerWall){
+				*handlerCurrent = NULL;
+				inc handlerCurrent;
+				jmp setHandlerLoop;
+			}
+			jmp setSignalHandlers;
+		}
+	}
+	setSignalHandlers:{
+		const SignalHandler *signalHandlerCurrent = (void *)((uint64 *)arg + 1);
+		const SignalHandler *const signalHandlerWall = signalHandlerCurrent + *(uint64 *)arg;
+		sigemptyset(&waitSet);
+		jmp setSignalHandlerLoop;
+		setSignalHandlerLoop:{
+			if(signalHandlerCurrent < signalHandlerWall){
+				const int signal = (*signalHandlerCurrent).signal;
+				if(signal >= SIGMIN and signal < SIGMAX){
+					void (*handle)(const int signal) = (*signalHandlerCurrent).handler;
+					*(handler + signal) = handle;
+					sigaddset(&waitSet, signal);
+				}
+				inc signalHandlerCurrent;
+				jmp setSignalHandlerLoop;
+			}
+			free(arg);
+			jmp signalLoop;
+		}
+	}
+	signalLoop:{
+		int signal;
+		if(sigwait(&waitSet, &signal) == SIGWAIT_FAILURE){
+			jmp signalLoop;
+		}
+		if(signal < SIGMIN or signal >= SIGMAX){
+			jmp signalLoop;
+		}
+		jmp handleSignal;
+		handleSignal:{
+			void (*h)(const int signal) = *(handler + signal);
+			if(!h){
+				jmp signalLoop;
+			}
+			(*h)(signal);
+			jmp signalLoop;
+		}
+	}
+}
+INTERRUPTSIGNALHANDLER(){
+	(void)signal;
+
+
+
+	/*!*/
+
+	fprintf(stdout, "\n");
+	quitDreitonCoreRegistrationLoopThread(&dreitonCore);
+	quitDreitonCoreReplyLoopThread(&dreitonCore);
+	quitDreitonCoreEventLoopThread(&dreitonCore);
+
+
+
+	ret;
+}
+PIPESIGNALHANDLER(){
+	(void)signal;
+	fprintf(stderr, "\tpipe error\n");
+	ret;
 }
 

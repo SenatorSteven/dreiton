@@ -21,6 +21,10 @@
 	decouple the server from the transport, currently shm.
 */
 
+/*!
+	keep local copies of the extension struct so that we can forgo checking if functions are non-null.
+*/
+
 
 
 
@@ -401,8 +405,8 @@ DREITONCOREREPLYLOOP(){
 								closeConnection:{
 									DreitonCoreClient *const client = findDreitonCoreClientFd(dreitonCore, fd);
 									if(client){
-										removeDreitonCoreClient(dreitonCore, client);
 										fprintf(stdout, "disconnected %u\n", (*client).clientId);
+										removeDreitonCoreClient(dreitonCore, client);
 										if((*dreitonCore).clientAllocated == 1 and (*dreitonCore).database and (*(*dreitonCore).database).closeOnIdle){
 											fprintf(stdout, "reply thread exited due to no clients\n");
 											jmp emergencyExit;
@@ -588,9 +592,8 @@ DREITONCOREEVENTLOOP(){
 
 
 
-						if(extension and extension < (*dreitonCore).extensionAllocated){
-							DreitonCoreExtension *const dreitonCoreExtension = (*dreitonCore).extensionStart + extension;
-							if((*dreitonCoreExtension).extensionReadFd == fd){
+						if(isValidDreitonCoreExtension(dreitonCore, extension)){
+							if((*((*dreitonCore).extensionStart + extension)).extensionReadFd == fd){
 								if(emitDreitonCoreEvent(dreitonCore, extension, message)){
 									success = true;
 								}
@@ -1013,12 +1016,11 @@ PARSEDREITONCORECLIENTREQUESTS(){
 				status = NONE_DREITON_REPLY_STATUS;
 				replyPayloadSize = 0 * sizeof(uint8);
 				if(extension){
-					DreitonCoreExtension *const dreitonCoreExtension = (*dreitonCore).extensionStart + extension;
 					DreitonExtensionDescriptor *dreitonExtensionDescriptor;
-					if(extension >= (*dreitonCore).extensionAllocated){
+					if(!isValidDreitonCoreExtension(dreitonCore, extension)){
 						jmp sendBadRequest;
 					}
-					dreitonExtensionDescriptor = (*dreitonCoreExtension).extensionDescriptor;
+					dreitonExtensionDescriptor = (*((*dreitonCore).extensionStart + extension)).extensionDescriptor;
 					if(!(*dreitonExtensionDescriptor).parseDreitonExtensionDescriptorRequest){
 						jmp sendBadRequest;
 					}
@@ -1142,12 +1144,7 @@ PARSEDREITONCORECLIENTREQUESTS(){
 					replyCurrentWriter = (replyCurrentWriter + 1) % replySlotSize;
 					if(status & SUCCESS_DREITON_REPLY_STATUS){
 						if(extension){
-							DreitonCoreExtension *const dreitonCoreExtension = (*dreitonCore).extensionStart + extension;
-							DreitonExtensionDescriptor *dreitonExtensionDescriptor;
-							if(extension >= (*dreitonCore).extensionAllocated){
-								jmp sendBadRequest;
-							}
-							dreitonExtensionDescriptor = (*dreitonCoreExtension).extensionDescriptor;
+							DreitonExtensionDescriptor *const dreitonExtensionDescriptor = (*((*dreitonCore).extensionStart + extension)).extensionDescriptor;
 							if(!(*dreitonExtensionDescriptor).parseDreitonExtensionDescriptorReply){
 								jmp sendBadRequest;
 							}
@@ -1406,13 +1403,10 @@ SUBSCRIBETODREITONCOREEVENT(){
 	if(!dreitonCore){
 		ret false;
 	}
-	if((*dreitonCore).eventAllocated < 2 or !isValidDreitonCoreClient(dreitonCore, client) or !extension or extension >= (*dreitonCore).extensionAllocated or !eventMask or !statusReturn){
+	if((*dreitonCore).eventAllocated < 2 or !isValidDreitonCoreClient(dreitonCore, client) or !isValidDreitonCoreExtension(dreitonCore, extension) or !eventMask or !statusReturn){
 		ret false;
 	}
 	dreitonCoreExtension = (*dreitonCore).extensionStart + extension;
-	if(!(*dreitonCoreExtension).extensionHandle){
-		ret false;
-	}
 	dreitonExtensionDescriptor = (*dreitonCoreExtension).extensionDescriptor;
 	eventType = 0;
 	baseEvent = (*dreitonCoreExtension).extensionBaseEvent;
@@ -1459,16 +1453,16 @@ SUBSCRIBETODREITONCOREEVENT(){
 			jmp advanceEventType;
 			advanceEventType:{
 				uint32 realEventType;
-				bool eventIsWithinBounds;
+				bool eventTypeIsWithinBounds;
 				if(lowestBit){
 					inc eventType;
 					lowestBit >>= 1;
 					jmp advanceEventType;
 				}
 				realEventType = baseEvent + eventType;
-				eventIsWithinBounds = realEventType < (*client).eventOffsetSize;
-				if(!eventIsWithinBounds or !*((*client).eventOffsetStart + realEventType)){
-					if(eventIsWithinBounds and *((*client).eventOffsetStart + realEventType)){
+				eventTypeIsWithinBounds = realEventType < (*client).eventOffsetSize;
+				if(!eventTypeIsWithinBounds or *((*client).eventOffsetStart + realEventType) == 0xFFFFFFFF){
+					if(eventTypeIsWithinBounds and *((*client).eventOffsetStart + realEventType) != 0xFFFFFFFF){
 						*statusReturn |= SUCCESS_DREITON_REPLY_STATUS;
 					}else{
 						DreitonCoreEvent *const event = (*dreitonCore).eventStart + realEventType;
@@ -1492,7 +1486,7 @@ SUBSCRIBETODREITONCOREEVENT(){
 							{ /*! use toolkit function */
 								uint i;
 								for(i = (*client).eventOffsetSize; i < size - (*client).eventOffsetSize; inc i){
-									*((uint32 *)temp + i) = 0;
+									*((uint32 *)temp + i) = 0xFFFFFFFF;
 								}
 							}
 							(*client).eventOffsetStart = temp;
@@ -1517,9 +1511,9 @@ SUBSCRIBETODREITONCOREEVENT(){
 								(*clientSubscription).eventSubscriptionOffset = (*event).subscriptionAllocated;
 								(*eventSubscription).clientOffset = client - (*dreitonCore).clientStart;
 								(*eventSubscription).clientSubscriptionOffset = (*client).subscriptionAllocated;
+								*((*client).eventOffsetStart + realEventType) = (*event).subscriptionAllocated;
 								inc (*client).subscriptionAllocated;
 								inc (*event).subscriptionAllocated;
-								*((*client).eventOffsetStart + realEventType) = (*event).subscriptionAllocated;
 								*statusReturn |= UPDATED_DREITON_REPLY_STATUS;
 								success = true;
 							}
@@ -1549,7 +1543,7 @@ EMITDREITONCOREEVENT(){
 	if(!dreitonCore){
 		ret false;
 	}
-	if(!extension or extension >= (*dreitonCore).extensionAllocated or !eventType){
+	if(!isValidDreitonCoreExtension(dreitonCore, extension) or !eventType){
 		ret false;
 	}
 	realEventType = (*((*dreitonCore).extensionStart + extension)).extensionBaseEvent + eventType;
@@ -1565,6 +1559,7 @@ EMITDREITONCOREEVENT(){
 	emitDreitonCoreEventLoop:{
 		if(current < wall){
 			DreitonCoreClient *const client = clientStart + (*current).clientOffset;
+			fprintf(stdout, "emitting to client %p (%u)...\n", (void *)client, (*current).clientOffset);
 			if(isValidDreitonCoreClient(dreitonCore, client)){
 				DreitonShmHeader *const header = (*client).shmStart;
 				uint32 eventCurrentWriter = (*header).eventCurrentWriter;
@@ -1621,13 +1616,10 @@ UNSUBSCRIBEFROMDREITONCOREEVENT(){
 	if(!dreitonCore){
 		ret false;
 	}
-	if((*dreitonCore).eventAllocated < 2 or !isValidDreitonCoreClient(dreitonCore, client) or !extension or extension >= (*dreitonCore).extensionAllocated or !eventMask or !statusReturn){
+	if((*dreitonCore).eventAllocated < 2 or !isValidDreitonCoreClient(dreitonCore, client) or !isValidDreitonCoreExtension(dreitonCore, extension) or !eventMask or !statusReturn){
 		ret false;
 	}
 	dreitonCoreExtension = (*dreitonCore).extensionStart + extension;
-	if(!(*dreitonCoreExtension).extensionHandle){
-		ret false;
-	}
 	dreitonExtensionDescriptor = (*dreitonCoreExtension).extensionDescriptor;
 	eventType = 0;
 	baseEvent = (*dreitonCoreExtension).extensionBaseEvent;
@@ -1646,12 +1638,11 @@ UNSUBSCRIBEFROMDREITONCOREEVENT(){
 				}
 				realEventType = baseEvent + eventType;
 				if(realEventType < (*client).eventOffsetSize and realEventType < (*dreitonCore).eventAllocated){
+					const uint32 eventSubscriptionOffset = *((*client).eventOffsetStart + realEventType);
 					DreitonCoreEvent *const event = (*dreitonCore).eventStart + realEventType;
-					uint32 eventSubscriptionOffset = *((*client).eventOffsetStart + realEventType);
-					if(!eventSubscriptionOffset){
+					if(eventSubscriptionOffset == 0xFFFFFFFF){
 						*statusReturn |= SUCCESS_DREITON_REPLY_STATUS;
 					}else{
-						dec eventSubscriptionOffset;
 						if((*dreitonExtensionDescriptor).decrementDreitonExtensionDescriptorEventCounter){
 							if((*(*dreitonExtensionDescriptor).decrementDreitonExtensionDescriptorEventCounter)(eventType)){
 								const uint32 clientSubscriptionOffset = (*((*event).subscriptionStart + eventSubscriptionOffset)).clientSubscriptionOffset;
@@ -1659,18 +1650,21 @@ UNSUBSCRIBEFROMDREITONCOREEVENT(){
 								const uint32 lastEventSubscriptionOffset = (*event).subscriptionAllocated - 1;
 								if(clientSubscriptionOffset != lastClientSubscriptionOffset){
 									const DreitonCoreClientSubscription lastClientSubscription = *((*client).subscriptionStart + lastClientSubscriptionOffset);
+									DreitonCoreEvent *const lastEvent = (*dreitonCore).eventStart + lastClientSubscription.eventType;
 									*((*client).subscriptionStart + clientSubscriptionOffset) = lastClientSubscription;
-									*((*client).eventOffsetStart + lastClientSubscription.eventType) = clientSubscriptionOffset;
-									(*((*((*dreitonCore).eventStart + lastClientSubscription.eventType)).subscriptionStart + lastClientSubscription.eventSubscriptionOffset)).clientSubscriptionOffset = clientSubscriptionOffset;
+									(*((*lastEvent).subscriptionStart + lastClientSubscription.eventSubscriptionOffset)).clientSubscriptionOffset = clientSubscriptionOffset;
+									*((*client).eventOffsetStart + lastClientSubscription.eventType) = eventSubscriptionOffset;
 								}
 								if(eventSubscriptionOffset != lastEventSubscriptionOffset){
 									const DreitonCoreEventSubscription lastEventSubscription = *((*event).subscriptionStart + lastEventSubscriptionOffset);
+									DreitonCoreClient *const lastClient = (*dreitonCore).clientStart + lastEventSubscription.clientOffset;
 									*((*event).subscriptionStart + eventSubscriptionOffset) = lastEventSubscription;
-									(*((*((*dreitonCore).clientStart + lastEventSubscription.clientOffset)).subscriptionStart + lastEventSubscription.clientSubscriptionOffset)).eventSubscriptionOffset = eventSubscriptionOffset;
+									(*((*lastClient).subscriptionStart + lastEventSubscription.clientSubscriptionOffset)).eventSubscriptionOffset = eventSubscriptionOffset;
+									*((*lastClient).eventOffsetStart + realEventType) = eventSubscriptionOffset;
 								}
+								*((*client).eventOffsetStart + realEventType) = 0xFFFFFFFF;
 								dec (*client).subscriptionAllocated;
 								dec (*event).subscriptionAllocated;
-								*((*client).eventOffsetStart + realEventType) = 0;
 								*statusReturn |= UPDATED_DREITON_REPLY_STATUS;
 								success = true;
 							}
@@ -1698,13 +1692,10 @@ UNLOADDREITONCOREEXTENSION(){
 	if(!dreitonCore){
 		ret false;
 	}
-	if(!extension or extension >= (*dreitonCore).extensionAllocated){
+	if(!isValidDreitonCoreExtension(dreitonCore, extension)){
 		ret false;
 	}
 	current = (*dreitonCore).extensionStart + extension;
-	if(!(*current).extensionHandle or (*current).extensionReferenceCount){
-		ret false;
-	}
 	if(!force and (*current).extensionReferenceCount){
 		ret false;
 	}
@@ -1725,17 +1716,16 @@ REMOVEDREITONCORECLIENT(){
 		ret false;
 	}
 	{
-		DreitonCoreClientSubscription *current = (*client).subscriptionStart + (*client).subscriptionAllocated - 1;
-		DreitonCoreClientSubscription *const wall = (*client).subscriptionStart;
-		fprintf(stdout, "subscribed to %u events\n", (*client).subscriptionAllocated);
-		jmp unsubscribeAllEventsLoop;
-		unsubscribeAllEventsLoop:{
-			if(current >= wall){
+		DreitonCoreClientSubscription *current = (*client).subscriptionStart;
+		DreitonCoreClientSubscription *const wall = (*client).subscriptionStart + (*client).subscriptionAllocated;
+		jmp unsubscribeEventLoop;
+		unsubscribeEventLoop:{
+			if(current < wall){
 				const uint32 eventMask = 1 << ((*current).eventType - (*((*dreitonCore).extensionStart + (*current).extension)).extensionBaseEvent - 1);
 				uint8 status;
-				fprintf(stdout, "unsub says %u\n", unsubscribeFromDreitonCoreEvent(dreitonCore, client, (*current).extension, eventMask, &status));
-				dec current;
-				jmp unsubscribeAllEventsLoop;
+				unsubscribeFromDreitonCoreEvent(dreitonCore, client, (*current).extension, eventMask, &status);
+				inc current;
+				jmp unsubscribeEventLoop;
 			}
 			free((*client).subscriptionStart);
 			free((*client).eventOffsetStart);
@@ -1941,6 +1931,15 @@ ISVALIDDREITONCORECLIENT(){
 		ret false;
 	}
 	if(client <= (*dreitonCore).clientStart or client >= (*dreitonCore).clientStart + (*dreitonCore).clientAllocated or !(*client).clientId){
+		ret false;
+	}
+	ret true;
+}
+ISVALIDDREITONCOREEXTENSION(){
+	if(!dreitonCore){
+		ret false;
+	}
+	if(!extension or extension >= (*dreitonCore).extensionAllocated or !(*((*dreitonCore).extensionStart + extension)).extensionHandle){
 		ret false;
 	}
 	ret true;
