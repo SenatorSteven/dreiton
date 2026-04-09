@@ -31,7 +31,14 @@ SOFTWARE. */
 #include "headers/cold/cold.hold"
 #endif
 
-/*!*/
+#define DREITON_SHM_TRANSPORT_PROTOCOL_VERSION /*--*/ (1)
+#define DREITON_SHM_TRANSPORT_TRANSPORT_VERSION /*-*/ (1)
+#define DREITON_SHM_TRANSPORT_TRANSPORT_NAME /*----*/ ("shm")
+#define DREITON_SHM_TRANSPORT_AUTHOR_NAME /*-------*/ ("senator")
+
+def struct{
+	const char * /*-*/ path;
+} DreitonShmTransportConnectionDescription;
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED

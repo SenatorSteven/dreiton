@@ -31,52 +31,85 @@ SOFTWARE. */
 #include "headers/cold/cold.hold"
 #endif
 
-#define Dreiton /*-----------------------*/ Dreiton
-
-#define INITDREITON() /*-----------------*/ bool  initDreiton(Dreiton *const dreiton)
-#define SETDREITONSERVERCHANNELPATH() /*-*/ bool  setDreitonServerChannelPath(Dreiton *const dreiton, const char *const serverChannelPath)
-#define CONNECTTODREITON() /*------------*/ bool  connectToDreiton(Dreiton *const dreiton)
-#define SENDDREITONREQUEST() /*----------*/ bool  sendDreitonRequest(Dreiton *const dreiton, const uint8 requestType, const uint8 extension, void *const request, const uint itemAmount, uint32 *const tokenReturn)
-#define WAITFORDREITONREPLY() /*---------*/ bool  waitForDreitonReply(Dreiton *const dreiton, const uint32 token, void *const replyReturn)
-#define FLUSHDREITONBUFFER() /*----------*/ bool  flushDreitonBuffer(Dreiton *const dreiton)
-#define WAITFORDREITONEVENT() /*---------*/ bool  waitForDreitonEvent(Dreiton *const dreiton, void *const eventReturn)
-#define DISCONNECTFROMDREITON() /*-------*/ bool  disconnectFromDreiton(Dreiton *const dreiton)
-#define FINIDREITON() /*-----------------*/ bool  finiDreiton(Dreiton *const dreiton)
+#define INITDREITON() /*-------------------*/ bool   initDreiton(Dreiton *const dreiton)
+#define SETDREITONREPLYCACHESLOTSIZE() /*--*/ bool   setDreitonReplyCacheSlotSize(Dreiton *const dreiton, const uint32 replyCacheSlotSize)
+#define LOADDREITONTRANSPORT() /*----------*/ bool   loadDreitonTransport(Dreiton *const dreiton, const char *const path)
+#define LOADDREITONCODEC() /*--------------*/ bool   loadDreitonCodec(Dreiton *const dreiton, const char *const path)
+#define CONNECTTODREITON() /*--------------*/ bool   connectToDreiton(Dreiton *const dreiton, const void *const argument)
+#define SENDDREITONREQUEST() /*------------*/ bool   sendDreitonRequest(Dreiton *const dreiton, const uint16 type, const uint16 extension, const uint32 payloadItemAmount, const uint32 *const payloadItemSizeStart, const void *const *const payloadItemDataStart, uint32 *const tokenReturn)
+#define FLUSHDREITONBUFFER() /*------------*/ bool   flushDreitonBuffer(Dreiton *const dreiton)
+#define WAITFORDREITONREPLY() /*-----------*/ bool   waitForDreitonReply(Dreiton *const dreiton, const uint32 token, DreitonReply **const replyReturn)
+#define WAITFORDREITONEVENT() /*-----------*/ bool   waitForDreitonEvent(Dreiton *const dreiton, DreitonEvent **const eventReturn)
+#define WAITFORDREITONUNCONSUMEDREPLY() /*-*/ bool   waitForDreitonUnconsumedReply(Dreiton *const dreiton, const uint32 token, DreitonReply *const replyReturn)
+#define WAITFORDREITONUNCONSUMEDEVENT() /*-*/ bool   waitForDreitonUnconsumedEvent(Dreiton *const dreiton, DreitonEvent *const eventReturn)
+#define GETDREITONMESSAGEDECODEDITEM() /*--*/ bool   getDreitonMessageDecodedItem(Dreiton *const dreiton, const void *const frame, const uint32 which, uint32 *const itemSizeReturn, void **const itemStartReturn)
+#define CONSUMEDREITONREPLY() /*-----------*/ bool   consumeDreitonReply(Dreiton *const dreiton, DreitonReply *const reply)
+#define CONSUMEDREITONEVENT() /*-----------*/ bool   consumeDreitonEvent(Dreiton *const dreiton, DreitonEvent *const event)
+#define WAKEUPDREITONREPLY() /*------------*/ bool   wakeUpDreitonReply(Dreiton *const dreiton, const uint8 status)
+#define WAKEUPDREITONEVENT() /*------------*/ bool   wakeUpDreitonEvent(Dreiton *const dreiton, const uint8 status)
+#define DISCONNECTFROMDREITON() /*---------*/ bool   disconnectFromDreiton(Dreiton *const dreiton)
+#define UNLOADDREITONCODEC() /*------------*/ bool   unloadDreitonCodec(Dreiton *const dreiton)
+#define UNLOADDREITONTRANSPORT() /*--------*/ bool   unloadDreitonTransport(Dreiton *const dreiton)
+#define DREITONHASERROR() /*---------------*/ uint8  dreitonHasError(Dreiton *const dreiton)
+#define FINIDREITON() /*-------------------*/ bool   finiDreiton(Dreiton *const dreiton)
 
 def struct{
-	const char * /*------------*/ serverChannelPath;
-	DreitonShmHeader * /*------*/ shmStart;
-	DreitonShmRequestSlot * /*-*/ requestSlotStart;
-	DreitonShmReplySlot * /*---*/ replySlotStart;
-	DreitonShmEventSlot * /*---*/ eventSlotStart;
-	GenericDreitonRequest * /*-*/ requestStart;
-	GenericDreitonRequest * /*-*/ requestCurrent;
-	GenericDreitonReply * /*---*/ replyStart;
-	GenericDreitonReply * /*---*/ replyCurrent;
-	GenericDreitonEvent * /*---*/ eventStart;
-	GenericDreitonEvent * /*---*/ eventCurrent;
-	uint32 /*------------------*/ clientId;
-	int32 /*-------------------*/ replyEpollFd;
-	int32 /*-------------------*/ eventEpollFd;
-	int32 /*-------------------*/ requestWriteFd;
-	int32 /*-------------------*/ replyReadFd;
-	int32 /*-------------------*/ eventReadFd;
-	uint32 /*------------------*/ currentToken;
-	uint32 /*------------------*/ lastTokenRead;
-	uint32 /*------------------*/ tokenBacklogSize;
-	uint8 /*-------------------*/ requestAmount;
-	bool /*--------------------*/ hasError;
-	uint8 /*-------------------*/ pad0[2];
+	void * /*-----------------------------*/ dataStart;
+	uint32 /*-----------------------------*/ dataSize;
+	uint32 /*-----------------------------*/ headerOffset;
+	uint32 /*-----------------------------*/ token;
+	uint32 /*-----------------------------*/ frameSize;
+} DreitonCacheSlot;
+
+def struct{
+	void * /*-----------------------------*/ dataStart;
+	uint32 /*-----------------------------*/ dataSize;
+	uint8 /*------------------------------*/ pad0[4];
+} DreitonCacheStorageSlot;
+
+def struct{
+	uint64 /*-----------------------------*/ uuid0;
+	uint64 /*-----------------------------*/ uuid1;
+} DreitonUuid;
+
+def struct{
+	void * /*-----------------------------*/ transportDescriptorHandle;
+	DreitonClientTransportDescriptor * /*-*/ transportDescriptor;
+	void * /*-----------------------------*/ transportHandle;
+	void * /*-----------------------------*/ codecDescriptorHandle;
+	DreitonCodecDescriptor * /*-----------*/ codecDescriptor;
+	DreitonCacheSlot * /*-----------------*/ replyCacheSlotStart;
+	DreitonCacheStorageSlot * /*----------*/ replyCacheStorageSlotStart;
+	DreitonUuid /*------------------------*/ clientUuid;
+	uint32 /*-----------------------------*/ replyCacheSlotSize;
+	uint32 /*-----------------------------*/ replyCacheStorageSlotSize;
+	uint32 /*-----------------------------*/ replyCacheStorageSlotAllocated;
+	uint32 /*-----------------------------*/ currentToken;
+	bool /*-------------------------------*/ isRunning;
+	uint8 /*------------------------------*/ status;
+	uint8 /*------------------------------*/ pad0[6];
 } Dreiton;
 
 INITDREITON();
-SETDREITONSERVERCHANNELPATH();
+SETDREITONREPLYCACHESLOTSIZE();
+LOADDREITONTRANSPORT();
+LOADDREITONCODEC();
 CONNECTTODREITON();
 SENDDREITONREQUEST();
-WAITFORDREITONREPLY();
 FLUSHDREITONBUFFER();
+WAITFORDREITONREPLY();
 WAITFORDREITONEVENT();
+WAITFORDREITONUNCONSUMEDREPLY();
+WAITFORDREITONUNCONSUMEDEVENT();
+GETDREITONMESSAGEDECODEDITEM();
+CONSUMEDREITONREPLY();
+CONSUMEDREITONEVENT();
+WAKEUPDREITONREPLY();
+WAKEUPDREITONEVENT();
 DISCONNECTFROMDREITON();
+UNLOADDREITONCODEC();
+UNLOADDREITONTRANSPORT();
+DREITONHASERROR();
 FINIDREITON();
 
 #ifdef  COLD_INCLUDED

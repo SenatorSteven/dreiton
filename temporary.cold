@@ -1,0 +1,119 @@
+
+#define PTHREAD_CREATE_SUCCESS /*------*/ (0)
+
+
+
+
+
+
+
+
+
+/*! server connect */
+
+char *ipPort = "127.0.0.1:1234";
+char *ip;
+uint16 port;
+{
+	const uint length = strlen(ipPort);
+	char *current = malloc(length * sizeof(char));
+	ip = current;
+	memcpy(ip, _ipPort, length * sizeof(char));
+	jmp loop;
+	loop:{
+		if(*current){
+			if(*current != ':'){
+				inc current;
+				jmp loop;
+			}
+			if(*current == '\0'){
+				jmp emergencyExit;
+			}
+			*current = '\0';
+			inc current;
+			port = atoi(current);
+		}
+	}
+}
+{
+	const uint concurrentConnectionAmount = 128;
+	int socketFd;
+	struct sockaddr_in address = {0};
+	socketFd = socket(AF_INET, SOCK_STREAM, NONE_SOCKET_PROTOCOL);
+	if(socketFd == -1){
+		fprintf(stdout, "failed to create server @ socket()\n");
+		ret 1;
+	}
+	memset(&address, 0, sizeof(address));
+	address.sin_family = AF_INET;
+	address.sin_port = htons(port);
+	if(inet_pton(AF_INET, ip, &address.sin_addr) < 1){
+		fprintf(stdout, "failed to create server @ inet_pton()\n");
+		close(socketFd); /*! errors? */
+		ret 1;
+	}
+	if(bind(socketFd, (void *)&address, sizeof(address)) == -1){
+		fprintf(stdout, "failed to create server @ bind()\n");
+		close(socketFd); /*! errors? */
+		ret 1;
+	}
+	if(listen(socketFd, concurrentConnectionAmount) == -1){
+		fprintf(stdout, "failed to create server @ listen()\n");
+		close(socketFd); /*! errors? */
+		ret 1;
+	}
+	{
+		const int clientFd = accept(socketFd, NULL, NULL);
+
+
+
+		fprintf(stdout, "connected to tcp server\n");
+		sleep(1);
+
+
+
+		close(clientFd); /*! errors? */
+	}
+	close(socketFd); /*! errors? */
+	jmp emergencyExit;
+	emergencyExit:{
+		free(ip);
+		ret true;
+	}
+}
+
+
+
+/*! client connect */
+
+struct sockaddr_in address = {0};
+int socketFd;
+memset(&address, 0, sizeof(address));
+address.sin_family = AF_INET;
+address.sin_port = htons(connection.tcpConnection.port);
+if(inet_pton(AF_INET, connection.tcpConnection.ip, &address.sin_addr) < 1){
+	fprintf(stdout, "failed to connect to server @ inet_pton()\n");
+	close(socketFd); /*! errors? */
+	ret 1;
+}
+socketFd = socket(AF_INET, SOCK_STREAM, NONE_SOCKET_PROTOCOL);
+if(socketFd == -1){
+	fprintf(stdout, "failed to connect to server @ socket()\n");
+	ret 1;
+}
+if(connect(socketFd, (void *)&address, sizeof(address)) == -1){
+	fprintf(stdout, "failed to connect to server @ connect()\n");
+	close(socketFd); /*! errors? */
+	ret 1;
+}
+fprintf(stdout, "connected to tcp server\n");
+close(socketFd); /*! errors? */
+
+
+
+
+
+
+
+
+

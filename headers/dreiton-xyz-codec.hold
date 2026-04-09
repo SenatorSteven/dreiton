@@ -1,5 +1,5 @@
 
-/*! dreiton-base-extension-helpers.hold
+/*! dreiton-xyz-codec.hold
 
 MIT License
 
@@ -23,23 +23,18 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#ifndef DREITON_BASE_EXTENSION_HELPERS_HOLD
-#define DREITON_BASE_EXTENSION_HELPERS_HOLD
+#ifndef DREITON_XYZ_CODEC_HOLD
+#define DREITON_XYZ_CODEC_HOLD
 
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
 #include "headers/cold/cold.hold"
 #endif
 
-#define REQUESTDREITONBASEGETMAGICNUMBER() /*------*/ bool  requestDreitonBaseGetMagicNumber(Dreiton *const dreiton, const uint32 extension, uint32 *const tokenReturn)
-#define REQUESTDREITONBASESETMAGICNUMBER() /*------*/ bool  requestDreitonBaseSetMagicNumber(Dreiton *const dreiton, const uint32 extension, const uint32 magicNumber, uint32 *const tokenReturn)
-#define WAITFORDREITONBASEGETMAGICNUMBERREPLY() /*-*/ bool  waitForDreitonBaseGetMagicNumberReply(Dreiton *const dreiton, const uint32 token, GetMagicNumberDreitonBaseReply *const reply)
-#define WAITFORDREITONBASESETMAGICNUMBERREPLY() /*-*/ bool  waitForDreitonBaseSetMagicNumberReply(Dreiton *const dreiton, const uint32 token, SetMagicNumberDreitonBaseReply *const reply)
-
-REQUESTDREITONBASEGETMAGICNUMBER();
-REQUESTDREITONBASESETMAGICNUMBER();
-WAITFORDREITONBASEGETMAGICNUMBERREPLY();
-WAITFORDREITONBASESETMAGICNUMBERREPLY();
+#define DREITON_XYZ_CODEC_PROTOCOL_VERSION /*-*/ (1)
+#define DREITON_XYZ_CODEC_CODEC_VERSION /*----*/ (1)
+#define DREITON_XYZ_CODEC_CODEC_NAME /*-------*/ ("xyz")
+#define DREITON_XYZ_CODEC_AUTHOR_NAME /*------*/ ("senator")
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED

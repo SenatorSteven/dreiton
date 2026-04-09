@@ -1,0 +1,115 @@
+
+/*!
+	the codec protocol in words: x, y, z, support 64 bit aligned frame sizes (please, for speed)
+*/
+
+/*!
+	structure of every message: m payload items each with a different size n
+
+		.----------------------------------------------------.
+		| 32: messageSize                                    |
+		| 32: payloadSize                                    |
+		| 16: type                                           |
+		| 16: extension                                      |
+		| 32: token                                          |
+		| 8 : header-specified byte                          |
+		| 8 : header-specified byte                          |
+		| 16: header-specified word                          |
+		| 32: header-specified dword                         |
+		|   ----------------------------------------------   |
+		| 16: payloadItemAmount                              |
+		| 16: payloadItemSize   m                            |
+		| 16: payloadItemOffset m                            |
+		| 16: byte              (4 - (1 + 2 * m) % 4) % 4    |
+		| 8 : payloadItem       n                        } m |
+		| 8 : byte              (8 - n % 8) % 8          ]   |
+		`----------------------------------------------------´
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*! dreiton-codec-protocol.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef DREITON_CODEC_PROTOCOL_HOLD
+#define DREITON_CODEC_PROTOCOL_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+#define DREITON_CODEC_PROTOCOL_VERSION /*-*/ (1)
+
+def struct{
+	uint32 /*-------*/ descriptorSize;
+	uint32 /*-------*/ protocolVersion;
+	uint32 /*-------*/ codecVersion;
+	uint32 /*-------*/ codecNameSize;
+	uint32 /*-------*/ authorNameSize;
+	uint8 /*--------*/ pad0[4];
+	const char * /*-*/ codecName;
+	const char * /*-*/ authorName;
+	bool /*---------*/ (*calculateDreitonCodecFrameSize)(const uint32 messageSize, const uint32 payloadItemAmount, const uint32 *const payloadItemSizeStart, uint32 *const frameSizeReturn);
+	bool /*---------*/ (*encodeDreitonCodecMessage)(const uint32 messageSize, const void *const message, const uint32 payloadItemAmount, const uint32 *const payloadItemSizeStart, const void *const *const payloadItemDataStart, const uint32 frameSize, void *const frame);
+	bool /*---------*/ (*decodeDreitonCodecMessage)(const void *const frame, void *const decodedFrame, void **const messageHeaderReturn);
+	bool /*---------*/ (*getDreitonCodecEncodedToken)(const void *const frame, uint32 *const tokenReturn);
+	bool /*---------*/ (*getDreitonCodecEncodedFrameSize)(const void *const frame, uint32 *const frameSizeReturn);
+	bool /*---------*/ (*getDreitonCodecDecodedPayloadItemAmount)(const void *const frame, uint32 *const payloadItemAmountReturn);
+	bool /*---------*/ (*getDreitonCodecDecodedItem)(const void *const frame, const uint32 which, uint32 *const itemSizeReturn, void **const itemStartReturn);
+} DreitonCodecDescriptorV1;
+
+def DreitonCodecDescriptorV1 /*-*/ DreitonCodecDescriptor;
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+

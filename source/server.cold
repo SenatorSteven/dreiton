@@ -1,4 +1,38 @@
 
+/*!
+	support sessions, where someone loses connection but can come back within some time and continue where they left off.
+*/
+
+/*!
+	implement round-robin @ ~32 requests per client so that time utilized is made as fair as memory utilized
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /*! server.cold
 
 MIT License
@@ -23,207 +57,938 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#define _POSIX_C_SOURCE /*-*/ (200809L)
+#define _POSIX_C_SOURCE /*-*/ (199506L)
 
-#include <pthread.h>
-#include <signal.h>
+#include <fcntl.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <time.h>
 #include <unistd.h>
 
+
+
+/*! remove later */
+
+#include <stdio.h>
+
+
+
 #include "headers/cold/cold.hold"
-#include "headers/dreiton-protocol.hold"
-#include "headers/dreiton-transport.hold"
-#include "headers/dreiton-extension.hold"
+#include "headers/signal-handler.hold"
+#include "headers/protocols/dreiton-protocol.hold"
+#include "headers/protocols/dreiton-transport-protocol.hold"
+#include "headers/protocols/dreiton-codec-protocol.hold"
+#include "headers/protocols/dreiton-extension-protocol.hold"
 #include "headers/dreiton-core.hold"
+#include "headers/helpers/dreiton-core-helpers.hold"
 #include "headers/server.hold"
 
+#define PTHREAD_CREATE_SUCCESS /*------------------*/ (0)
+#define PTHREAD_JOIN_SUCCESS /*--------------------*/ (0)
+
+#define NONE_CONNECTION /*-------------------------*/ (0)
+#define SHM_CONNECTION /*--------------------------*/ (1)
+#define TCP_CONNECTION /*--------------------------*/ (2)
+
+#define TERMINATIONSIGNALHANDLER() /*--------------*/ local void   terminationSignalHandler(const int signal)
+#define PIPESIGNALHANDLER() /*---------------------*/ local void   pipeSignalHandler(const int signal)
+#define ISBIGENDIAN() /*---------------------------*/ local bool   isBigEndian(void)
+
+#define INITSERVERSYSTEM() /*----------------------*/ local bool   initServerSystem(ServerSystem *const serverSystem)
+#define BOOTSERVERREQUESTLOOPTHREAD() /*-----------*/ local bool   bootServerRequestLoopThread(ServerSystem *const serverSystem, void *(*function)(void *const argument), void *const argument)
+#define BOOTSERVEREVENTLOOPTHREAD() /*-------------*/ local bool   bootServerEventLoopThread(ServerSystem *const serverSystem, void *(*function)(void *const argument), void *const argument)
+#define BOOTSERVERREGISTRATIONLOOPTHREAD() /*------*/ local bool   bootServerRegistrationLoopThread(ServerSystem *const serverSystem, void *(*function)(void *const argument), void *const argument)
+#define REQUESTLOOPMAIN() /*-----------------------*/ local void * requestLoopMain(void *const argument)
+#define EVENTLOOPMAIN() /*-------------------------*/ local void * eventLoopMain(void *const argument)
+#define REGISTRATIONLOOPMAIN() /*------------------*/ local void * registrationLoopMain(void *const argument)
+#define PARSEDREITONREQUEST() /*-------------------*/ local bool   parseDreitonRequest(DreitonCore *const dreitonCore, DreitonServerTransportRequest *const transportRequest)
+#define QUITSERVERREGISTRATIONLOOPTHREAD() /*------*/ local bool   quitServerRegistrationLoopThread(ServerSystem *const serverSystem)
+#define QUITSERVERREQUESTLOOPTHREAD() /*-----------*/ local bool   quitServerRequestLoopThread(ServerSystem *const serverSystem)
+#define QUITSERVEREVENTLOOPTHREAD() /*-------------*/ local bool   quitServerEventLoopThread(ServerSystem *const serverSystem)
+#define AWAITSERVERREGISTRATIONLOOPTHREADEXIT() /*-*/ local bool   awaitServerRegistrationLoopThreadExit(ServerSystem *const serverSystem)
+#define AWAITSERVERREQUESTLOOPTHREADEXIT() /*------*/ local bool   awaitServerRequestLoopThreadExit(ServerSystem *const serverSystem)
+#define AWAITSERVEREVENTLOOPTHREADEXIT() /*--------*/ local bool   awaitServerEventLoopThreadExit(ServerSystem *const serverSystem)
+#define FINISERVERSYSTEM() /*----------------------*/ local bool   finiServerSystem(ServerSystem *const serverSystem)
+
 def struct{
-	void /*--*/ (*handler)(const int signal);
-	int32 /*-*/ signal;
-	uint8 /*-*/ pad0[4];
-} SignalHandler;
+	bool /*------*/ requestLoopThreadCreated;
+	bool /*------*/ eventLoopThreadCreated;
+	bool /*------*/ registrationLoopThreadCreated;
+	bool /*------*/ requestLoopThreadRunning;
+	bool /*------*/ eventLoopThreadRunning;
+	bool /*------*/ registrationLoopThreadRunning;
+	uint8 /*-----*/ pad0[2];
+	pthread_t /*-*/ requestLoopThread;
+	pthread_t /*-*/ eventLoopThread;
+	pthread_t /*-*/ registrationLoopThread;
+} ServerSystem;
 
-local const char * /*--------*/ serverName;
-local DreitonCore /*---------*/ dreitonCore;
-local DreitonCoreDatabase /*-*/ database;
-
-#define BOOTSIGNALTHREAD() /*-------*/ bool   bootSignalThread(const uint64 signalHandlerSize, const SignalHandler *const signalHandlerStart)
-#define SIGNALMAIN() /*-------------*/ void * signalMain(void *const arg)
-#define INTERRUPTSIGNALHANDLER() /*-*/ void   interruptSignalHandler(const int signal)
-#define PIPESIGNALHANDLER() /*------*/ void   pipeSignalHandler(const int signal)
-
-BOOTSIGNALTHREAD();
-SIGNALMAIN();
-INTERRUPTSIGNALHANDLER();
+TERMINATIONSIGNALHANDLER();
 PIPESIGNALHANDLER();
+ISBIGENDIAN();
 
-int main(const int argumentSize, const char *const *const argumentStart){
-	if(argumentSize != 2){
-		ret 0;
+INITSERVERSYSTEM();
+BOOTSERVERREQUESTLOOPTHREAD();
+BOOTSERVEREVENTLOOPTHREAD();
+BOOTSERVERREGISTRATIONLOOPTHREAD();
+REQUESTLOOPMAIN();
+EVENTLOOPMAIN();
+REGISTRATIONLOOPMAIN();
+PARSEDREITONREQUEST();
+QUITSERVERREGISTRATIONLOOPTHREAD();
+QUITSERVERREQUESTLOOPTHREAD();
+QUITSERVEREVENTLOOPTHREAD();
+AWAITSERVERREGISTRATIONLOOPTHREADEXIT();
+AWAITSERVERREQUESTLOOPTHREADEXIT();
+AWAITSERVEREVENTLOOPTHREADEXIT();
+FINISERVERSYSTEM();
+
+local const char * /*-*/ name;
+local const char * /*-*/ transport;
+local const char * /*-*/ codec;
+local const char * /*-*/ connectionName;
+local pthread_t /*----*/ thread;
+local ServerSystem /*-*/ serverSystem;
+local DreitonCore /*--*/ dreitonCore;
+
+
+
+
+
+
+
+
+
+#define OPEN_FAILURE /*-----*/ (-1)
+
+#define GENERATEUUIDV7() /*-*/ bool  generateUuidV7(DreitonCoreUuid *const uuid)
+#define GETRANDOMBYTES() /*-*/ bool  getRandomBytes(const uint64 length, void *const data)
+
+GENERATEUUIDV7();
+GETRANDOMBYTES();
+
+GENERATEUUIDV7(){
+	struct timespec timespec;
+	uint64 number[2];
+	if(!uuid){
+		ret false;
 	}
-	serverName = *(argumentStart + 1);
-	{
-		SignalHandler signalHandler[2];
-		(*(signalHandler + 0)).handler = &interruptSignalHandler;
-		(*(signalHandler + 0)).signal = SIGINT;
-		(*(signalHandler + 1)).handler = &pipeSignalHandler;
-		(*(signalHandler + 1)).signal = SIGPIPE;
-		bootSignalThread(countof(signalHandler), signalHandler);
+	if(!getRandomBytes(sizeof(number), &number)){
+		ret false;
 	}
-	fprintf(stdout, "starting dreiton core @ \'%s\'\n", serverName);
-
-
-
-	/*! actually use the server name */
-
-	initDreitonCore(&dreitonCore);
-
-
-
-	/*! does this mean anything if non-shm used? */
-
-	setDreitonCoreServerChannelPath(&dreitonCore, "/dev/shm/registration-form");
-	setDreitonCoreClientChannelPath(&dreitonCore, "/dev/shm/client-writer");
-
-
-
-	/*! why set database? */
-
-	setDreitonCoreDatabase(&dreitonCore, &database);
-
-
-
-	setDreitonCoreOwner(&dreitonCore, NONE_DREITON_CORE_OWNER);
-	setDreitonCoreExtensionBlockSize(&dreitonCore, 16);
-	setDreitonCoreClientBlockSize(&dreitonCore, 16);
-	bootDreitonCoreReplyLoopThread(&dreitonCore);
-	bootDreitonCoreEventLoopThread(&dreitonCore);
-	bootDreitonCoreRegistrationLoopThread(&dreitonCore);
-
-
-
-	/*! all clients closing and turning the hint on will still cause us to not exit the program. fix. */
-
-	awaitDreitonCoreRegistrationLoopThreadExit(&dreitonCore);
-	awaitDreitonCoreReplyLoopThreadExit(&dreitonCore);
-	awaitDreitonCoreEventLoopThreadExit(&dreitonCore);
-
-
-
-	finiDreitonCore(&dreitonCore);
-	ret 0;
+	clock_gettime(CLOCK_REALTIME, &timespec);
+	(*uuid).uuid0 = ((timespec.tv_sec * 1000 + timespec.tv_nsec / 1000000) << 16) | (0x7 << 12) | (*(number + 0) & 0xFFF);
+	(*uuid).uuid1 = ((uint64)0x2 << 62) | (*(number + 1) & (uint64)0x3FFFFFFFFFFFFFFF);
+	ret true;
 }
-BOOTSIGNALTHREAD(){
-	#define PTHREAD_CREATE_FAILURE /*-*/ (-1)
-	sigset_t blockSet;
-	if(!signalHandlerSize){
-		sigfillset(&blockSet);
-		pthread_sigmask(SIG_BLOCK, &blockSet, NULL);
-	}else{
-		void *data;
-		pthread_t thread;
-		if(!signalHandlerStart){
-			ret false;
-		}
-		data = malloc(1 * sizeof(uint64) + signalHandlerSize * sizeof(SignalHandler));
-		if(!data){
-			ret false;
-		}
-		*(uint64 *)data = signalHandlerSize;
-		memcpy((uint64 *)data + 1, signalHandlerStart, signalHandlerSize * sizeof(SignalHandler));
-		sigfillset(&blockSet);
-		pthread_sigmask(SIG_BLOCK, &blockSet, NULL);
-		if(pthread_create(&thread, NULL, &signalMain, data) == PTHREAD_CREATE_FAILURE){
-			free(data);
-			ret false;
-		}
+GETRANDOMBYTES(){
+	int fd;
+	uint64 value;
+	if(!data){
+		ret false;
+	}
+	fd = open("/dev/urandom", O_RDONLY); /*! errors? */
+	if(fd == OPEN_FAILURE){
+		ret false;
+	}
+	value = read(fd, data, length); /*! errors? */
+	close(fd); /*! errors? */
+	if(value != length){
+		ret false;
 	}
 	ret true;
 }
-SIGNALMAIN(){
-	#define SIGWAIT_FAILURE /*-*/ (-1)
-	#define SIGMIN /*----------*/ (0)
-	#define SIGMAX /*----------*/ (64)
-	void (*handler[SIGMAX])(const int signal);
-	sigset_t waitSet;
-	if(!arg){
-		ret NULL;
+
+
+
+
+
+
+
+
+
+int main(const int argumentSize, const char *const *const argumentStart){
+	uint8 type = SHM_CONNECTION;
+	(void)argumentSize;
+	(void)argumentStart;
+	{
+		SignalHandler signalHandler[5];
+		SignalHandler *signalHandlerCurrent = signalHandler;
+		(*signalHandlerCurrent).handler = &terminationSignalHandler;
+		(*signalHandlerCurrent).signal = SIGHUP;
+		(*signalHandlerCurrent).terminal = true;
+		inc signalHandlerCurrent;
+		(*signalHandlerCurrent).handler = &terminationSignalHandler;
+		(*signalHandlerCurrent).signal = SIGINT;
+		(*signalHandlerCurrent).terminal = true;
+		inc signalHandlerCurrent;
+		(*signalHandlerCurrent).handler = &terminationSignalHandler;
+		(*signalHandlerCurrent).signal = SIGQUIT;
+		(*signalHandlerCurrent).terminal = true;
+		inc signalHandlerCurrent;
+		(*signalHandlerCurrent).handler = &pipeSignalHandler;
+		(*signalHandlerCurrent).signal = SIGPIPE;
+		(*signalHandlerCurrent).terminal = false;
+		inc signalHandlerCurrent;
+		(*signalHandlerCurrent).handler = &terminationSignalHandler;
+		(*signalHandlerCurrent).signal = SIGTERM;
+		(*signalHandlerCurrent).terminal = true;
+		inc signalHandlerCurrent;
+		bootSignalThread(countof(signalHandler), signalHandler, &thread);
 	}
-	jmp setHandlers;
-	setHandlers:{
-		void (**handlerCurrent)(const int signal) = handler + SIGMIN;
-		void (*const *const handlerWall)(const int signal) = handler + SIGMAX;
-		jmp setHandlerLoop;
-		setHandlerLoop:{
-			if(handlerCurrent < handlerWall){
-				*handlerCurrent = NULL;
-				inc handlerCurrent;
-				jmp setHandlerLoop;
-			}
-			jmp setSignalHandlers;
+	if(type == SHM_CONNECTION){
+		name = "shm";
+		transport = "libdreiton-shm-transport.so";
+		connectionName = "/tmp/dreiton-one";
+	}else{
+		name = "tcp";
+		transport = "libdreiton-tcp-transport.so";
+		connectionName = "127.0.0.1:23170";
+	}
+	{
+		const bool hostIsBigEndian = isBigEndian();
+		const bool protocolIsBigEndian = DREITON_ENDIANNESS == BIG_DREITON_ENDIANNESS;
+		const bool differentEndianness = !hostIsBigEndian != !protocolIsBigEndian;
+		if(differentEndianness){
+			codec = "libdreiton-endian-codec.so";
+		}else{
+			codec = "libdreiton-xyz-codec.so";
 		}
 	}
-	setSignalHandlers:{
-		const SignalHandler *signalHandlerCurrent = (void *)((uint64 *)arg + 1);
-		const SignalHandler *const signalHandlerWall = signalHandlerCurrent + *(uint64 *)arg;
-		sigemptyset(&waitSet);
-		jmp setSignalHandlerLoop;
-		setSignalHandlerLoop:{
-			if(signalHandlerCurrent < signalHandlerWall){
-				const int signal = (*signalHandlerCurrent).signal;
-				if(signal >= SIGMIN and signal < SIGMAX){
-					void (*handle)(const int signal) = (*signalHandlerCurrent).handler;
-					*(handler + signal) = handle;
-					sigaddset(&waitSet, signal);
-				}
-				inc signalHandlerCurrent;
-				jmp setSignalHandlerLoop;
-			}
-			free(arg);
-			jmp signalLoop;
-		}
+	initServerSystem(&serverSystem);
+	initDreitonCore(&dreitonCore);
+	setDreitonCoreClientBlockSize(&dreitonCore, 16);
+	setDreitonCoreExtensionBlockSize(&dreitonCore, 4);
+	setDreitonCoreExtensionEventBlockSize(&dreitonCore, 4);
+	if(!loadDreitonCoreTransport(&dreitonCore, transport)){
+		fprintf(stdout, "could not load transport @ %s\n", transport);
+		jmp emergencyExit;
 	}
-	signalLoop:{
-		int signal;
-		if(sigwait(&waitSet, &signal) == SIGWAIT_FAILURE){
-			jmp signalLoop;
-		}
-		if(signal < SIGMIN or signal >= SIGMAX){
-			jmp signalLoop;
-		}
-		jmp handleSignal;
-		handleSignal:{
-			void (*h)(const int signal) = *(handler + signal);
-			if(!h){
-				jmp signalLoop;
-			}
-			(*h)(signal);
-			jmp signalLoop;
-		}
+	fprintf(stdout, "using transport @ %s\n", transport);
+	if(!loadDreitonCoreCodec(&dreitonCore, codec)){
+		fprintf(stdout, "could not load codec @ %s\n", codec);
+		jmp emergencyExit;
+	}
+	fprintf(stdout, "using codec @ %s\n", codec);
+	setDreitonCoreTransportClientBlockSize(&dreitonCore, 16);
+	setDreitonCoreTransportConcurrentConnectionAmount(&dreitonCore, 128);
+	setDreitonCoreTransportRequestSlotSize(&dreitonCore, 256);
+	setDreitonCoreTransportReplySlotSize(&dreitonCore, 256);
+	setDreitonCoreTransportEventSlotSize(&dreitonCore, 256);
+	setDreitonCoreTransportRequestSize(&dreitonCore, 16 * 1024);
+	setDreitonCoreTransportReplySize(&dreitonCore, 16 * 1024);
+	setDreitonCoreTransportEventSize(&dreitonCore, 16 * 1024);
+	createDreitonCoreTransportRequestReceiver(&dreitonCore);
+	createDreitonCoreTransportEventReceiver(&dreitonCore);
+	if(!createDreitonCoreTransportRegistrationReceiver(&dreitonCore, connectionName)){
+		fprintf(stdout, "could not create %s server @ %s\n", name, connectionName);
+		jmp emergencyExit;
+	}
+	fprintf(stdout, "created %s server @ %s\n\n", name, connectionName);
+	{
+		void *argument[2];
+		*(argument + 0) = &serverSystem;
+		*(argument + 1) = &dreitonCore;
+		bootServerRequestLoopThread(&serverSystem, requestLoopMain, argument);
+		bootServerEventLoopThread(&serverSystem, eventLoopMain, argument);
+		bootServerRegistrationLoopThread(&serverSystem, registrationLoopMain, argument);
+	}
+	awaitServerRequestLoopThreadExit(&serverSystem);
+	quitServerRegistrationLoopThread(&serverSystem);
+	wakeUpDreitonCoreTransportRegistration(&dreitonCore);
+	awaitServerRegistrationLoopThreadExit(&serverSystem);
+	quitServerEventLoopThread(&serverSystem);
+	wakeUpDreitonCoreTransportEvent(&dreitonCore);
+	awaitServerEventLoopThreadExit(&serverSystem);
+	jmp emergencyExit;
+	emergencyExit:{
+		finiDreitonCore(&dreitonCore);
+		finiServerSystem(&serverSystem);
+		pthread_kill(thread, SIGTERM);
+		pthread_join(thread, NULL);
+		ret 0;
 	}
 }
-INTERRUPTSIGNALHANDLER(){
+TERMINATIONSIGNALHANDLER(){
 	(void)signal;
-
-
-
-	/*!*/
-
-	fprintf(stdout, "\n");
-	quitDreitonCoreRegistrationLoopThread(&dreitonCore);
-	quitDreitonCoreReplyLoopThread(&dreitonCore);
-	quitDreitonCoreEventLoopThread(&dreitonCore);
-
-
-
+	quitServerRequestLoopThread(&serverSystem);
+	wakeUpDreitonCoreTransportRequest(&dreitonCore);
 	ret;
 }
 PIPESIGNALHANDLER(){
 	(void)signal;
 	fprintf(stderr, "\tpipe error\n");
 	ret;
+}
+ISBIGENDIAN(){
+	const uint32 variable = 1;
+	ret *(uint8 *)&variable == 0;
+}
+INITSERVERSYSTEM(){
+	if(!serverSystem){
+		ret false;
+	}
+	(*serverSystem).requestLoopThreadCreated = false;
+	(*serverSystem).eventLoopThreadCreated = false;
+	(*serverSystem).registrationLoopThreadCreated = false;
+	(*serverSystem).requestLoopThreadRunning = false;
+	(*serverSystem).eventLoopThreadRunning = false;
+	(*serverSystem).registrationLoopThreadRunning = false;
+	ret true;
+}
+BOOTSERVERREQUESTLOOPTHREAD(){
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	success = false;
+	if((*serverSystem).requestLoopThreadCreated or (*serverSystem).requestLoopThreadRunning){
+		jmp emergencyExit;
+	}
+	(*serverSystem).requestLoopThreadRunning = true;
+	(*serverSystem).requestLoopThreadCreated = pthread_create(&(*serverSystem).requestLoopThread, NULL, function, argument) == PTHREAD_CREATE_SUCCESS;
+	if(!(*serverSystem).requestLoopThreadCreated){
+		(*serverSystem).requestLoopThreadRunning = false;
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+BOOTSERVEREVENTLOOPTHREAD(){
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	success = false;
+	if(!serverSystem){
+		ret false;
+	}
+	if((*serverSystem).eventLoopThreadCreated or (*serverSystem).eventLoopThreadRunning){
+		jmp emergencyExit;
+	}
+	(*serverSystem).eventLoopThreadRunning = true;
+	(*serverSystem).eventLoopThreadCreated = pthread_create(&(*serverSystem).eventLoopThread, NULL, function, argument) == PTHREAD_CREATE_SUCCESS;
+	if(!(*serverSystem).eventLoopThreadCreated){
+		(*serverSystem).eventLoopThreadRunning = false;
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+BOOTSERVERREGISTRATIONLOOPTHREAD(){
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	success = false;
+	if(!serverSystem){
+		ret false;
+	}
+	if((*serverSystem).registrationLoopThreadCreated or (*serverSystem).registrationLoopThreadRunning){
+		jmp emergencyExit;
+	}
+	(*serverSystem).registrationLoopThreadRunning = true;
+	(*serverSystem).registrationLoopThreadCreated = pthread_create(&(*serverSystem).registrationLoopThread, NULL, function, argument) == PTHREAD_CREATE_SUCCESS;
+	if(!(*serverSystem).registrationLoopThreadCreated){
+		(*serverSystem).registrationLoopThreadRunning = false;
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+REQUESTLOOPMAIN(){
+	ServerSystem *const serverSystem = *((void **)argument + 0);
+	DreitonCore *const dreitonCore = *((void **)argument + 1);
+	bool success;
+	if(!serverSystem or !dreitonCore){
+		ret NULL;
+	}
+	success = false;
+	jmp requestLoop;
+	requestLoop:{
+		DreitonServerTransportRequest transportRequest;
+		bool status = waitForDreitonCoreTransportRequest(dreitonCore, &transportRequest);
+		if(!(*serverSystem).requestLoopThreadRunning){
+			success = true;
+			jmp emergencyExit;
+		}
+		if(!status){
+			jmp requestLoop;
+		}
+		switch(transportRequest.operation){
+			to CONNECT_DREITON_TRANSPORT_REQUEST_OPERATION:{
+				if(!insertDreitonCoreClient(dreitonCore, transportRequest.clientId, transportRequest.dataSize, transportRequest.dataStart)){
+					free(transportRequest.dataStart);
+					jmp requestLoop;
+				}
+				free(transportRequest.dataStart);
+				jmp requestLoop;
+			}
+			to REQUEST_DREITON_TRANSPORT_REQUEST_OPERATION:{
+				if(!parseDreitonRequest(dreitonCore, &transportRequest)){
+					jmp requestLoop;
+				}
+				jmp requestLoop;
+			}
+			to DISCONNECT_DREITON_TRANSPORT_REQUEST_OPERATION:{
+				if(!removeDreitonCoreClient(dreitonCore, transportRequest.clientHandle)){
+					jmp requestLoop;
+				}
+				jmp requestLoop;
+			}
+			off:{
+				jmp requestLoop;
+			}
+		}
+	}
+	emergencyExit:{
+		if(!success){
+			ret NULL;
+		}
+		ret serverSystem;
+	}
+}
+PARSEDREITONREQUEST(){
+	uint32 current;
+	uint32 wall;
+	bool (*getDreitonCodecDecodedItem)(const void *const frame, const uint32 which, uint32 *const itemSizeReturn, void **const itemStartReturn);
+	DreitonCoreClient *client;
+	DreitonExtensionErrorSignature errorSignature;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!(*dreitonCore).codecDescriptor or !(*(*dreitonCore).codecDescriptor).getDreitonCodecDecodedItem or !findDreitonCoreClientId(dreitonCore, (*transportRequest).clientHandle, &client)){
+		jmp emergencyExit;
+	}
+	current = 0;
+	wall = (*transportRequest).requestAmount;
+	getDreitonCodecDecodedItem = (*(*dreitonCore).codecDescriptor).getDreitonCodecDecodedItem;
+	errorSignature.operation = NONE_DREITON_REQUEST_TYPE;
+	errorSignature.parameterOffset = 0;
+	errorSignature.value = 0;
+	jmp parseRequestLoop;
+	parseRequestLoop:{
+		if(current < wall){
+			DreitonRequest request;
+			DreitonRequestHeader *requestHeader;
+			void *frame;
+			uint16 type;
+			uint16 extensionId;
+			uint32 token = 0;
+			uint32 payloadItemAmount;
+			uint8 status = NONE_DREITON_REPLY_STATUS;
+			uint32 requestExtensionId;
+			DreitonCoreExtension *extension;
+			DreitonExtensionDescriptor *extensionDescriptor;
+			if(!decodeDreitonCoreRequest(dreitonCore, client, &request)){
+				status = FAILURE_DREITON_ERROR_STATUS;
+				jmp consumeRequest;
+			}
+			requestHeader = request.header;
+			frame = request.frame;
+			type = (*requestHeader).type;
+			extensionId = (*requestHeader).extension;
+			token = (*requestHeader).token;
+			if(!getDreitonCoreRequestPayloadItemAmount(dreitonCore, frame, &payloadItemAmount)){
+				errorSignature.operation = type;
+				status = FAILURE_DREITON_ERROR_STATUS;
+				jmp consumeRequest;
+			}
+			extension = NULL;
+			extensionDescriptor = NULL;
+			if(extensionId){
+				DreitonExtensionEventSignature eventSignature;
+				if(!isValidDreitonCoreExtension(dreitonCore, extensionId)){
+					errorSignature.operation = type;
+					status = FAILURE_DREITON_ERROR_STATUS;
+					jmp consumeRequest;
+				}
+				extension = (*dreitonCore).extensionStart + extensionId;
+				extensionDescriptor = (*extension).extensionDescriptor;
+				if(!(*extensionDescriptor).parseDreitonExtensionDescriptorRequest){
+					errorSignature.operation = type;
+					status = FAILURE_DREITON_ERROR_STATUS;
+					jmp consumeRequest;
+				}
+				eventSignature.status = NONE_DREITON_EVENT_STATUS;
+				if(!(*(*extensionDescriptor).parseDreitonExtensionDescriptorRequest)((*extension).extensionHandle, type, payloadItemAmount, frame, getDreitonCodecDecodedItem, &errorSignature, &eventSignature, &status)){
+					jmp consumeRequest;
+				}
+				if(eventSignature.status){
+					emitDreitonCoreEvent(dreitonCore, eventSignature.type, extensionId, /*! event token */ 1, eventSignature.status, eventSignature.itemAmount, eventSignature.sizeStart, eventSignature.dataStart);
+				}
+			}else{
+				switch(type){
+					to NONE_DREITON_REQUEST_TYPE:{
+						errorSignature.operation = type;
+						status = REQUEST_DREITON_ERROR_STATUS;
+						jmp consumeRequest;
+					}
+					to NO_OPERATION_DREITON_REQUEST_TYPE:{
+						if(payloadItemAmount != NO_OPERATION_DREITON_REQUEST_ITEM_AMOUNT){
+							errorSignature.operation = type;
+							errorSignature.value = payloadItemAmount;
+							status = PAYLOAD_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						status = SUCCESS_DREITON_REPLY_STATUS;
+						brk;
+					}
+					to SYNC_DREITON_REQUEST_TYPE:{
+						if(payloadItemAmount != SYNC_DREITON_REQUEST_ITEM_AMOUNT){
+							errorSignature.operation = type;
+							errorSignature.value = payloadItemAmount;
+							status = PAYLOAD_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						status = SUCCESS_DREITON_REPLY_STATUS;
+						brk;
+					}
+					to ENABLE_EXTENSION_DREITON_REQUEST_TYPE:{
+						uint32 extensionNameSize;
+						void *extensionNameStart;
+						if(payloadItemAmount != ENABLE_EXTENSION_DREITON_REQUEST_ITEM_AMOUNT){
+							errorSignature.operation = type;
+							errorSignature.value = payloadItemAmount;
+							status = PAYLOAD_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(!getDreitonCoreMessageDecodedItem(dreitonCore, frame, ENABLE_EXTENSION_PATH_DREITON_REQUEST_ITEM_OFFSET, &extensionNameSize, &extensionNameStart)){
+							errorSignature.operation = type;
+							status = FAILURE_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(*((char *)extensionNameStart + extensionNameSize - 1)){
+							errorSignature.operation = type;
+							errorSignature.parameterOffset = ENABLE_EXTENSION_PATH_DREITON_REQUEST_ITEM_OFFSET;
+							status = LENGTH_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(!loadDreitonCoreExtension(dreitonCore, extensionNameStart, &requestExtensionId)){
+							errorSignature.operation = type;
+							status = FAILURE_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						status = UPDATE_DREITON_REPLY_STATUS;
+						brk;
+					}
+					to APPLY_FOR_EVENT_DREITON_REQUEST_TYPE:{
+						uint32 extensionIdSize;
+						void *extensionIdStart;
+						uint32 eventMaskSize;
+						void *eventMaskStart;
+						if(payloadItemAmount != APPLY_FOR_EVENT_DREITON_REQUEST_ITEM_AMOUNT){
+							errorSignature.operation = type;
+							errorSignature.value = payloadItemAmount;
+							status = PAYLOAD_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(!getDreitonCoreMessageDecodedItem(dreitonCore, frame, APPLY_FOR_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET, &extensionIdSize, &extensionIdStart)){
+							errorSignature.operation = type;
+							status = FAILURE_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(extensionIdSize != sizeof(uint32)){
+							errorSignature.operation = type;
+							errorSignature.parameterOffset = APPLY_FOR_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET;
+							status = LENGTH_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(!getDreitonCoreMessageDecodedItem(dreitonCore, frame, APPLY_FOR_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET, &eventMaskSize, &eventMaskStart)){
+							errorSignature.operation = type;
+							status = FAILURE_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(eventMaskSize != sizeof(uint32)){
+							errorSignature.operation = type;
+							errorSignature.parameterOffset = APPLY_FOR_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET;
+							status = LENGTH_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(!subscribeToDreitonCoreEvent(dreitonCore, client, *(uint32 *)extensionIdStart, *(uint32 *)eventMaskStart)){
+							errorSignature.operation = type;
+							status = FAILURE_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						status = SUCCESS_DREITON_REPLY_STATUS;
+						brk;
+					}
+					to WITHDRAW_FROM_EVENT_DREITON_REQUEST_TYPE:{
+						uint32 extensionIdSize;
+						void *extensionIdStart;
+						uint32 eventMaskSize;
+						void *eventMaskStart;
+						if(payloadItemAmount != WITHDRAW_FROM_EVENT_DREITON_REQUEST_ITEM_AMOUNT){
+							errorSignature.operation = type;
+							errorSignature.value = payloadItemAmount;
+							status = PAYLOAD_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(!getDreitonCoreMessageDecodedItem(dreitonCore, frame, WITHDRAW_FROM_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET, &extensionIdSize, &extensionIdStart)){
+							errorSignature.operation = type;
+							status = FAILURE_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(extensionIdSize != sizeof(uint32)){
+							errorSignature.operation = type;
+							errorSignature.parameterOffset = WITHDRAW_FROM_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET;
+							status = LENGTH_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(!getDreitonCoreMessageDecodedItem(dreitonCore, frame, WITHDRAW_FROM_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET, &eventMaskSize, &eventMaskStart)){
+							errorSignature.operation = type;
+							status = FAILURE_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(eventMaskSize != sizeof(uint32)){
+							errorSignature.operation = type;
+							errorSignature.parameterOffset = WITHDRAW_FROM_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET;
+							status = LENGTH_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						if(!unsubscribeFromDreitonCoreEvent(dreitonCore, client, *(uint32 *)extensionIdStart, *(uint32 *)eventMaskStart)){
+							errorSignature.operation = type;
+							status = FAILURE_DREITON_ERROR_STATUS;
+							jmp consumeRequest;
+						}
+						status = SUCCESS_DREITON_REPLY_STATUS;
+						brk;
+					}
+					off:{
+						errorSignature.operation = type;
+						status = REQUEST_DREITON_ERROR_STATUS;
+						jmp consumeRequest;
+					}
+				}
+			}
+			if(!((*requestHeader).flags & SEND_REPLY_DREITON_REQUEST_FLAG)){
+				jmp consumeRequest;
+			}
+			if(extensionId){
+				DreitonExtensionReplySignature replySignature;
+				if(!(*extensionDescriptor).parseDreitonExtensionDescriptorReply){
+					errorSignature.operation = type;
+					status = FAILURE_DREITON_ERROR_STATUS;
+					jmp consumeRequest;
+				}
+				replySignature.status = NONE_DREITON_REPLY_STATUS;
+				if(!(*(*extensionDescriptor).parseDreitonExtensionDescriptorReply)((*extension).extensionHandle, type, &replySignature)){
+					jmp consumeRequest;
+				}
+				if(replySignature.status){
+					sendDreitonCoreReply(dreitonCore, client, replySignature.type, extensionId, token, replySignature.status, replySignature.itemAmount, replySignature.sizeStart, replySignature.dataStart);
+				}
+			}else{
+				switch(type){
+					to NONE_DREITON_REPLY_TYPE:{
+						jmp consumeRequest;
+					}
+					to NO_OPERATION_DREITON_REPLY_TYPE:{
+						sendDreitonCoreReply(dreitonCore, client, NO_OPERATION_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, NO_OPERATION_DREITON_REPLY_ITEM_AMOUNT, NULL, NULL);
+						jmp consumeRequest;
+					}
+					to SYNC_DREITON_REPLY_TYPE:{
+						sendDreitonCoreReply(dreitonCore, client, SYNC_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, SYNC_DREITON_REPLY_ITEM_AMOUNT, NULL, NULL);
+						jmp consumeRequest;
+					}
+					to ENABLE_EXTENSION_DREITON_REPLY_TYPE:{
+						const void *dataStart[ENABLE_EXTENSION_DREITON_REPLY_ITEM_AMOUNT];
+						uint32 sizeStart[ENABLE_EXTENSION_DREITON_REPLY_ITEM_AMOUNT];
+						*(dataStart + ENABLE_EXTENSION_EXTENSION_DREITON_REPLY_ITEM_OFFSET) = &requestExtensionId;
+						*(sizeStart + ENABLE_EXTENSION_EXTENSION_DREITON_REPLY_ITEM_OFFSET) = sizeof(uint32);
+						sendDreitonCoreReply(dreitonCore, client, ENABLE_EXTENSION_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, ENABLE_EXTENSION_DREITON_REPLY_ITEM_AMOUNT, sizeStart, dataStart);
+						jmp consumeRequest;
+					}
+					to APPLY_FOR_EVENT_DREITON_REPLY_TYPE:{
+						sendDreitonCoreReply(dreitonCore, client, APPLY_FOR_EVENT_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, APPLY_FOR_EVENT_DREITON_REPLY_ITEM_AMOUNT, NULL, NULL);
+						jmp consumeRequest;
+					}
+					to WITHDRAW_FROM_EVENT_DREITON_REPLY_TYPE:{
+						sendDreitonCoreReply(dreitonCore, client, WITHDRAW_FROM_EVENT_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, WITHDRAW_FROM_EVENT_DREITON_REPLY_ITEM_AMOUNT, NULL, NULL);
+						jmp consumeRequest;
+					}
+					off:{
+						jmp consumeRequest;
+					}
+				}
+			}
+			consumeRequest:{
+				if(status & ERROR_FLAG_DREITON_STATUS_MASK and token){
+					fprintf(stdout, "server   : error code %u for type %u\n", status & ~ERROR_FLAG_DREITON_STATUS_MASK, type);
+					if((*requestHeader).flags & SEND_REPLY_DREITON_REQUEST_FLAG){
+						sendDreitonCoreErrorReply(dreitonCore, client, NONE_DREITON_REPLY_TYPE, extensionId, token, status, errorSignature.parameterOffset, errorSignature.operation, errorSignature.value);
+						fprintf(stdout, "server   : \\ error sent back for token %u\n", token);
+					}else{
+						sendDreitonCoreErrorEvent(dreitonCore, client, NONE_DREITON_EVENT_TYPE, extensionId, token, status, errorSignature.parameterOffset, errorSignature.operation, errorSignature.value);
+						fprintf(stdout, "server   : \\ error sent back for token %u as event\n", token);
+					}
+					errorSignature.operation = NONE_DREITON_REQUEST_TYPE;
+					errorSignature.parameterOffset = 0;
+					errorSignature.value = 0;
+				}
+				consumeDreitonCoreRequest(dreitonCore, client);
+				fprintf(stdout, "server   : parsed and consumed request for client %lu\n", (*transportRequest).clientId);
+				inc current;
+				jmp parseRequestLoop;
+			}
+		}
+		success = true;
+		jmp emergencyExit;
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+EVENTLOOPMAIN(){
+	ServerSystem *const serverSystem = *((void **)argument + 0);
+	DreitonCore *const dreitonCore = *((void **)argument + 1);
+	bool success;
+	if(!serverSystem or !dreitonCore){
+		ret NULL;
+	}
+	success = false;
+	jmp eventLoop;
+	eventLoop:{
+		uint32 extensionId;
+		uint32 eventType;
+		bool status = waitForDreitonCoreTransportEvent(dreitonCore, &extensionId, &eventType);
+		if(!(*serverSystem).eventLoopThreadRunning){
+			success = true;
+			jmp emergencyExit;
+		}
+		if(!status){
+			jmp eventLoop;
+		}
+		fprintf(stdout, "event loop woke, and it did fuck all\n");
+#ifdef a
+		if(!emitDreitonCoreEvent(dreitonCore, extensionId, eventType)){
+/*! if(!emitDreitonCoreEvent(dreitonCore, eventType, extensionId, /*! event token */ 1, status, itemAmount, sizeStart, dataStart)){ */
+			jmp eventLoop;
+		}
+#endif
+		jmp eventLoop;
+	}
+	emergencyExit:{
+		if(!success){
+			ret NULL;
+		}
+		ret serverSystem;
+	}
+}
+REGISTRATIONLOOPMAIN(){
+	ServerSystem *const serverSystem = *((void **)argument + 0);
+	DreitonCore *const dreitonCore = *((void **)argument + 1);
+	bool success;
+	if(!serverSystem or !dreitonCore){
+		ret NULL;
+	}
+	success = false;
+	jmp registrationLoop;
+	registrationLoop:{
+		DreitonCoreUuid clientUuid;
+		bool hasSeat;
+
+
+
+		/*! put this lower down for reasons of consistency with the above? */
+
+		if(!(*serverSystem).registrationLoopThreadRunning){
+			success = true;
+			jmp emergencyExit;
+		}
+
+
+
+		if(!waitForDreitonCoreTransportRegistration(dreitonCore, sizeof(DreitonCoreUuid), &clientUuid)){
+			jmp registrationLoop;
+		}
+		hasSeat = generateUuidV7(&clientUuid);
+		if(!handshakeDreitonCoreTransportRegistration(dreitonCore, hasSeat, sizeof(DreitonCoreUuid), &clientUuid)){
+			jmp registrationLoop;
+		}
+		if(!hasSeat){
+			jmp registrationLoop;
+		}
+		if(!consumeDreitonCoreTransportRegistration(dreitonCore)){
+			jmp registrationLoop;
+		}
+		jmp registrationLoop;
+	}
+	emergencyExit:{
+		if(!success){
+			ret NULL;
+		}
+		ret serverSystem;
+	}
+}
+QUITSERVERREGISTRATIONLOOPTHREAD(){
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	success = false;
+	if(!(*serverSystem).registrationLoopThreadRunning){
+		jmp emergencyExit;
+	}
+	(*serverSystem).registrationLoopThreadRunning = false;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+QUITSERVERREQUESTLOOPTHREAD(){
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	success = false;
+	if(!(*serverSystem).requestLoopThreadRunning){
+		jmp emergencyExit;
+	}
+	(*serverSystem).requestLoopThreadRunning = false;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+QUITSERVEREVENTLOOPTHREAD(){
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	success = false;
+	if(!(*serverSystem).eventLoopThreadRunning){
+		jmp emergencyExit;
+	}
+	(*serverSystem).eventLoopThreadRunning = false;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+AWAITSERVERREGISTRATIONLOOPTHREADEXIT(){
+	void *serverSystemReturn;
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	success = false;
+	if(!(*serverSystem).registrationLoopThreadCreated){
+		jmp emergencyExit;
+	}
+	if(pthread_join((*serverSystem).registrationLoopThread, &serverSystemReturn) != PTHREAD_JOIN_SUCCESS){
+		jmp emergencyExit;
+	}
+	(*serverSystem).registrationLoopThreadCreated = false;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+AWAITSERVERREQUESTLOOPTHREADEXIT(){
+	void *serverSystemReturn;
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	success = false;
+	if(!(*serverSystem).requestLoopThreadCreated){
+		jmp emergencyExit;
+	}
+	if(pthread_join((*serverSystem).requestLoopThread, &serverSystemReturn) != PTHREAD_JOIN_SUCCESS){
+		jmp emergencyExit;
+	}
+	(*serverSystem).requestLoopThreadCreated = false;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+AWAITSERVEREVENTLOOPTHREADEXIT(){
+	void *serverSystemReturn;
+	bool success;
+	if(!serverSystem){
+		ret false;
+	}
+	success = false;
+	if(!(*serverSystem).eventLoopThreadCreated){
+		jmp emergencyExit;
+	}
+	if(pthread_join((*serverSystem).eventLoopThread, &serverSystemReturn) != PTHREAD_JOIN_SUCCESS){
+		jmp emergencyExit;
+	}
+	(*serverSystem).eventLoopThreadCreated = false;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+FINISERVERSYSTEM(){
+	if((*serverSystem).registrationLoopThreadCreated){
+		quitServerRegistrationLoopThread(serverSystem);
+		awaitServerRegistrationLoopThreadExit(serverSystem);
+	}
+	if((*serverSystem).requestLoopThreadCreated){
+		quitServerRequestLoopThread(serverSystem);
+		awaitServerRequestLoopThreadExit(serverSystem);
+	}
+	if((*serverSystem).eventLoopThreadCreated){
+		quitServerEventLoopThread(serverSystem);
+		awaitServerEventLoopThreadExit(serverSystem);
+	}
+	(*serverSystem).registrationLoopThreadRunning = false;
+	(*serverSystem).requestLoopThreadRunning = false;
+	(*serverSystem).eventLoopThreadRunning = false;
+	(*serverSystem).registrationLoopThreadCreated = false;
+	(*serverSystem).requestLoopThreadCreated = false;
+	(*serverSystem).eventLoopThreadCreated = false;
+	ret true;
 }
 

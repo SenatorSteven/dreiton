@@ -30,24 +30,25 @@ true=1;
 false=0;
 
 function main(){
-	[ $true        ] && { local name="dreiton-core";                                       } || :;
-	[ $true        ] && { local folder="/tmp/$name";                                       } || :;
-	[ $true        ] && { local libraries="";                                              } || :;
-	[ $true        ] && { local parameters=();                                             } || :;
-	[ $true        ] && { cd "${BASH_SOURCE%/*}";                                          } || :;
-	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2; return 1; } || :;
-	[ $true        ] && { rm -rf "$folder";                                                } || :;
-	[ $true        ] && { parameters+=(shared);                                            } || :;
-	[ $true        ] && { parameters+=(header-folder "headers");                           } || :;
-	[ $true        ] && { parameters+=(source-folder "source");                            } || :;
-	[ $true        ] && { parameters+=(debug-folder "$folder/debug");                      } || :;
-	[ $true        ] && { parameters+=(output-folder "$folder/output");                    } || :;
-	[ $true        ] && { parameters+=(record-folder "$folder/record");                    } || :;
-	[ $true        ] && { parameters+=(includes "-I$(pwd)");                               } || :;
-	[ $true        ] && { parameters+=(mains "$name");                                     } || :;
-	[ $true        ] && { parameters+=(executables "$name");                               } || :;
-	[ $true        ] && { parameters+=(libraries "$libraries");                            } || :;
-	[ $true        ] && { ./compile/compile.sh "${parameters[@]}" "$@";          return 0; } || :;
+	[ $true        ] && { local name="${NAME%-compile.sh}";                                                           } || :;
+	[ $true        ] && { local folder="/tmp/$name";                                                                  } || :;
+	[ $true        ] && { local executableName="lib$name.so.0";                                                       } || :;
+	[ $true        ] && { local libraries="";                                                                         } || :;
+	[ $true        ] && { local parameters=();                                                                        } || :;
+	[ $true        ] && { cd "${BASH_SOURCE%/*}";                                                                     } || :;
+	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2;                            return 1; } || :;
+	[ $true        ] && { parameters+=(shared "$executableName");                                                     } || :;
+	[ $true        ] && { parameters+=(header-folder "headers");                                                      } || :;
+	[ $true        ] && { parameters+=(source-folder "source");                                                       } || :;
+	[ $true        ] && { parameters+=(debug-folder "$folder/debug");                                                 } || :;
+	[ $true        ] && { parameters+=(output-folder "$folder/output");                                               } || :;
+	[ $true        ] && { parameters+=(record-folder "$folder/record");                                               } || :;
+	[ $true        ] && { parameters+=(includes "-I$(pwd)");                                                          } || :;
+	[ $true        ] && { parameters+=(mains "$name");                                                                } || :;
+	[ $true        ] && { parameters+=(executables "$executableName");                                                } || :;
+	[ $true        ] && { parameters+=(libraries "$libraries");                                                       } || :;
+	[ $true        ] && { ./compile/compile.sh "${parameters[@]}" "$@";                                               } || :;
+	[ $true        ] && { ln -s "$folder/output/$executableName" "$folder/output/lib$name.so" &> /dev/null; return 0; } || :;
 }
 
 main "$@";

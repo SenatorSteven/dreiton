@@ -1,5 +1,5 @@
 
-/*! dreiton-transport.hold
+/*! dreiton-tcp-transport.hold
 
 MIT License
 
@@ -23,25 +23,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#ifndef DREITON_TRANSPORT_HOLD
-#define DREITON_TRANSPORT_HOLD
+#ifndef DREITON_TCP_TRANSPORT_HOLD
+#define DREITON_TCP_TRANSPORT_HOLD
 
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
 #include "headers/cold/cold.hold"
 #endif
 
+#define DREITON_TCP_TRANSPORT_PROTOCOL_VERSION /*--*/ (1)
+#define DREITON_TCP_TRANSPORT_TRANSPORT_VERSION /*-*/ (1)
+#define DREITON_TCP_TRANSPORT_TRANSPORT_NAME /*----*/ ("tcp")
+#define DREITON_TCP_TRANSPORT_AUTHOR_NAME /*-------*/ ("senator")
+
 def struct{
-	bool /*-*/ (*initDreitonTransportDescriptor)(void);
-	bool /*-*/ (*createDreitonTransportDescriptor)(void);
-	bool /*-*/ (*createDreitonTransportDescriptorClientBuffer)(void);
-	bool /*-*/ (*waitForDreitonTransportDescriptorRequest)(void);
-	bool /*-*/ (*sendDreitonTransportDescriptorMessage)(const uint32 size, const void *const buffer);
-	bool /*-*/ (*receiveDreitonTransportDescriptorMessage)(uint32 *const size, void *const *const buffer);
-	bool /*-*/ (*destroyDreitonTransportDescriptorClientBuffer)(void);
-	bool /*-*/ (*findDreitonTransportDescriptorClient)(void);
-	bool /*-*/ (*finiDreitonTransportDescriptor)(void);
-} DreitonTransportDescriptor;
+	const char * /*-*/ ipPort;
+} DreitonTcpTransportConnectionDescription;
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED

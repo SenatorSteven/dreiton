@@ -1,0 +1,126 @@
+
+/*!
+	what about event? make functions for that as well.
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*! dreiton-base-extension-helpers.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef DREITON_BASE_EXTENSION_HELPERS_HOLD
+#define DREITON_BASE_EXTENSION_HELPERS_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+extern uint16 /*-*/ baseExtensionId;
+
+#define REQUESTDREITONBASEENABLEEXTENSION() /*----------------*/        bool  requestDreitonBaseEnableExtension(Dreiton *const dreiton, uint32 *const tokenReturn)
+#define REQUESTDREITONBASEAPPLYFOREVENT() /*------------------*/        bool  requestDreitonBaseApplyForEvent(Dreiton *const dreiton, const uint32 eventMask, uint32 *const tokenReturn)
+#define REQUESTDREITONBASEGETMAGICNUMBER() /*-----------------*/        bool  requestDreitonBaseGetMagicNumber(Dreiton *const dreiton, uint32 *const tokenReturn)
+#define REQUESTDREITONBASESETMAGICNUMBER() /*-----------------*/        bool  requestDreitonBaseSetMagicNumber(Dreiton *const dreiton, const uint32 magicNumber, uint32 *const tokenReturn)
+#define WAITFORDREITONBASEENABLEEXTENSIONREPLY() /*-----------*/ inline bool  waitForDreitonBaseEnableExtensionReply(Dreiton *const dreiton, const uint32 token, EnableExtensionDreitonBaseReply **const replyReturn)
+#define WAITFORDREITONBASEAPPLYFOREVENTREPLY() /*-------------*/ inline bool  waitForDreitonBaseApplyForEventReply(Dreiton *const dreiton, const uint32 token, ApplyForEventDreitonBaseReply **const replyReturn)
+#define WAITFORDREITONBASEGETMAGICNUMBERREPLY() /*------------*/ inline bool  waitForDreitonBaseGetMagicNumberReply(Dreiton *const dreiton, const uint32 token, GetMagicNumberDreitonBaseReply **const replyReturn)
+#define WAITFORDREITONBASESETMAGICNUMBERREPLY() /*------------*/ inline bool  waitForDreitonBaseSetMagicNumberReply(Dreiton *const dreiton, const uint32 token, SetMagicNumberDreitonBaseReply **const replyReturn)
+#define WAITFORDREITONBASEENABLEEXTENSIONUNCONSUMEDREPLY() /*-*/ inline bool  waitForDreitonBaseEnableExtensionUnconsumedReply(Dreiton *const dreiton, const uint32 token, EnableExtensionDreitonBaseReply *const replyReturn)
+#define WAITFORDREITONBASEAPPLYFOREVENTUNCONSUMEDREPLY() /*---*/ inline bool  waitForDreitonBaseApplyForEventUnconsumedReply(Dreiton *const dreiton, const uint32 token, ApplyForEventDreitonBaseReply *const replyReturn)
+#define WAITFORDREITONBASEGETMAGICNUMBERUNCONSUMEDREPLY() /*--*/ inline bool  waitForDreitonBaseGetMagicNumberUnconsumedReply(Dreiton *const dreiton, const uint32 token, GetMagicNumberDreitonBaseReply *const replyReturn)
+#define WAITFORDREITONBASESETMAGICNUMBERUNCONSUMEDREPLY() /*--*/ inline bool  waitForDreitonBaseSetMagicNumberUnconsumedReply(Dreiton *const dreiton, const uint32 token, SetMagicNumberDreitonBaseReply *const replyReturn)
+#define GETDREITONBASEENABLEEXTENSIONREPLYMAGICNUMBER() /*----*/        bool  getDreitonBaseEnableExtensionReplyMagicNumber(Dreiton *const dreiton, EnableExtensionDreitonBaseReply *const reply, uint16 *const extensionReturn)
+#define GETDREITONBASEGETMAGICNUMBERREPLYMAGICNUMBER() /*-----*/        bool  getDreitonBaseGetMagicNumberReplyMagicNumber(Dreiton *const dreiton, GetMagicNumberDreitonBaseReply *const reply, uint32 *const magicNumberReturn)
+#define CONSUMEDREITONBASEENABLEEXTENSIONREPLY() /*-----------*/ inline bool  consumeDreitonBaseEnableExtensionReply(Dreiton *const dreiton, EnableExtensionDreitonBaseReply *const reply)
+#define CONSUMEDREITONBASEAPPLYFOREVENTREPLY() /*-------------*/ inline bool  consumeDreitonBaseApplyForEventReply(Dreiton *const dreiton, ApplyForEventDreitonBaseReply *const reply)
+#define CONSUMEDREITONBASEGETMAGICNUMBERREPLY() /*------------*/ inline bool  consumeDreitonBaseGetMagicNumberReply(Dreiton *const dreiton, GetMagicNumberDreitonBaseReply *const reply)
+#define CONSUMEDREITONBASESETMAGICNUMBERREPLY() /*------------*/ inline bool  consumeDreitonBaseSetMagicNumberReply(Dreiton *const dreiton, SetMagicNumberDreitonBaseReply *const reply)
+#define ISDREITONBASEEXTENSIONEVENT() /*----------------------*/ inline bool  isDreitonBaseExtensionEvent(const uint16 extension)
+#define GETDREITONBASEMAGICNUMBERCHANGEDEVENTMAGICNUMBER() /*-*/        bool  getDreitonBaseMagicNumberChangedEventMagicNumber(Dreiton *const dreiton, MagicNumberChangedDreitonBaseEvent *const event, uint32 *const magicNumberReturn)
+#define PRINTDREITONBASEEVENT() /*----------------------------*/        bool  printDreitonBaseEvent(DreitonEvent *const event)
+#define PRINTDREITONBASEERROR() /*----------------------------*/        bool  printDreitonBaseError(DreitonError *const error)
+
+#define IS_DREITON_BASE_EXTENSION_EVENT(extension) /*---------*/ (extension == baseExtensionId)
+
+def DreitonReply /*-*/ EnableExtensionDreitonBaseReply;
+def DreitonReply /*-*/ ApplyForEventDreitonBaseReply;
+def DreitonReply /*-*/ GetMagicNumberDreitonBaseReply;
+def DreitonReply /*-*/ SetMagicNumberDreitonBaseReply;
+def DreitonEvent /*-*/ MagicNumberChangedDreitonBaseEvent;
+
+REQUESTDREITONBASEENABLEEXTENSION();
+REQUESTDREITONBASEAPPLYFOREVENT();
+REQUESTDREITONBASEGETMAGICNUMBER();
+REQUESTDREITONBASESETMAGICNUMBER();
+WAITFORDREITONBASEENABLEEXTENSIONREPLY();
+WAITFORDREITONBASEAPPLYFOREVENTREPLY();
+WAITFORDREITONBASEGETMAGICNUMBERREPLY();
+WAITFORDREITONBASESETMAGICNUMBERREPLY();
+WAITFORDREITONBASEENABLEEXTENSIONUNCONSUMEDREPLY();
+WAITFORDREITONBASEAPPLYFOREVENTUNCONSUMEDREPLY();
+WAITFORDREITONBASEGETMAGICNUMBERUNCONSUMEDREPLY();
+WAITFORDREITONBASESETMAGICNUMBERUNCONSUMEDREPLY();
+GETDREITONBASEENABLEEXTENSIONREPLYMAGICNUMBER();
+GETDREITONBASEGETMAGICNUMBERREPLYMAGICNUMBER();
+CONSUMEDREITONBASEENABLEEXTENSIONREPLY();
+CONSUMEDREITONBASEAPPLYFOREVENTREPLY();
+CONSUMEDREITONBASEGETMAGICNUMBERREPLY();
+CONSUMEDREITONBASESETMAGICNUMBERREPLY();
+ISDREITONBASEEXTENSIONEVENT();
+GETDREITONBASEMAGICNUMBERCHANGEDEVENTMAGICNUMBER();
+PRINTDREITONBASEEVENT();
+PRINTDREITONBASEERROR();
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+

@@ -30,17 +30,16 @@ true=1;
 false=0;
 
 function main(){
-	[ $true        ] && { local name="client";                                                                                                        } || :;
+	[ $true        ] && { local name="${NAME%-compile.sh}";                                                                                           } || :;
 	[ $true        ] && { local folder="/tmp/$name";                                                                                                  } || :;
-	[ $true        ] && { local dreitonCodec="/tmp/dreiton-codec/output/libdreiton-codec";                                                            } || :;
+	[ $true        ] && { local executableName="$name";                                                                                               } || :;
 	[ $true        ] && { local dreiton="/tmp/dreiton/output/libdreiton";                                                                             } || :;
 	[ $true        ] && { local dreitonHelpers="/tmp/dreiton-helpers/output/libdreiton-helpers";                                                      } || :;
 	[ $true        ] && { local dreitonBaseExtensionHelpers="/tmp/dreiton-base-extension-helpers/output/libdreiton-base-extension-helpers";           } || :;
-	[ $true        ] && { local libraries="$dreitonCodec.so $dreiton.so $dreitonHelpers.so $dreitonBaseExtensionHelpers.so";                          } || :;
+	[ $true        ] && { local libraries="$dreiton.so $dreitonHelpers.so $dreitonBaseExtensionHelpers.so";                                           } || :;
 	[ $true        ] && { local parameters=();                                                                                                        } || :;
 	[ $true        ] && { cd "${BASH_SOURCE%/*}";                                                                                                     } || :;
 	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2;                                                            return 1; } || :;
-	[ $true        ] && { rm -rf "$folder";                                                                                                           } || :;
 	[ $true        ] && { parameters+=(header-folder "headers");                                                                                      } || :;
 	[ $true        ] && { parameters+=(source-folder "source");                                                                                       } || :;
 	[ $true        ] && { parameters+=(debug-folder "$folder/debug");                                                                                 } || :;
@@ -48,7 +47,7 @@ function main(){
 	[ $true        ] && { parameters+=(record-folder "$folder/record");                                                                               } || :;
 	[ $true        ] && { parameters+=(includes "-I$(pwd)");                                                                                          } || :;
 	[ $true        ] && { parameters+=(mains "$name");                                                                                                } || :;
-	[ $true        ] && { parameters+=(executables "$name");                                                                                          } || :;
+	[ $true        ] && { parameters+=(executables "$executableName");                                                                                } || :;
 	[ $true        ] && { parameters+=(libraries "$libraries");                                                                                       } || :;
 	[ $true        ] && { ./compile/compile.sh "${parameters[@]}" "$@";                                                                     return 0; } || :;
 }

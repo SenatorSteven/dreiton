@@ -152,3 +152,85 @@ Loader design choices still affect:
 Minecraft’s ecosystem looks chaotic because Mojang collapsed multiple responsibilities into one monolith and left extension unsupported. The community responded by re-introducing missing layers.
 What you are doing with your server is not unusual or redundant — it is actually architecturally clean.
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+				 ┌────────────────────┐
+				 │    Application     │
+				 └─────────┬──────────┘
+				           │
+		┌──────────────────┴────────────────┐
+		│                Core               │
+		│  ┌─────────────┐  ┌─────────────┐ │
+		│  │ Extension A │  │ Extension B │ │
+		│  └─────────────┘  └─────────────┘ │
+		│     (in-process, same memory)     │
+		└──────────────────┬────────────────┘
+				           │
+				 ┌─────────┴──────────┐
+				 │   Client Library   │
+				 └─────────┬──────────┘
+				           │
+				 ┌─────────┴──────────┐
+				 │     Transport      │
+				 └─────────┬──────────┘
+				           │
+				 ┌─────────┴──────────┐
+				 │       Codec        │
+				 └─────────┬──────────┘
+				           │
+				     Network / OS
+
+
+
+
+
+
+
+
+
+		+--------------------------------------------------+
+		|                 Application Logic                |
+		+--------------------------------------------------+
+		|              Server Library (Core)               |
+		|  +--------------------------------------------+  |
+		|  |            In-Process Extensions           |  |
+		|  |  (plugins, filters, auth, interceptors)    |  |
+		|  +--------------------------------------------+  |
+		+--------------------------------------------------+
+		|                Client Library API                |
+		+--------------------------------------------------+
+		|                   Transport                      |
+		|          (TCP / QUIC / HTTP2 / etc.)             |
+		+--------------------------------------------------+
+		|                     Codec                        |
+		|          (Protobuf / JSON / Avro / etc.)         |
+		+--------------------------------------------------+
+		|                 Operating System                 |
+		+--------------------------------------------------+
+		|                    Hardware                      |
+		+--------------------------------------------------+
+
+
+
+
+
+
+
+
+

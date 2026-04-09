@@ -1,5 +1,5 @@
 
-/*! dreiton-codec.hold
+/*! dreiton-tcp-transport.cold
 
 MIT License
 
@@ -23,24 +23,21 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#ifndef DREITON_CODEC_HOLD
-#define DREITON_CODEC_HOLD
+#ifdef a
+def struct{
+	int32 /*-----*/ fd;
+} Client;
 
-#ifndef COLD_HOLD
-#define COLD_INCLUDED
-#include "headers/cold/cold.hold"
-#endif
+def struct{
+	Client * /*--*/ clientStart;
+	uint32 /*----*/ clientSize;
+	uint32 /*----*/ clientAllocated;
+	uint32 /*----*/ clientBlockSize;
+	uint32 /*----*/ concurrentConnectionAmount;
+	int32 /*-----*/ socketFd;
+	uint8 /*-----*/ pad0[4];
+} Backend;
 
-#define PACKDREITONMESSAGE() /*---*/ bool  packDreitonMessage(const void *const message, const uint32 itemAmount, void *const structStart)
-#define UNPACKDREITONMESSAGE() /*-*/ bool  unpackDreitonMessage(const void *const message, const uint32 itemAmount, void *const structStartReturn)
-
-PACKDREITONMESSAGE();
-UNPACKDREITONMESSAGE();
-
-#ifdef  COLD_INCLUDED
-#undef  COLD_INCLUDED
-#include "headers/cold/hot.hold"
-#endif
-
+local Backend /*-*/ backend;
 #endif
 

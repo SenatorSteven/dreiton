@@ -1,0 +1,283 @@
+
+/*! dreiton-base-extension-helpers.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#include "headers/cold/cold.hold"
+#include "headers/protocols/dreiton-protocol.hold"
+#include "headers/protocols/dreiton-transport-protocol.hold"
+#include "headers/protocols/dreiton-codec-protocol.hold"
+#include "headers/dreiton.hold"
+#include "headers/dreiton-base-extension.hold"
+#include "headers/helpers/dreiton-base-extension-helpers.hold"
+
+uint16 /*-*/ baseExtensionId = 0xFFFF;
+
+REQUESTDREITONBASEENABLEEXTENSION(){
+	const void *dataStart[ENABLE_EXTENSION_DREITON_REQUEST_ITEM_AMOUNT];
+	uint32 sizeStart[ENABLE_EXTENSION_DREITON_REQUEST_ITEM_AMOUNT];
+	*(dataStart + ENABLE_EXTENSION_PATH_DREITON_REQUEST_ITEM_OFFSET) = DREITON_BASE_OBJECT_NAME;
+	*(sizeStart + ENABLE_EXTENSION_PATH_DREITON_REQUEST_ITEM_OFFSET) = DREITON_BASE_OBJECT_NAME_LENGTH;
+	ret sendDreitonRequest(dreiton, ENABLE_EXTENSION_DREITON_REQUEST_TYPE, NONE_DREITON_EXTENSION, ENABLE_EXTENSION_DREITON_REQUEST_ITEM_AMOUNT, sizeStart, dataStart, tokenReturn);
+}
+REQUESTDREITONBASEAPPLYFOREVENT(){
+	const void *dataStart[APPLY_FOR_EVENT_DREITON_REQUEST_ITEM_AMOUNT];
+	uint32 sizeStart[APPLY_FOR_EVENT_DREITON_REQUEST_ITEM_AMOUNT];
+	*(dataStart + APPLY_FOR_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET) = (void *)&baseExtensionId;
+	*(sizeStart + APPLY_FOR_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET) = sizeof(uint32);
+	*(dataStart + APPLY_FOR_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET) = (void *)&eventMask;
+	*(sizeStart + APPLY_FOR_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET) = sizeof(uint32);
+	ret sendDreitonRequest(dreiton, APPLY_FOR_EVENT_DREITON_REQUEST_TYPE, NONE_DREITON_EXTENSION, APPLY_FOR_EVENT_DREITON_REQUEST_ITEM_AMOUNT, sizeStart, dataStart, tokenReturn);
+}
+REQUESTDREITONBASEGETMAGICNUMBER(){
+	ret sendDreitonRequest(dreiton, GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE, baseExtensionId, GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT, NULL, NULL, tokenReturn);
+}
+REQUESTDREITONBASESETMAGICNUMBER(){
+	const void *dataStart[SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT];
+	uint32 sizeStart[SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT];
+	*(dataStart + SET_MAGIC_NUMBER_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_OFFSET) = &magicNumber;
+	*(sizeStart + SET_MAGIC_NUMBER_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_OFFSET) = sizeof(uint32);
+	ret sendDreitonRequest(dreiton, SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE, baseExtensionId, SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT, sizeStart, dataStart, tokenReturn);
+}
+WAITFORDREITONBASEENABLEEXTENSIONREPLY(){
+	const bool status = waitForDreitonReply(dreiton, token, replyReturn);
+	if(status and !((*(**replyReturn).header).status & ERROR_FLAG_DREITON_STATUS_MASK)){
+		uint32 size;
+		void *start;
+		getDreitonMessageDecodedItem(dreiton, (**replyReturn).frame, ENABLE_EXTENSION_EXTENSION_DREITON_REPLY_ITEM_OFFSET, &size, &start);
+		baseExtensionId = *(uint32 *)start;
+	}
+	ret status;
+}
+WAITFORDREITONBASEAPPLYFOREVENTREPLY(){
+	ret waitForDreitonReply(dreiton, token, replyReturn);
+}
+WAITFORDREITONBASEGETMAGICNUMBERREPLY(){
+	ret waitForDreitonReply(dreiton, token, replyReturn);
+}
+WAITFORDREITONBASESETMAGICNUMBERREPLY(){
+	ret waitForDreitonReply(dreiton, token, replyReturn);
+}
+WAITFORDREITONBASEENABLEEXTENSIONUNCONSUMEDREPLY(){
+	const bool status = waitForDreitonUnconsumedReply(dreiton, token, replyReturn);
+	if(status and !((*(*replyReturn).header).status & ERROR_FLAG_DREITON_STATUS_MASK)){
+		uint32 size;
+		void *start;
+		getDreitonMessageDecodedItem(dreiton, (*replyReturn).frame, ENABLE_EXTENSION_EXTENSION_DREITON_REPLY_ITEM_OFFSET, &size, &start);
+		baseExtensionId = *(uint32 *)start;
+	}
+	ret status;
+}
+WAITFORDREITONBASEAPPLYFOREVENTUNCONSUMEDREPLY(){
+	ret waitForDreitonUnconsumedReply(dreiton, token, replyReturn);
+}
+WAITFORDREITONBASEGETMAGICNUMBERUNCONSUMEDREPLY(){
+	ret waitForDreitonUnconsumedReply(dreiton, token, replyReturn);
+}
+WAITFORDREITONBASESETMAGICNUMBERUNCONSUMEDREPLY(){
+	ret waitForDreitonUnconsumedReply(dreiton, token, replyReturn);
+}
+GETDREITONBASEENABLEEXTENSIONREPLYMAGICNUMBER(){
+	uint32 size;
+	void *start;
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+	success = false;
+	if(!reply or !extensionReturn){
+		jmp emergencyExit;
+	}
+	if(!getDreitonMessageDecodedItem(dreiton, (*reply).frame, ENABLE_EXTENSION_EXTENSION_DREITON_REPLY_ITEM_OFFSET, &size, &start)){
+		jmp emergencyExit;
+	}
+	if(size != sizeof(uint32)){
+		jmp emergencyExit;
+	}
+	*extensionReturn = *(uint32 *)start;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONBASEGETMAGICNUMBERREPLYMAGICNUMBER(){
+	uint32 size;
+	void *start;
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+	success = false;
+	if(!reply or !magicNumberReturn){
+		jmp emergencyExit;
+	}
+	if(!getDreitonMessageDecodedItem(dreiton, (*reply).frame, GET_MAGIC_NUMBER_MAGIC_NUMBER_DREITON_BASE_REPLY_ITEM_OFFSET, &size, &start)){
+		jmp emergencyExit;
+	}
+	if(size != sizeof(uint32)){
+		jmp emergencyExit;
+	}
+	*magicNumberReturn = *(uint32 *)start;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CONSUMEDREITONBASEENABLEEXTENSIONREPLY(){
+	ret consumeDreitonReply(dreiton, reply);
+}
+CONSUMEDREITONBASEAPPLYFOREVENTREPLY(){
+	ret consumeDreitonReply(dreiton, reply);
+}
+CONSUMEDREITONBASEGETMAGICNUMBERREPLY(){
+	ret consumeDreitonReply(dreiton, reply);
+}
+CONSUMEDREITONBASESETMAGICNUMBERREPLY(){
+	ret consumeDreitonReply(dreiton, reply);
+}
+ISDREITONBASEEXTENSIONEVENT(){
+	if(extension != baseExtensionId){
+		ret false;
+	}
+	ret true;
+}
+GETDREITONBASEMAGICNUMBERCHANGEDEVENTMAGICNUMBER(){
+	uint32 size;
+	void *start;
+	bool success;
+	if(!dreiton){
+		ret false;
+	}
+	success = false;
+	if(!event or !magicNumberReturn){
+		jmp emergencyExit;
+	}
+	if(!getDreitonMessageDecodedItem(dreiton, (*event).frame, MAGIC_NUMBER_CHANGED_MAGIC_NUMBER_DREITON_BASE_EVENT_ITEM_OFFSET, &size, &start)){
+		jmp emergencyExit;
+	}
+	if(size != sizeof(uint32)){
+		jmp emergencyExit;
+	}
+	*magicNumberReturn = *(uint32 *)start;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+PRINTDREITONBASEEVENT(){
+	DreitonEventHeader *header;
+	char *name;
+	if(!event){
+		ret false;
+	}
+	header = (*event).header;
+	if((*header).status & ERROR_FLAG_DREITON_STATUS_MASK){
+		ret false;
+	}
+	switch((*header).type){
+		to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ name = "none"; /*-----------------*/ brk;
+		to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ name = "magic number changed"; /*-*/ brk;
+		off: /*---------------------------------------------*/ name = "unrecognized"; /*---------*/ brk;
+	}
+	fprintf(stdout, "dreiton event: %s event\n", name);
+	ret true;
+}
+PRINTDREITONBASEERROR(){
+	DreitonErrorHeader *header;
+	char *name;
+	char *operation;
+	if(!error){
+		ret false;
+	}
+	header = (*error).header;
+	if(!((*header).status & ERROR_FLAG_DREITON_STATUS_MASK)){
+		ret false;
+	}
+	if(!(*header).extension){
+		switch((*header).operation){
+			to NONE_DREITON_REQUEST_TYPE: /*------------------*/ operation = "none"; /*----------------*/ brk;
+			to NO_OPERATION_DREITON_REQUEST_TYPE: /*----------*/ operation = "no operation"; /*--------*/ brk;
+			to SYNC_DREITON_REQUEST_TYPE: /*------------------*/ operation = "sync"; /*----------------*/ brk;
+			to ENABLE_EXTENSION_DREITON_REQUEST_TYPE: /*------*/ operation = "enable extension"; /*----*/ brk;
+			to APPLY_FOR_EVENT_DREITON_REQUEST_TYPE: /*-------*/ operation = "apply for event"; /*-----*/ brk;
+			to WITHDRAW_FROM_EVENT_DREITON_REQUEST_TYPE: /*---*/ operation = "withdraw from event"; /*-*/ brk;
+			off: /*-------------------------------------------*/ operation = "unrecognized"; /*--------*/ brk;
+		}
+	}else{
+		switch((*header).operation){
+			to NONE_DREITON_BASE_REQUEST_TYPE: /*-------------*/ operation = "none"; /*----------------*/ brk;
+			to GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE: /*-*/ operation = "get magic number"; /*----*/ brk;
+			to SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE: /*-*/ operation = "set magic number"; /*----*/ brk;
+			off: /*-------------------------------------------*/ operation = "unrecognized"; /*--------*/ brk;
+		}
+	}
+	switch((*header).status){
+		to NONE_DREITON_ERROR_STATUS: /*-----------*/ name = "none"; /*-----------*/ jmp printErrorName;
+		to REQUEST_DREITON_ERROR_STATUS: /*--------*/ name = "request"; /*--------*/ jmp printErrorNameOperation;
+		to IMPLEMENTATION_DREITON_ERROR_STATUS: /*-*/ name = "implementation"; /*-*/ jmp printErrorNameOperation;
+		to PAYLOAD_DREITON_ERROR_STATUS: /*--------*/ name = "payload"; /*--------*/ jmp printErrorNameOperationValue;
+		to LENGTH_DREITON_ERROR_STATUS: /*---------*/ name = "length"; /*---------*/ jmp printErrorNameOperationParameter;
+		to VALUE_DREITON_ERROR_STATUS: /*----------*/ name = "value"; /*----------*/ jmp printErrorNameOperationParameterValue;
+		to ACCESS_DREITON_ERROR_STATUS: /*---------*/ name = "access"; /*---------*/ jmp printErrorNameOperation;
+		to ALLOCATION_DREITON_ERROR_STATUS: /*-----*/ name = "allocation"; /*-----*/ jmp printErrorNameOperation;
+		to FAILURE_DREITON_ERROR_STATUS: /*--------*/ name = "failure"; /*--------*/ jmp printErrorNameOperation;
+		off: /*------------------------------------*/ name = "unrecognized"; /*---*/ jmp printErrorNameOperationParameterValue;
+	}
+	printErrorName:{
+		fprintf(stdout, "dreiton error: %s error\n", name);
+		ret true;
+	}
+	printErrorNameOperation:{
+		fprintf(stdout, "dreiton error: %s error during %s operation\n", name, operation);
+		ret true;
+	}
+	printErrorNameOperationParameter:{
+		fprintf(stdout, "dreiton error: %s error during %s operation at parameter %u\n", name, operation, (*header).parameterOffset);
+		ret true;
+	}
+	printErrorNameOperationValue:{
+		fprintf(stdout, "dreiton error: %s error during %s operation with value %u\n", name, operation, (*header).value);
+		ret true;
+	}
+	printErrorNameOperationParameterValue:{
+		fprintf(stdout, "dreiton error: %s error during %s operation at parameter %u with value %u\n", name, operation, (*header).parameterOffset, (*header).value);
+		ret true;
+	}
+}
+

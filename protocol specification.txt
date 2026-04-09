@@ -1,0 +1,23 @@
+
+dreiton codec:
+	- descriptor
+		operation "packDreitonMessage", parameters "message", "payloadItemAmount", "payload", "destination"
+		operation "unpackDreitonMessage", parameters "wire"
+		operation "getDreitonMessageSize", parameters "wire", "sizeReturn"
+		byte sequences that are not equal to one (1), two (2) or four (4) must be copied without accounting for endianness
+
+dreiton transport:
+	- descriptor
+		operation
+
+dreiton extension:
+	- descriptor
+		operation
+
+dreiton core:
+	operation "initDreitonCore", parameters "dreitonCore"
+	operation "finiDreitonCore", parameters "dreitonCore"
+
+dreiton:
+	operation
+

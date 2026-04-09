@@ -1,5 +1,5 @@
 
-/*! dreiton-extension.hold
+/*! dreiton-extension-protocol.hold
 
 MIT License
 
@@ -23,15 +23,40 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#ifndef DREITON_EXTENSION_HOLD
-#define DREITON_EXTENSION_HOLD
+#ifndef DREITON_EXTENSION_PROTOCOL_HOLD
+#define DREITON_EXTENSION_PROTOCOL_HOLD
 
 #ifndef COLD_HOLD
 #define COLD_INCLUDED
 #include "headers/cold/cold.hold"
 #endif
 
-#define DREITON_EXTENSION_VERSION /*-*/ (1)
+#define DREITON_EXTENSION_PROTOCOL_VERSION /*-*/ (1)
+
+def struct{
+	uint16 /*-------*/ type;
+	uint8 /*--------*/ status;
+	uint8 /*--------*/ pad0[1];
+	uint32 /*-------*/ itemAmount;
+	void * /*-------*/ dataStart;
+	uint32 * /*-----*/ sizeStart;
+} DreitonExtensionReplySignature;
+
+def struct{
+	uint16 /*-------*/ operation;
+	uint8 /*--------*/ parameterOffset;
+	uint8 /*--------*/ pad0[1];
+	uint32 /*-------*/ value;
+} DreitonExtensionErrorSignature;
+
+def struct{
+	uint16 /*-------*/ type;
+	uint8 /*--------*/ status;
+	uint8 /*--------*/ pad0[1];
+	uint32 /*-------*/ itemAmount;
+	void * /*-------*/ dataStart;
+	uint32 * /*-----*/ sizeStart;
+} DreitonExtensionEventSignature;
 
 def struct{
 	uint32 /*-------*/ descriptorSize;
@@ -42,14 +67,10 @@ def struct{
 	uint32 /*-------*/ eventAmount;
 	const char * /*-*/ extensionName;
 	const char * /*-*/ authorName;
-	bool /*---------*/ (*initDreitonExtensionDescriptor)(void);
-	bool /*---------*/ (*setDreitonExtensionDescriptorEventFd)(const int fd);
-	bool /*---------*/ (*incrementDreitonExtensionDescriptorEventCounter)(const uint32 eventType);
-	bool /*---------*/ (*decrementDreitonExtensionDescriptorEventCounter)(const uint32 eventType);
-	bool /*---------*/ (*parseDreitonExtensionDescriptorRequest)(const GenericDreitonRequest *const request, const uint32 itemAmount, uint8 *const statusReturn, uint32 *const payloadSizeReturn);
-	bool /*---------*/ (*parseDreitonExtensionDescriptorReply)(const uint8 replyType, GenericDreitonReply *const replyReturn);
-	bool /*---------*/ (*parseDreitonExtensionDescriptorEvent)(void);
-	bool /*---------*/ (*finiDreitonExtensionDescriptor)(void);
+	bool /*---------*/ (*initDreitonExtensionDescriptor)(void **const handleReturn);
+	bool /*---------*/ (*parseDreitonExtensionDescriptorRequest)(void *const handle, const uint16 type, const uint32 payloadItemAmount, const void *const frame, bool (*getDreitonDecodedItem)(const void *const frame, const uint32 which, uint32 *const itemSizeReturn, void **const itemStartReturn), DreitonExtensionErrorSignature *const errorSignatureReturn, DreitonExtensionEventSignature *const eventSignatureReturn, uint8 *const statusReturn);
+	bool /*---------*/ (*parseDreitonExtensionDescriptorReply)(void *const handle, const uint16 type, DreitonExtensionReplySignature *const replySignatureReturn);
+	bool /*---------*/ (*finiDreitonExtensionDescriptor)(void *const handle);
 } DreitonExtensionDescriptorV1;
 
 def DreitonExtensionDescriptorV1 /*-*/ DreitonExtensionDescriptor;

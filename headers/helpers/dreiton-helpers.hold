@@ -1,0 +1,96 @@
+
+/*! dreiton-helpers.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef DREITON_HELPERS_HOLD
+#define DREITON_HELPERS_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+#define REQUESTDREITONNOOPERATION() /*----------------------*/        bool  requestDreitonNoOperation(Dreiton *const dreiton, uint32 *const tokenReturn)
+#define REQUESTDREITONSYNC() /*-----------------------------*/        bool  requestDreitonSync(Dreiton *const dreiton, uint32 *const tokenReturn)
+#define REQUESTDREITONENABLEEXTENSION() /*------------------*/        bool  requestDreitonEnableExtension(Dreiton *const dreiton, const uint32 pathSize, const char *const pathStart, uint32 *const tokenReturn)
+#define REQUESTDREITONAPPLYFOREVENT() /*--------------------*/        bool  requestDreitonApplyForEvent(Dreiton *const dreiton, const uint32 extension, const uint32 eventMask, uint32 *const tokenReturn)
+#define REQUESTDREITONWITHDRAWFROMEVENT() /*----------------*/        bool  requestDreitonWithdrawFromEvent(Dreiton *const dreiton, const uint32 extension, const uint32 eventMask, uint32 *const tokenReturn)
+#define WAITFORDREITONNOOPERATIONREPLY() /*-----------------*/ inline bool  waitForDreitonNoOperationReply(Dreiton *const dreiton, const uint32 token, NoOperationDreitonReply **const replyReturn)
+#define WAITFORDREITONSYNCREPLY() /*------------------------*/ inline bool  waitForDreitonSyncReply(Dreiton *const dreiton, const uint32 token, SyncDreitonReply **const replyReturn)
+#define WAITFORDREITONENABLEEXTENSIONREPLY() /*-------------*/ inline bool  waitForDreitonEnableExtensionReply(Dreiton *const dreiton, const uint32 token, EnableExtensionDreitonReply **const replyReturn)
+#define WAITFORDREITONAPPLYFOREVENTREPLY() /*---------------*/ inline bool  waitForDreitonApplyForEventReply(Dreiton *const dreiton, const uint32 token, ApplyForEventDreitonReply **const replyReturn)
+#define WAITFORDREITONWITHDRAWFROMEVENTREPLY() /*-----------*/ inline bool  waitForDreitonWithdrawFromEventReply(Dreiton *const dreiton, const uint32 token, WithdrawFromEventDreitonReply **const replyReturn)
+#define WAITFORDREITONNOOPERATIONUNCONSUMEDREPLY() /*-------*/ inline bool  waitForDreitonNoOperationUnconsumedReply(Dreiton *const dreiton, const uint32 token, NoOperationDreitonReply *const replyReturn)
+#define WAITFORDREITONSYNCUNCONSUMEDREPLY() /*--------------*/ inline bool  waitForDreitonSyncUnconsumedReply(Dreiton *const dreiton, const uint32 token, SyncDreitonReply *const replyReturn)
+#define WAITFORDREITONENABLEEXTENSIONUNCONSUMEDREPLY() /*---*/ inline bool  waitForDreitonEnableExtensionUnconsumedReply(Dreiton *const dreiton, const uint32 token, EnableExtensionDreitonReply *const replyReturn)
+#define WAITFORDREITONAPPLYFOREVENTUNCONSUMEDREPLY() /*-----*/ inline bool  waitForDreitonApplyForEventUnconsumedReply(Dreiton *const dreiton, const uint32 token, ApplyForEventDreitonReply *const replyReturn)
+#define WAITFORDREITONWITHDRAWFROMEVENTUNCONSUMEDREPLY() /*-*/ inline bool  waitForDreitonWithdrawFromEventUnconsumedReply(Dreiton *const dreiton, const uint32 token, WithdrawFromEventDreitonReply *const replyReturn)
+#define GETDREITONENABLEEXTENSIONREPLYEXTENSION() /*--------*/        bool  getDreitonEnableExtensionReplyExtension(Dreiton *const dreiton, EnableExtensionDreitonReply *const reply, uint32 *const extensionIdReturn)
+#define CONSUMEDREITONNOOPERATIONREPLY() /*-----------------*/ inline bool  consumeDreitonNoOperationReply(Dreiton *const dreiton, NoOperationDreitonReply *const reply)
+#define CONSUMEDREITONSYNCREPLY() /*------------------------*/ inline bool  consumeDreitonSyncReply(Dreiton *const dreiton, SyncDreitonReply *const reply)
+#define CONSUMEDREITONENABLEEXTENSIONREPLY() /*-------------*/ inline bool  consumeDreitonEnableExtensionReply(Dreiton *const dreiton, EnableExtensionDreitonReply *const reply)
+#define CONSUMEDREITONAPPLYFOREVENTREPLY() /*---------------*/ inline bool  consumeDreitonApplyForEventReply(Dreiton *const dreiton, ApplyForEventDreitonReply *const reply)
+#define CONSUMEDREITONWITHDRAWFROMEVENTREPLY() /*-----------*/ inline bool  consumeDreitonWithdrawFromEventReply(Dreiton *const dreiton, WithdrawFromEventDreitonReply *const reply)
+#define PRINTDREITONEVENT() /*------------------------------*/        bool  printDreitonEvent(DreitonEvent *const event)
+#define PRINTDREITONERROR() /*------------------------------*/        bool  printDreitonError(DreitonError *const error)
+#define PRINTDREITONCONNECTIONERROR() /*--------------------*/        bool  printDreitonConnectionError(Dreiton *const dreiton)
+
+def DreitonReply /*---*/ NoOperationDreitonReply;
+def DreitonReply /*---*/ SyncDreitonReply;
+def DreitonReply /*---*/ EnableExtensionDreitonReply;
+def DreitonReply /*---*/ ApplyForEventDreitonReply;
+def DreitonReply /*---*/ WithdrawFromEventDreitonReply;
+
+REQUESTDREITONNOOPERATION();
+REQUESTDREITONSYNC();
+REQUESTDREITONENABLEEXTENSION();
+REQUESTDREITONAPPLYFOREVENT();
+REQUESTDREITONWITHDRAWFROMEVENT();
+WAITFORDREITONNOOPERATIONREPLY();
+WAITFORDREITONSYNCREPLY();
+WAITFORDREITONENABLEEXTENSIONREPLY();
+WAITFORDREITONAPPLYFOREVENTREPLY();
+WAITFORDREITONWITHDRAWFROMEVENTREPLY();
+WAITFORDREITONNOOPERATIONUNCONSUMEDREPLY();
+WAITFORDREITONSYNCUNCONSUMEDREPLY();
+WAITFORDREITONENABLEEXTENSIONUNCONSUMEDREPLY();
+WAITFORDREITONAPPLYFOREVENTUNCONSUMEDREPLY();
+WAITFORDREITONWITHDRAWFROMEVENTUNCONSUMEDREPLY();
+GETDREITONENABLEEXTENSIONREPLYEXTENSION();
+CONSUMEDREITONNOOPERATIONREPLY();
+CONSUMEDREITONSYNCREPLY();
+CONSUMEDREITONENABLEEXTENSIONREPLY();
+CONSUMEDREITONAPPLYFOREVENTREPLY();
+CONSUMEDREITONWITHDRAWFROMEVENTREPLY();
+PRINTDREITONEVENT();
+PRINTDREITONERROR();
+PRINTDREITONCONNECTIONERROR();
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+

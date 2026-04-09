@@ -1,318 +1,4 @@
 
-#ifdef a
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-#include "headers/cold/cold.hold"
-
-#define SHM
-
-#define SETDREITONCORETRANSPORTDESCRIPTOR() /*--*/ bool  setDreitonCoreTransportDescriptor(DreitonCore *const dreitonCore, const DreitonTransportDescriptor *const dreitonTransportDescriptor)
-#define SENDDREITONCORETRANSPORTMESSAGE() /*----*/ bool  sendDreitonCoreTransportMessage(DreitonCore *const dreitonCore, const uint32 size, const void *const buffer)
-#define RECEIVEDREITONCORETRANSPORTMESSAGE() /*-*/ bool  receiveDreitonCoreTransportMessage(DreitonCore *const dreitonCore, uint32 *const sizeReturn, void *const *const bufferReturn)
-
-def struct{
-	bool /*-*/ (*initDreitonTransportDescriptor)(void);
-	bool /*-*/ (*sendDreitonTransportDescriptorMessage)(const uint32 size, const void *const buffer);
-	bool /*-*/ (*receiveDreitonTransportDescriptorMessage)(uint32 *const size, void *const *const buffer);
-	bool /*-*/ (*finiDreitonTransportDescriptor)(void);
-} DreitonTransportDescriptor;
-
-def struct{
-	const DreitonTransportDescriptor * /*-*/ dreitonTransportDescriptor;
-} DreitonCore;
-
-SETDREITONCORETRANSPORTDESCRIPTOR();
-SENDDREITONCORETRANSPORTMESSAGE();
-RECEIVEDREITONCORETRANSPORTMESSAGE();
-
-SETDREITONCORETRANSPORTDESCRIPTOR(){
-	if(!dreitonCore or !dreitonTransportDescriptor){
-		ret false;
-	}
-
-
-
-	/*! load here */
-
-
-
-	if(!(*dreitonTransportDescriptor).initDreitonTransportDescriptor or !(*dreitonTransportDescriptor).sendDreitonTransportDescriptorMessage or !(*dreitonTransportDescriptor).receiveDreitonTransportDescriptorMessage or !(*dreitonTransportDescriptor).finiDreitonTransportDescriptor){
-		ret false;
-	}
-	(*dreitonCore).dreitonTransportDescriptor = dreitonTransportDescriptor;
-
-
-
-	ret true;
-}
-SENDDREITONCORETRANSPORTMESSAGE(){
-	if(!dreitonCore or !size or !buffer){
-		ret false;
-	}
-	if((*(*dreitonCore).dreitonTransportDescriptor).sendDreitonTransportDescriptorMessage){
-		(*(*(*dreitonCore).dreitonTransportDescriptor).sendDreitonTransportDescriptorMessage)(size, buffer);
-	}
-	ret true;
-}
-RECEIVEDREITONCORETRANSPORTMESSAGE(){
-	if(!dreitonCore or !sizeReturn or !bufferReturn){
-		ret false;
-	}
-	if((*(*dreitonCore).dreitonTransportDescriptor).receiveDreitonTransportDescriptorMessage){
-		(*(*(*dreitonCore).dreitonTransportDescriptor).receiveDreitonTransportDescriptorMessage)(sizeReturn, bufferReturn);
-	}
-	ret true;
-}
-
-
-
-
-
-
-
-
-
-#ifdef SHM
-#ifdef a
-#endif
-	/*! SHM, communication through pipe */
-
-	#define INITDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  initDreitonTransportDescriptor(void)
-	#define SENDDREITONTRANSPORTDESCRIPTORMESSAGE() /*----*/ bool  sendDreitonTransportDescriptorMessage(const uint32 size, const void *const buffer)
-	#define RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE() /*-*/ bool  receiveDreitonTransportDescriptorMessage(uint32 *const sizeReturn, void *const *const bufferReturn)
-	#define FINIDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  finiDreitonTransportDescriptor(void)
-
-	def struct{
-		void * /*-*/ shmStart;
-		int32 /*--*/ shmId;
-		uint8 /*--*/ pad0[4];
-	} Backend;
-
-	INITDREITONTRANSPORTDESCRIPTOR();
-	SENDDREITONTRANSPORTDESCRIPTORMESSAGE();
-	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE();
-	FINIDREITONTRANSPORTDESCRIPTOR();
-
-	const DreitonTransportDescriptor dreitonTransportDescriptor = {
-		  initDreitonTransportDescriptor
-		, sendDreitonTransportDescriptorMessage
-		, receiveDreitonTransportDescriptorMessage
-		, finiDreitonTransportDescriptor
-	};
-
-	INITDREITONTRANSPORTDESCRIPTOR(){
-		fprintf(stdout, "init shm\n");
-		ret true;
-	}
-	SENDDREITONTRANSPORTDESCRIPTORMESSAGE(){
-		(void)size;
-		(void)buffer;
-		fprintf(stdout, "send shm\n");
-		ret true;
-	}
-	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE(){
-		(void)sizeReturn;
-		(void)bufferReturn;
-		fprintf(stdout, "receive shm\n");
-		ret true;
-	}
-	FINIDREITONTRANSPORTDESCRIPTOR(){
-		fprintf(stdout, "fini shm\n");
-		ret true;
-	}
-#endif
-
-#ifdef TCP
-#ifdef a
-#endif
-	/*! TCP, communication through socket */
-
-	#define INITDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  initDreitonTransportDescriptor(void)
-	#define SENDDREITONTRANSPORTDESCRIPTORMESSAGE() /*----*/ bool  sendDreitonTransportDescriptorMessage(const uint32 size, const void *const buffer)
-	#define RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE() /*-*/ bool  receiveDreitonTransportDescriptorMessage(uint32 *const sizeReturn, void *const *const bufferReturn)
-	#define FINIDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  finiDreitonTransportDescriptor(void)
-
-	def struct{
-		int32 /*-*/ fd;
-	} Backend;
-
-	INITDREITONTRANSPORTDESCRIPTOR();
-	SENDDREITONTRANSPORTDESCRIPTORMESSAGE();
-	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE();
-	FINIDREITONTRANSPORTDESCRIPTOR();
-
-	const DreitonTransportDescriptor dreitonTransportDescriptor = {
-		  initDreitonTransportDescriptor
-		, sendDreitonTransportDescriptorMessage
-		, receiveDreitonTransportDescriptorMessage
-		, finiDreitonTransportDescriptor
-	};
-
-	INITDREITONTRANSPORTDESCRIPTOR(){
-		fprintf(stdout, "init tcp\n");
-		ret true;
-	}
-	SENDDREITONTRANSPORTDESCRIPTORMESSAGE(){
-		(void)size;
-		(void)buffer;
-		fprintf(stdout, "send tcp\n");
-		ret true;
-	}
-	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE(){
-		(void)sizeReturn;
-		(void)bufferReturn;
-		fprintf(stdout, "receive tcp\n");
-		ret true;
-	}
-	FINIDREITONTRANSPORTDESCRIPTOR(){
-		fprintf(stdout, "fini tcp\n");
-		ret true;
-	}
-#endif
-
-#ifdef UDP
-#ifdef a
-#endif
-	/*! UDP, communication through socket */
-
-	#define INITDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  initDreitonTransportDescriptor(void)
-	#define SENDDREITONTRANSPORTDESCRIPTORMESSAGE() /*----*/ bool  sendDreitonTransportDescriptorMessage(const uint32 size, const void *const buffer)
-	#define RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE() /*-*/ bool  receiveDreitonTransportDescriptorMessage(uint32 *const sizeReturn, void *const *const bufferReturn)
-	#define FINIDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  finiDreitonTransportDescriptor(void)
-
-	def struct{
-		int32 /*-*/ fd;
-	} Backend;
-
-	INITDREITONTRANSPORTDESCRIPTOR();
-	SENDDREITONTRANSPORTDESCRIPTORMESSAGE();
-	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE();
-	FINIDREITONTRANSPORTDESCRIPTOR();
-
-	const DreitonTransportDescriptor dreitonTransportDescriptor = {
-		  initDreitonTransportDescriptor
-		, sendDreitonTransportDescriptorMessage
-		, receiveDreitonTransportDescriptorMessage
-		, finiDreitonTransportDescriptor
-	};
-
-	INITDREITONTRANSPORTDESCRIPTOR(){
-		fprintf(stdout, "init udp\n");
-		ret true;
-	}
-	SENDDREITONTRANSPORTDESCRIPTORMESSAGE(){
-		(void)size;
-		(void)buffer;
-		fprintf(stdout, "send udp\n");
-		ret true;
-	}
-	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE(){
-		(void)sizeReturn;
-		(void)bufferReturn;
-		fprintf(stdout, "receive udp\n");
-		ret true;
-	}
-	FINIDREITONTRANSPORTDESCRIPTOR(){
-		fprintf(stdout, "fini udp\n");
-		ret true;
-	}
-#endif
-
-
-
-
-
-
-
-
-
-int main(void){
-	DreitonCore dreitonCore;
-	setDreitonCoreTransportDescriptor(&dreitonCore, &dreitonTransportDescriptor);
-
-
-
-	sendDreitonCoreTransportMessage(&dreitonCore, lengthof("hello") + 1, "hello");
-	{
-		uint32 size;
-		void *buffer;
-		receiveDreitonCoreTransportMessage(&dreitonCore, &size, &buffer);
-	}
-
-
-
-#ifdef a
-	fprintf(stdout, "%s backend active\n", networkBackend? "udp" : "shm");
-#endif
-
-
-
-	ret 0;
-}
-#endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#ifdef a
-	/*!blockAllSignals:*/{
-		sigset_t signalSet;
-		sigfillset(&signalSet);
-		pthread_sigmask(SIG_BLOCK, &signalSet, NULL);
-	}
-#endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*! client.cold
 
 MIT License
@@ -337,174 +23,309 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#define _POSIX_C_SOURCE /*-*/ (200809L)
+#define _POSIX_C_SOURCE /*-*/ (199506L)
 
-#include <signal.h>
 #include <stdint.h>
+
+
+
+/*! remove later */
+
 #include <stdio.h>
 
+
+
 #include "headers/cold/cold.hold"
-#include "headers/dreiton-protocol.hold"
-#include "headers/dreiton-transport.hold"
+#include "headers/signal-handler.hold"
+#include "headers/protocols/dreiton-protocol.hold"
+#include "headers/protocols/dreiton-transport-protocol.hold"
+#include "headers/protocols/dreiton-codec-protocol.hold"
 #include "headers/dreiton.hold"
-#include "headers/dreiton-helpers.hold"
 #include "headers/dreiton-base-extension.hold"
-#include "headers/dreiton-base-extension-helpers.hold"
+#include "headers/helpers/dreiton-helpers.hold"
+#include "headers/helpers/dreiton-base-extension-helpers.hold"
 #include "headers/client.hold"
 
-def struct{ /*! basic but pretty bad solution to the event problem. use a proper way to copy an event over regardless of payload size. */
-	GenericDreitonEvent /*-*/ event;
-	uint8 /*---------------*/ payload[256];
-} EventContainer;
+#define NONE_CONNECTION /*------------*/ (0)
+#define SHM_CONNECTION /*-------------*/ (1)
+#define TCP_CONNECTION /*-------------*/ (2)
 
-local Dreiton /*--------*/ _dreiton;
-local Dreiton * /*------*/ dreiton;
-local uint32 /*---------*/ dreitonBaseExtension;
-local uint32 /*---------*/ dreitonBase1Extension;
-local EventContainer /*-*/ eventContainer;
+#define TERMINATIONSIGNALHANDLER() /*-*/ local void  terminationSignalHandler(const int signal)
+#define PIPESIGNALHANDLER() /*--------*/ local void  pipeSignalHandler(const int signal)
+#define ISBIGENDIAN() /*--------------*/ local bool  isBigEndian(void)
 
-void signalHandler(const int signal){
-	if(signal == SIGINT){
-		fprintf(stdout, "\n");
-	}
-	if(signal == SIGPIPE){
-		fprintf(stderr, "\tpipe error\n");
-	}
-	ret;
-}
-int main(void){
+TERMINATIONSIGNALHANDLER();
+PIPESIGNALHANDLER();
+ISBIGENDIAN();
+
+local const char * /*---------*/ name;
+local const char * /*---------*/ transport;
+local const char * /*---------*/ codec;
+local const char * /*---------*/ connectionName;
+local pthread_t /*------------*/ thread;
+local Dreiton /*--------------*/ dreiton;
+local DreitonEvent * /*-------*/ event;
+local DreitonEventHeader * /*-*/ eventHeader;
+
+int main(const int argumentSize, const char *const *const argumentStart){
+	uint8 type = SHM_CONNECTION;
+	(void)argumentSize;
+	(void)argumentStart;
 	{
-		dreiton = &_dreiton;
-		dreitonBaseExtension = 0;
-		dreitonBase1Extension = 0;
-	}
-	/*!setSignals:*/{
-		struct sigaction s;
-		s.sa_handler = signalHandler;
-		s.sa_flags = SA_RESTART;
-		sigemptyset(&s.sa_mask);
-		sigaction(SIGINT , &s, NULL);
-		sigaction(SIGPIPE, &s, NULL);
-	}
-	initDreiton(dreiton);
-	setDreitonServerChannelPath(dreiton, "/dev/shm/registration-form");
-	if(!connectToDreiton(dreiton)){
-		fprintf(stdout, "failed dreiton\n");
-		ret 0;
+		event = NULL;
 	}
 	{
-		uint32 token;
-		ClaimOwnershipDreitonReply claimOwnershipDreitonReply;
-		requestDreitonClaimOwnership(dreiton, &token);
-		flushDreitonBuffer(dreiton);
-		waitForDreitonReply(dreiton, token, &claimOwnershipDreitonReply);
-		if(claimOwnershipDreitonReply.reply.status & SUCCESS_DREITON_REPLY_STATUS){
-			/*! requestDreitonCloseOnIdle(dreiton, &token); */
+		SignalHandler signalHandler[5];
+		SignalHandler *signalHandlerCurrent = signalHandler;
+		(*signalHandlerCurrent).handler = &terminationSignalHandler;
+		(*signalHandlerCurrent).signal = SIGHUP;
+		(*signalHandlerCurrent).terminal = true;
+		inc signalHandlerCurrent;
+		(*signalHandlerCurrent).handler = &terminationSignalHandler;
+		(*signalHandlerCurrent).signal = SIGINT;
+		(*signalHandlerCurrent).terminal = true;
+		inc signalHandlerCurrent;
+		(*signalHandlerCurrent).handler = &terminationSignalHandler;
+		(*signalHandlerCurrent).signal = SIGQUIT;
+		(*signalHandlerCurrent).terminal = true;
+		inc signalHandlerCurrent;
+		(*signalHandlerCurrent).handler = &pipeSignalHandler;
+		(*signalHandlerCurrent).signal = SIGPIPE;
+		(*signalHandlerCurrent).terminal = false;
+		inc signalHandlerCurrent;
+		(*signalHandlerCurrent).handler = &terminationSignalHandler;
+		(*signalHandlerCurrent).signal = SIGTERM;
+		(*signalHandlerCurrent).terminal = true;
+		inc signalHandlerCurrent;
+		bootSignalThread(countof(signalHandler), signalHandler, &thread);
+	}
+	initDreiton(&dreiton);
+	if(type == SHM_CONNECTION){
+		name = "shm";
+		transport = "libdreiton-shm-transport.so";
+		connectionName = "/tmp/dreiton-one";
+	}else{
+		name = "tcp";
+		transport = "libdreiton-tcp-transport.so";
+		connectionName = "127.0.0.1:23170";
+	}
+	{
+		const bool hostIsBigEndian = isBigEndian();
+		const bool protocolIsBigEndian = DREITON_ENDIANNESS == BIG_DREITON_ENDIANNESS;
+		const bool differentEndianness = !hostIsBigEndian != !protocolIsBigEndian;
+		if(differentEndianness){
+			codec = "libdreiton-endian-codec.so";
+		}else{
+			codec = "libdreiton-xyz-codec.so";
 		}
+	}
+	setDreitonReplyCacheSlotSize(&dreiton, 3);
+	if(!loadDreitonTransport(&dreiton, transport)){
+		fprintf(stdout, "could not load transport @ %s\n", transport);
+		jmp emergencyExit;
+	}
+	fprintf(stdout, "using transport @ %s\n", transport);
+	if(!loadDreitonCodec(&dreiton, codec)){
+		fprintf(stdout, "could not load codec @ %s\n", codec);
+		jmp emergencyExit;
+	}
+	fprintf(stdout, "using codec @ %s\n", codec);
+	if(!connectToDreiton(&dreiton, connectionName)){
+		fprintf(stdout, "could not connect to %s server @ %s\n", name, connectionName);
+		jmp emergencyExit;
+	}
+	fprintf(stdout, "connected to %s server @ %s\n\n", name, connectionName);
+	{
+		uint32 token = 0;
+		EnableExtensionDreitonReply *reply = NULL;
+		requestDreitonBaseEnableExtension(&dreiton, &token);
+		flushDreitonBuffer(&dreiton);
+		waitForDreitonBaseEnableExtensionReply(&dreiton, token, &reply);
+		free(reply);
+	}
+	requestDreitonBaseApplyForEvent(&dreiton, MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE_MASK, NULL);
+	{
+		const uint32 magicNumber = 113;
+		uint32 token[10];
+		GetMagicNumberDreitonBaseReply *reply;
+		requestDreitonBaseGetMagicNumber(&dreiton, token + 0);
+		requestDreitonBaseSetMagicNumber(&dreiton, magicNumber, token + 1);
+		flushDreitonBuffer(&dreiton);
 		{
-			#define PATH /*-*/ "/tmp/dreiton-base-extension/output/libdreiton-base-extension.so"
-			EnableExtensionDreitonReply enableExtensionDreitonReply;
-			requestDreitonEnableExtension(dreiton, lengthof(PATH) + 1, PATH, &token);
-			flushDreitonBuffer(dreiton);
-			waitForDreitonReply(dreiton, token, &enableExtensionDreitonReply);
-			dreitonBaseExtension = enableExtensionDreitonReply.extension;
-			#undef  PATH
+			int i = 1;
+			while(i >= 0){
+				fprintf(stdout, "waiting on reply %u\n", *(token + i));
+				if(waitForDreitonReply(&dreiton, *(token + i), &reply)){
+					fprintf(stdout, "++++++++++++++++++++reply came in for %u\n", *(token + i));
+					free(reply);
+				}else{
+					fprintf(stdout, "--------------------reply did not come for %u\n", *(token + i));
+				}
+				dec i;
+			}
 		}
+		requestDreitonBaseGetMagicNumber(&dreiton, token + 2);
+		requestDreitonBaseSetMagicNumber(&dreiton, magicNumber, token + 3);
+		requestDreitonBaseGetMagicNumber(&dreiton, token + 4);
+		requestDreitonBaseSetMagicNumber(&dreiton, magicNumber, token + 5);
+		requestDreitonBaseGetMagicNumber(&dreiton, token + 6);
+		requestDreitonBaseSetMagicNumber(&dreiton, magicNumber, token + 7);
+		requestDreitonBaseGetMagicNumber(&dreiton, token + 8);
+		requestDreitonBaseSetMagicNumber(&dreiton, magicNumber, token + 9);
+		flushDreitonBuffer(&dreiton);
+		fprintf(stdout, "waiting on replies [%u, %u]\n", *(token + 1), *(token + 9));
 		{
-			#define PATH /*-*/ "/tmp/dreiton-base1-extension/output/libdreiton-base1-extension.so"
-			EnableExtensionDreitonReply enableExtensionDreitonReply;
-			requestDreitonEnableExtension(dreiton, lengthof(PATH) + 1, PATH, &token);
-			flushDreitonBuffer(dreiton);
-			waitForDreitonReply(dreiton, token, &enableExtensionDreitonReply);
-			dreitonBase1Extension = enableExtensionDreitonReply.extension;
-			#undef  PATH
+			int i = countof(token) - 2;
+			while(i >= 2){
+				fprintf(stdout, "waiting on reply %u\n", *(token + i));
+				if(waitForDreitonReply(&dreiton, *(token + i), &reply)){
+					uint16 type = (*(*reply).header).type;
+					fprintf(stdout, "++++++++++++++++++++reply came in for %u with type %u\n", *(token + i), type);
+					free(reply);
+				}else{
+					fprintf(stdout, "--------------------reply did not come for %u\n", *(token + i));
+				}
+				dec i;
+			}
 		}
-		if(claimOwnershipDreitonReply.reply.status & SUCCESS_DREITON_REPLY_STATUS){
-			requestDreitonSealOwnership(dreiton, &token);
-			flushDreitonBuffer(dreiton);
+#ifdef a
+		if(waitForDreitonReply(&dreiton, *(token + 0), &reply)){
+			/*! uint32 number;
+			fprintf(stdout, "get number said %u\n", getDreitonBaseGetMagicNumberReplyMagicNumber(&dreiton, reply, &number)); */
+			fprintf(stdout, "reply came in for %u\n", *(token + 0));
+			free(reply);
 		}
+		fprintf(stdout, "waiting on reply %u\n", *(token + 1));
+		if(waitForDreitonReply(&dreiton, *(token + 1), &reply)){
+			fprintf(stdout, "reply came in for %u\n", *(token + 1));
+			free(reply);
+		}
+		fprintf(stdout, "waiting on reply %u\n", *(token + 2));
+		if(waitForDreitonReply(&dreiton, *(token + 2), &reply)){
+			fprintf(stdout, "reply came in for %u\n", *(token + 2));
+			free(reply);
+		}
+		fprintf(stdout, "waiting on reply %u\n", *(token + 3));
+		if(waitForDreitonReply(&dreiton, *(token + 3), &reply)){
+			fprintf(stdout, "reply came in for %u\n", *(token + 3));
+			free(reply);
+		}
+		fprintf(stdout, "waiting on reply %u\n", *(token + 4));
+		if(waitForDreitonReply(&dreiton, *(token + 4), &reply)){
+			fprintf(stdout, "reply came in for %u\n", *(token + 4));
+			free(reply);
+		}
+		fprintf(stdout, "waiting on reply %u\n", *(token + 5));
+		if(waitForDreitonReply(&dreiton, *(token + 5), &reply)){
+			fprintf(stdout, "reply came in for %u\n", *(token + 5));
+			free(reply);
+		}
+		fprintf(stdout, "waiting on reply %u\n", *(token + 6));
+		if(waitForDreitonReply(&dreiton, *(token + 6), &reply)){
+			fprintf(stdout, "reply came in for %u\n", *(token + 6));
+			free(reply);
+		}
+		fprintf(stdout, "waiting on reply %u\n", *(token + 7));
+		if(waitForDreitonReply(&dreiton, *(token + 7), &reply)){
+			fprintf(stdout, "reply came in for %u\n", *(token + 7));
+			free(reply);
+		}
+		fprintf(stdout, "waiting on reply %u\n", *(token + 8));
+		if(waitForDreitonReply(&dreiton, *(token + 8), &reply)){
+			fprintf(stdout, "reply came in for %u\n", *(token + 8));
+			free(reply);
+		}
+		fprintf(stdout, "waiting on reply %u\n", *(token + 9));
+		if(waitForDreitonReply(&dreiton, *(token + 9), &reply)){
+			fprintf(stdout, "reply came in for %u\n", *(token + 9));
+			free(reply);
+		}
+#endif
+		fprintf(stdout, "done with replies\n");
 	}
-	requestDreitonApplyForEvent(dreiton, dreitonBaseExtension, MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE_MASK, NULL);
-	requestDreitonApplyForEvent(dreiton, dreitonBase1Extension, MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE_MASK, NULL);
-	{
-		const uint32 magicNumber = 123;
-		uint32 token;
-		GetMagicNumberDreitonBaseReply getMagicNumberDreitonBaseReply;
-		requestDreitonBaseSetMagicNumber(dreiton, dreitonBaseExtension, magicNumber, NULL);
-		requestDreitonBaseGetMagicNumber(dreiton, dreitonBaseExtension, &token);
-		flushDreitonBuffer(dreiton);
-		waitForDreitonBaseGetMagicNumberReply(dreiton, token, &getMagicNumberDreitonBaseReply);
-		fprintf(stdout, "we got the %s number back (%u)\n", getMagicNumberDreitonBaseReply.magicNumber == magicNumber? "right" : "wrong", getMagicNumberDreitonBaseReply.magicNumber);
-	}
-	{
-		const uint32 magicNumber = 1234;
-		uint32 token;
-		GetMagicNumberDreitonBaseReply getMagicNumberDreitonBaseReply;
-		requestDreitonBaseSetMagicNumber(dreiton, dreitonBase1Extension, magicNumber, NULL);
-		requestDreitonBaseGetMagicNumber(dreiton, dreitonBase1Extension, &token);
-		flushDreitonBuffer(dreiton);
-		waitForDreitonBaseGetMagicNumberReply(dreiton, token, &getMagicNumberDreitonBaseReply);
-		fprintf(stdout, "we got the %s number back (%u)\n", getMagicNumberDreitonBaseReply.magicNumber == magicNumber? "right" : "wrong", getMagicNumberDreitonBaseReply.magicNumber);
-		jmp eventLoop;
-	}
+	jmp eventLoop;
 	eventLoop:{
-		flushDreitonBuffer(dreiton);
-		if(!waitForDreitonEvent(dreiton, &eventContainer)){
-			if((*dreiton).hasError){
+		uint32 extension;
+		flushDreitonBuffer(&dreiton);
+		free(event);
+		event = NULL;
+		if(!waitForDreitonEvent(&dreiton, &event)){
+			if(dreitonHasError(&dreiton)){
+				printDreitonConnectionError(&dreiton);
 				jmp emergencyExit;
 			}
 			jmp eventLoop;
 		}
-		if(!eventContainer.event.extension){
+		eventHeader = (*event).header;
+		extension = (*eventHeader).extension;
+		if(!extension){
 			jmp switchEvent;
 		}
-		if(eventContainer.event.extension == dreitonBaseExtension){
+		if(IS_DREITON_BASE_EXTENSION_EVENT(extension)){
 			jmp switchBaseExtensionEvent;
-		}
-		if(eventContainer.event.extension == dreitonBase1Extension){
-			jmp switchBase1ExtensionEvent;
 		}
 		jmp eventLoop;
 	}
 	switchEvent:{
-		switch(eventContainer.event.eventType){
-			to NONE_DREITON_EVENT_TYPE: /*----------------------*/ fprintf(stdout, "got \"none\" event\n"); /*----------------------*/ jmp eventLoop;
-			off: /*---------------------------------------------*/ fprintf(stdout, "got other event\n"); /*-------------------------*/ jmp eventLoop;
+		printDreitonEvent(event);
+		switch((*eventHeader).type){
+			to NONE_DREITON_EVENT_TYPE: /*----------------------*/ jmp errorEvent;
+			off: /*---------------------------------------------*/ jmp eventLoop;
 		}
 	}
 	switchBaseExtensionEvent:{
-		switch(eventContainer.event.eventType){
-			to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ fprintf(stdout, "got \"none\" base event\n"); /*-----------------*/ jmp eventLoop;
-			to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ fprintf(stdout, "got \"magic number changed\" base event\n"); /*-*/ jmp magicNumberChangedEvent;
-			off: /*---------------------------------------------*/ fprintf(stdout, "got other base event\n"); /*--------------------*/ jmp eventLoop;
+		printDreitonBaseEvent(event);
+		switch((*eventHeader).type){
+			to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ jmp errorBaseEvent;
+			to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ jmp magicNumberChangedBaseEvent;
+			off: /*---------------------------------------------*/ jmp eventLoop;
 		}
 	}
-	switchBase1ExtensionEvent:{
-		switch(eventContainer.event.eventType){
-			to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ fprintf(stdout, "got \"none\" base1 event\n"); /*-----------------*/ jmp eventLoop;
-			to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ fprintf(stdout, "got \"magic number changed\" base1 event\n"); /*-*/ jmp magicNumberChangedEvent1;
-			off: /*---------------------------------------------*/ fprintf(stdout, "got other base1 event\n"); /*--------------------*/ jmp eventLoop;
-		}
-	}
-	magicNumberChangedEvent:{
-		MagicNumberChangedDreitonBaseEvent *const event = (void *)&eventContainer;
-		fprintf(stdout, "new magic number: %u\n", (*event).magicNumber);
+	errorEvent:{
+		printDreitonError((void *)event);
 		jmp eventLoop;
 	}
-	magicNumberChangedEvent1:{
-		MagicNumberChangedDreitonBaseEvent *const event = (void *)&eventContainer;
-		fprintf(stdout, "new magic number: %u\n", (*event).magicNumber);
+	errorBaseEvent:{
+		printDreitonBaseError((void *)event);
+		jmp eventLoop;
+	}
+	magicNumberChangedBaseEvent:{
+		uint32 magicNumber;
+		getDreitonBaseMagicNumberChangedEventMagicNumber(&dreiton, event, &magicNumber);
+		fprintf(stdout, "\t/// magic number changed event ///////////////////////\n");
+		fprintf(stdout, "\t\tnew magic number: %u\n", magicNumber);
+		fprintf(stdout, "\t//////////////////////////////////////////////////////\n\n");
 		jmp eventLoop;
 	}
 	emergencyExit:{
-		uint32 token;
-		requestDreitonSync(dreiton, &token);
-		flushDreitonBuffer(dreiton);
-		waitForDreitonReply(dreiton, token, NULL);
-		disconnectFromDreiton(dreiton);
-		finiDreiton(dreiton);
-		fprintf(stdout, "done\n");
+		uint32 token = 0;
+		DreitonReply *reply = NULL;
+		requestDreitonSync(&dreiton, &token);
+		flushDreitonBuffer(&dreiton);
+		waitForDreitonReply(&dreiton, token, &reply);
+		free(reply);
+		disconnectFromDreiton(&dreiton);
+		unloadDreitonCodec(&dreiton);
+		unloadDreitonTransport(&dreiton);
+		finiDreiton(&dreiton);
+		pthread_kill(thread, SIGTERM);
+		pthread_join(thread, NULL);
 		ret 0;
 	}
+}
+TERMINATIONSIGNALHANDLER(){
+	(void)signal;
+	wakeUpDreitonReply(&dreiton, EXIT_DREITON_TRANSPORT_STATUS);
+	wakeUpDreitonEvent(&dreiton, EXIT_DREITON_TRANSPORT_STATUS);
+	ret;
+}
+PIPESIGNALHANDLER(){
+	(void)signal;
+	fprintf(stderr, "\tpipe error\n");
+	ret;
+}
+ISBIGENDIAN(){
+	const uint32 variable = 1;
+	ret *(uint8 *)&variable == 0;
 }
 

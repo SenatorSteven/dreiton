@@ -1,0 +1,192 @@
+
+/*! dreiton-core-helpers.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "headers/cold/cold.hold"
+#include "headers/protocols/dreiton-protocol.hold"
+#include "headers/protocols/dreiton-transport-protocol.hold"
+#include "headers/protocols/dreiton-codec-protocol.hold"
+#include "headers/protocols/dreiton-extension-protocol.hold"
+#include "headers/dreiton-core.hold"
+#include "headers/helpers/dreiton-core-helpers.hold"
+
+SENDDREITONCORENOOPERATIONREPLY(){
+	ret sendDreitonCoreReply(dreitonCore, client, NO_OPERATION_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, NO_OPERATION_DREITON_REPLY_ITEM_AMOUNT, NULL, NULL);
+}
+SENDDREITONCORESYNCREPLY(){
+	ret sendDreitonCoreReply(dreitonCore, client, SYNC_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, SYNC_DREITON_REPLY_ITEM_AMOUNT, NULL, NULL);
+}
+SENDDREITONCOREENABLEEXTENSIONREPLY(){
+	const void *dataStart[ENABLE_EXTENSION_DREITON_REPLY_ITEM_AMOUNT];
+	uint32 sizeStart[ENABLE_EXTENSION_DREITON_REPLY_ITEM_AMOUNT];
+	*(dataStart + ENABLE_EXTENSION_EXTENSION_DREITON_REPLY_ITEM_OFFSET) = &extensionId;
+	*(sizeStart + ENABLE_EXTENSION_EXTENSION_DREITON_REPLY_ITEM_OFFSET) = sizeof(uint32);
+	ret sendDreitonCoreReply(dreitonCore, client, ENABLE_EXTENSION_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, ENABLE_EXTENSION_DREITON_REPLY_ITEM_AMOUNT, sizeStart, dataStart);
+}
+SENDDREITONCOREAPPLYFOREVENTREPLY(){
+	ret sendDreitonCoreReply(dreitonCore, client, APPLY_FOR_EVENT_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, APPLY_FOR_EVENT_DREITON_REPLY_ITEM_AMOUNT, NULL, NULL);
+}
+SENDDREITONCOREWITHDRAWFROMEVENTREPLY(){
+	ret sendDreitonCoreReply(dreitonCore, client, WITHDRAW_FROM_EVENT_DREITON_REPLY_TYPE, NONE_DREITON_EXTENSION, token, status, WITHDRAW_FROM_EVENT_DREITON_REPLY_ITEM_AMOUNT, NULL, NULL);
+}
+GETDREITONCOREENABLEEXTENSIONREQUESTPATH(){
+	uint32 pathSize;
+	void *pathStart;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!request or !pathSizeReturn or !pathStartReturn){
+		jmp emergencyExit;
+	}
+	if(!getDreitonCoreMessageDecodedItem(dreitonCore, (*request).frame, ENABLE_EXTENSION_PATH_DREITON_REQUEST_ITEM_OFFSET, &pathSize, &pathStart)){
+		jmp emergencyExit;
+	}
+	if(*((char *)pathStart + pathSize - 1)){
+		jmp emergencyExit;
+	}
+	*pathSizeReturn = pathSize;
+	*pathStartReturn = pathStart;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONCOREAPPLYFOREVENTREQUESTEXTENSION(){
+	uint32 size;
+	void *start;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!request or !extensionReturn){
+		jmp emergencyExit;
+	}
+	if(!getDreitonCoreMessageDecodedItem(dreitonCore, (*request).frame, APPLY_FOR_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET, &size, &start)){
+		jmp emergencyExit;
+	}
+	if(size != sizeof(uint32)){
+		jmp emergencyExit;
+	}
+	*extensionReturn = *(uint32 *)start;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONCOREAPPLYFOREVENTREQUESTEVENTMASK(){
+	uint32 size;
+	void *start;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!request or !eventMaskReturn){
+		jmp emergencyExit;
+	}
+	if(!getDreitonCoreMessageDecodedItem(dreitonCore, (*request).frame, APPLY_FOR_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET, &size, &start)){
+		jmp emergencyExit;
+	}
+	if(size != sizeof(uint32)){
+		jmp emergencyExit;
+	}
+	*eventMaskReturn = *(uint32 *)start;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONCOREWITHDRAWFROMEVENTREQUESTEXTENSION(){
+	uint32 size;
+	void *start;
+	bool success;
+	if(!dreitonCore or !extensionReturn){
+		ret false;
+	}
+	success = false;
+	if(!request){
+		jmp emergencyExit;
+	}
+	if(!getDreitonCoreMessageDecodedItem(dreitonCore, (*request).frame, WITHDRAW_FROM_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET, &size, &start)){
+		jmp emergencyExit;
+	}
+	if(size != sizeof(uint32)){
+		jmp emergencyExit;
+	}
+	*extensionReturn = *(uint32 *)start;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONCOREWITHDRAWFROMEVENTREQUESTEVENTMASK(){
+	uint32 size;
+	void *start;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!request or !eventMaskReturn){
+		jmp emergencyExit;
+	}
+	if(!getDreitonCoreMessageDecodedItem(dreitonCore, (*request).frame, WITHDRAW_FROM_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET, &size, &start)){
+		jmp emergencyExit;
+	}
+	if(size != sizeof(uint32)){
+		jmp emergencyExit;
+	}
+	*eventMaskReturn = *(uint32 *)start;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+

@@ -1,0 +1,167 @@
+
+/*! signal-handler.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef SIGNAL_HANDLER_HOLD
+#define SIGNAL_HANDLER_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+#include <pthread.h>
+#include <signal.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "headers/cold/cold.hold"
+
+def struct{
+	void /*---*/ (*handler)(const int signal);
+	int32 /*--*/ signal;
+	bool /*---*/ terminal;
+	uint8 /*--*/ pad0[3];
+} SignalHandler;
+
+#define BOOTSIGNALTHREAD() /*-*/ bool   bootSignalThread(const uint64 signalHandlerSize, const SignalHandler *const signalHandlerStart, pthread_t *const threadReturn)
+#define SIGNALMAIN() /*-------*/ void * signalMain(void *const argument)
+
+BOOTSIGNALTHREAD();
+SIGNALMAIN();
+
+BOOTSIGNALTHREAD(){
+	#define PTHREAD_CREATE_FAILURE /*-*/ (-1)
+	sigset_t blockSet;
+	if(!signalHandlerSize){
+		sigfillset(&blockSet);
+		pthread_sigmask(SIG_BLOCK, &blockSet, NULL);
+	}else{
+		void *data;
+		pthread_t thread;
+		if(!signalHandlerStart){
+			ret false;
+		}
+		data = malloc(1 * sizeof(uint64) + signalHandlerSize * sizeof(SignalHandler));
+		if(!data){
+			ret false;
+		}
+		*(uint64 *)data = signalHandlerSize;
+		memcpy((uint64 *)data + 1, signalHandlerStart, signalHandlerSize * sizeof(SignalHandler));
+		sigfillset(&blockSet);
+		pthread_sigmask(SIG_BLOCK, &blockSet, NULL);
+		if(pthread_create(&thread, NULL, &signalMain, data) == PTHREAD_CREATE_FAILURE){
+			free(data);
+			ret false;
+		}
+		*threadReturn = thread;
+	}
+	ret true;
+	#undef  PTHREAD_CREATE_FAILURE
+}
+SIGNALMAIN(){
+	#define SIGWAIT_FAILURE /*-*/ (-1)
+	#define SIGMIN /*----------*/ (0)
+	#define SIGMAX /*----------*/ (64)
+	void (*handler[SIGMAX])(const int signal);
+	uint64 signalTerminationMask;
+	sigset_t waitSet;
+	bool success;
+	if(!argument){
+		ret NULL;
+	}
+	success = false;
+	jmp setHandlers;
+	setHandlers:{
+		void (**handlerCurrent)(const int signal) = handler + SIGMIN;
+		void (*const *const handlerWall)(const int signal) = handler + SIGMAX;
+		jmp setHandlerLoop;
+		setHandlerLoop:{
+			if(handlerCurrent < handlerWall){
+				*handlerCurrent = NULL;
+				inc handlerCurrent;
+				jmp setHandlerLoop;
+			}
+			jmp setSignalHandlers;
+		}
+	}
+	setSignalHandlers:{
+		const SignalHandler *signalHandlerCurrent = (void *)((uint64 *)argument + 1);
+		const SignalHandler *const signalHandlerWall = signalHandlerCurrent + *(uint64 *)argument;
+		signalTerminationMask = 0;
+		sigemptyset(&waitSet);
+		jmp setSignalHandlerLoop;
+		setSignalHandlerLoop:{
+			if(signalHandlerCurrent < signalHandlerWall){
+				const int signal = (*signalHandlerCurrent).signal;
+				if(signal >= SIGMIN and signal < SIGMAX){
+					*(handler + signal) = (*signalHandlerCurrent).handler;
+					signalTerminationMask |= !!(*signalHandlerCurrent).terminal << signal;
+					sigaddset(&waitSet, signal);
+				}
+				inc signalHandlerCurrent;
+				jmp setSignalHandlerLoop;
+			}
+			free(argument);
+			jmp signalLoop;
+		}
+	}
+	signalLoop:{
+		int signal;
+		if(sigwait(&waitSet, &signal) == SIGWAIT_FAILURE){
+			jmp signalLoop;
+		}
+		if(signal < SIGMIN or signal >= SIGMAX){
+			jmp signalLoop;
+		}
+		jmp handleSignal;
+		handleSignal:{
+			void (*h)(const int signal) = *(handler + signal);
+			if(!h){
+				jmp signalLoop;
+			}
+			(*h)(signal);
+			success = true;
+			if((1 << signal) & signalTerminationMask){
+				jmp emergencyExit;
+			}
+			jmp signalLoop;
+		}
+	}
+	emergencyExit:{
+		if(!success){
+			ret NULL;
+		}
+		ret (void *)0x1;
+	}
+}
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+

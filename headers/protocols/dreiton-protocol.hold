@@ -1,0 +1,271 @@
+
+/*!
+	leave endianness up to each server's discretion, it's up to them.
+*/
+
+/*!
+	keep replies lossless and events lossy. if the buffer fills up, lose events but do not lose replies.
+*/
+
+/*!
+	support errors by sending event 0 and casting to error.
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*! dreiton-protocol.hold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#ifndef DREITON_PROTOCOL_HOLD
+#define DREITON_PROTOCOL_HOLD
+
+#ifndef COLD_HOLD
+#define COLD_INCLUDED
+#include "headers/cold/cold.hold"
+#endif
+
+#define DREITON_PROTOCOL_VERSION /*-----------------------------------*/ (1)
+
+#define NONE_DREITON_ENDIANNESS /*------------------------------------*/ (0)
+#define LITTLE_DREITON_ENDIANNESS /*----------------------------------*/ (1)
+#define BIG_DREITON_ENDIANNESS /*-------------------------------------*/ (2)
+
+#define DREITON_ENDIANNESS /*-----------------------------------------*/ (LITTLE_DREITON_ENDIANNESS)
+
+#define NONE_DREITON_REQUEST_TYPE /*----------------------------------*/ (0)
+#define NO_OPERATION_DREITON_REQUEST_TYPE /*--------------------------*/ (1)
+#define SYNC_DREITON_REQUEST_TYPE /*----------------------------------*/ (2)
+#define ENABLE_EXTENSION_DREITON_REQUEST_TYPE /*----------------------*/ (3)
+#define APPLY_FOR_EVENT_DREITON_REQUEST_TYPE /*-----------------------*/ (4)
+#define WITHDRAW_FROM_EVENT_DREITON_REQUEST_TYPE /*-------------------*/ (5)
+
+#define NONE_DREITON_REPLY_TYPE /*------------------------------------*/ (0)
+#define NO_OPERATION_DREITON_REPLY_TYPE /*----------------------------*/ (1)
+#define SYNC_DREITON_REPLY_TYPE /*------------------------------------*/ (2)
+#define ENABLE_EXTENSION_DREITON_REPLY_TYPE /*------------------------*/ (3)
+#define APPLY_FOR_EVENT_DREITON_REPLY_TYPE /*-------------------------*/ (4)
+#define WITHDRAW_FROM_EVENT_DREITON_REPLY_TYPE /*---------------------*/ (5)
+
+#define NONE_DREITON_EVENT_TYPE /*------------------------------------*/ (0)
+
+#define NONE_DREITON_ERROR_TYPE /*------------------------------------*/ (0)
+
+#define NONE_DREITON_EXTENSION /*-------------------------------------*/ (0)
+
+#define NONE_DREITON_REQUEST_FLAG /*----------------------------------*/ (b(0))
+#define SEND_REPLY_DREITON_REQUEST_FLAG /*----------------------------*/ (b(1))
+
+#define NONE_DREITON_REQUEST_STATUS /*--------------------------------*/ (0)
+#define SUCCESS_DREITON_REQUEST_STATUS /*-----------------------------*/ (1)
+#define UPDATE_DREITON_REQUEST_STATUS /*------------------------------*/ (2)
+
+#define NONE_DREITON_REPLY_STATUS /*----------------------------------*/ (0)
+#define SUCCESS_DREITON_REPLY_STATUS /*-------------------------------*/ (1)
+#define UPDATE_DREITON_REPLY_STATUS /*--------------------------------*/ (2)
+
+#define NONE_DREITON_EVENT_STATUS /*----------------------------------*/ (0)
+#define SUCCESS_DREITON_EVENT_STATUS /*-------------------------------*/ (1)
+#define UPDATE_DREITON_EVENT_STATUS /*--------------------------------*/ (2)
+
+#define NONE_DREITON_ERROR_STATUS /*----------------------------------*/ (ERROR_FLAG_DREITON_STATUS_MASK | 0)
+#define REQUEST_DREITON_ERROR_STATUS /*-------------------------------*/ (ERROR_FLAG_DREITON_STATUS_MASK | 1)
+#define IMPLEMENTATION_DREITON_ERROR_STATUS /*------------------------*/ (ERROR_FLAG_DREITON_STATUS_MASK | 2)
+#define PAYLOAD_DREITON_ERROR_STATUS /*-------------------------------*/ (ERROR_FLAG_DREITON_STATUS_MASK | 3)
+#define LENGTH_DREITON_ERROR_STATUS /*--------------------------------*/ (ERROR_FLAG_DREITON_STATUS_MASK | 4)
+#define VALUE_DREITON_ERROR_STATUS /*---------------------------------*/ (ERROR_FLAG_DREITON_STATUS_MASK | 5)
+#define ACCESS_DREITON_ERROR_STATUS /*--------------------------------*/ (ERROR_FLAG_DREITON_STATUS_MASK | 6)
+#define ALLOCATION_DREITON_ERROR_STATUS /*----------------------------*/ (ERROR_FLAG_DREITON_STATUS_MASK | 7)
+#define FAILURE_DREITON_ERROR_STATUS /*-------------------------------*/ (ERROR_FLAG_DREITON_STATUS_MASK | 8)
+
+#define ERROR_FLAG_DREITON_STATUS_MASK /*-----------------------------*/ (b(10000000))
+
+#define NONE_DREITON_REQUEST_ITEM_AMOUNT /*---------------------------*/ (0)
+#define NO_OPERATION_DREITON_REQUEST_ITEM_AMOUNT /*-------------------*/ (0)
+#define SYNC_DREITON_REQUEST_ITEM_AMOUNT /*---------------------------*/ (0)
+#define ENABLE_EXTENSION_DREITON_REQUEST_ITEM_AMOUNT /*---------------*/ (1)
+#define APPLY_FOR_EVENT_DREITON_REQUEST_ITEM_AMOUNT /*----------------*/ (2)
+#define WITHDRAW_FROM_EVENT_DREITON_REQUEST_ITEM_AMOUNT /*------------*/ (2)
+
+#define NONE_DREITON_REPLY_ITEM_AMOUNT /*-----------------------------*/ (0)
+#define NO_OPERATION_DREITON_REPLY_ITEM_AMOUNT /*---------------------*/ (0)
+#define SYNC_DREITON_REPLY_ITEM_AMOUNT /*-----------------------------*/ (0)
+#define ENABLE_EXTENSION_DREITON_REPLY_ITEM_AMOUNT /*-----------------*/ (1)
+#define APPLY_FOR_EVENT_DREITON_REPLY_ITEM_AMOUNT /*------------------*/ (0)
+#define WITHDRAW_FROM_EVENT_DREITON_REPLY_ITEM_AMOUNT /*--------------*/ (0)
+
+#define NONE_DREITON_EVENT_ITEM_AMOUNT /*-----------------------------*/ (0)
+
+#define NONE_DREITON_ERROR_ITEM_AMOUNT /*-----------------------------*/ (0)
+
+#define ENABLE_EXTENSION_PATH_DREITON_REQUEST_ITEM_OFFSET /*----------*/ (0)
+
+#define APPLY_FOR_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET /*------*/ (0)
+#define APPLY_FOR_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET /*-----*/ (1)
+
+#define WITHDRAW_FROM_EVENT_EXTENSION_DREITON_REQUEST_ITEM_OFFSET /*--*/ (0)
+#define WITHDRAW_FROM_EVENT_EVENT_MASK_DREITON_REQUEST_ITEM_OFFSET /*-*/ (1)
+
+#define ENABLE_EXTENSION_EXTENSION_DREITON_REPLY_ITEM_OFFSET /*-------*/ (0)
+
+#define NONE_DREITON_EVENT_TYPE_MASK /*-------------------------------*/ (b(0))
+
+def struct{
+	uint16 /*------------------*/ type;
+	uint16 /*------------------*/ extension;
+	uint32 /*------------------*/ token;
+	uint8 /*-------------------*/ pad0[8];
+} DreitonMessageHeader;
+
+def struct{
+	uint16 /*------------------*/ type;
+	uint16 /*------------------*/ extension;
+	uint32 /*------------------*/ token;
+	uint8 /*-------------------*/ flags;
+	uint8 /*-------------------*/ pad0[7];
+} DreitonRequestHeader;
+
+def struct{
+	uint16 /*------------------*/ type;
+	uint16 /*------------------*/ extension;
+	uint32 /*------------------*/ token;
+	uint8 /*-------------------*/ status;
+	uint8 /*-------------------*/ pad0[7];
+} DreitonReplyHeader;
+
+def struct{
+	uint16 /*------------------*/ type;
+	uint16 /*------------------*/ extension;
+	uint32 /*------------------*/ token;
+	uint8 /*-------------------*/ status;
+	uint8 /*-------------------*/ pad0[7];
+} DreitonEventHeader;
+
+def struct{
+	uint16 /*------------------*/ type;
+	uint16 /*------------------*/ extension;
+	uint32 /*------------------*/ token;
+	uint8 /*-------------------*/ status;
+	uint8 /*-------------------*/ parameterOffset;
+	uint16 /*------------------*/ operation;
+	uint32 /*------------------*/ value;
+} DreitonErrorHeader;
+
+def struct{
+	DreitonMessageHeader * /*--*/ header;
+	void * /*------------------*/ frame;
+} DreitonMessage;
+
+def struct{
+	DreitonRequestHeader * /*--*/ header;
+	void * /*------------------*/ frame;
+} DreitonRequest;
+
+def struct{
+	DreitonReplyHeader * /*----*/ header;
+	void * /*------------------*/ frame;
+} DreitonReply;
+
+def struct{
+	DreitonEventHeader * /*----*/ header;
+	void * /*------------------*/ frame;
+} DreitonEvent;
+
+def struct{
+	DreitonErrorHeader * /*----*/ header;
+	void * /*------------------*/ frame;
+} DreitonError;
+
+def struct{
+	uint8 /*-------------------*/ pad0[1];
+} NoOperationDreitonRequestDescription;
+
+def struct{
+	uint8 /*-------------------*/ pad0[1];
+} SyncDreitonRequestDescription;
+
+def struct{
+	char * /*------------------*/ path;
+} EnableExtensionDreitonRequestDescription;
+
+def struct{
+	uint32 /*------------------*/ extension;
+	uint32 /*------------------*/ eventMask;
+} ApplyForEventDreitonRequestDescription;
+
+def struct{
+	uint32 /*------------------*/ extension;
+	uint32 /*------------------*/ eventMask;
+} WithdrawFromEventDreitonRequestDescription;
+
+def struct{
+	uint8 /*-------------------*/ pad0[1];
+} NoOperationDreitonReplyDescription;
+
+def struct{
+	uint8 /*-------------------*/ pad0[1];
+} SyncDreitonReplyDescription;
+
+def struct{
+	uint32 /*------------------*/ extension;
+} EnableExtensionDreitonReplyDescription;
+
+def struct{
+	uint8 /*-------------------*/ pad0[1];
+} ApplyForEventDreitonReplyDescription;
+
+def struct{
+	uint8 /*-------------------*/ pad0[1];
+} WithdrawFromEventDreitonReplyDescription;
+
+#ifdef  COLD_INCLUDED
+#undef  COLD_INCLUDED
+#include "headers/cold/hot.hold"
+#endif
+
+#endif
+

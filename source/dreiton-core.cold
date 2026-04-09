@@ -6,23 +6,33 @@
 */
 
 /*!
-	implement a single malloc segment to "malloc" on.
-*/
-
-/*!
 	max client amount?
 */
 
 /*!
-	add generations and other data to extensions, as well as the clients.
+	when request comes in, event must be handled before a reply, synchronously. that is slow, maybe reform to send events at the same time, even if the design is weird.
 */
 
 /*!
-	decouple the server from the transport, currently shm.
+	keep replies lossless and events lossy. if the buffer fills up, lose events but do not lose replies.
 */
 
 /*!
-	keep local copies of the extension struct so that we can forgo checking if functions are non-null.
+	support client id XOR with /dev/urandom for obfuscation.
+*/
+
+/*!
+	support extension id XOR with /dev/urandom for obfuscation.
+*/
+
+/*!
+	keep track of base events per extension to avoid holes, if you care. adding extensions should probably not be allowed after a little bit since the start anyway.
+
+	same goes for loading and unloading extensions if unloading is at all possible.
+*/
+
+/*!
+	introduce stacks to store clients, extensions etc in holes left behind by removals.
 */
 
 
@@ -75,99 +85,36 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
-#include <errno.h>
 #include <dlfcn.h>
-#include <fcntl.h>
-#include <pthread.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h> /*! remove later */
-#include <unistd.h>
-#include <sys/epoll.h>
-#include <sys/eventfd.h>
-#include <sys/shm.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-
-#include "headers/cold/cold.hold"
-#include "headers/dreiton-protocol.hold"
-#include "headers/dreiton-transport.hold"
-#include "headers/dreiton-codec.hold"
-#include "headers/dreiton-extension.hold"
-#include "headers/dreiton-core.hold"
-
-
-
-
-
-
 
 
 
 /*! remove later */
 
-#define SHM_NONE /*--------------------*/ (0)
-#define NONE_EPOLL_FLAG /*-------------*/ (0)
-#define NONE_SOCKET_PROTOCOL /*--------*/ (0)
-#define EPOLL_CREATE1_FAILURE /*-------*/ (-1)
-#define INFINITE_EPOLL_WAIT_TIMEOUT /*-*/ (-1)
-#define PTHREAD_CREATE_SUCCESS /*------*/ (0)
-#define SOCKET_FAILURE /*--------------*/ (-1)
-#define PIPE_FAILURE /*----------------*/ (-1)
-#define FCNTL_FAILURE /*---------------*/ (-1)
-#define EPOLL_CTL_FAILURE /*-----------*/ (-1)
-#define SENDMSG_FAILURE /*-------------*/ (-1)
-
-local bool sendFd(const int socket, const int *const fd, const uint fdSize){
-	uint controlMessageBufferSize;
-	char *controlMessageBuffer;
-	char mandatoryPayloadByte;
-	struct iovec payload;
-	struct msghdr messageHeader = {0};
-	struct cmsghdr *controlMessageHeader;
-	if(!socket or !fd or !fdSize){
-		ret false;
-	}
-	controlMessageBufferSize = CMSG_SPACE(fdSize * sizeof(int));
-	if(!(controlMessageBuffer = malloc(controlMessageBufferSize))){
-		ret false;
-	}
-	mandatoryPayloadByte = 1;
-	payload.iov_base = &mandatoryPayloadByte;
-	payload.iov_len = 1;
-	messageHeader.msg_iov = &payload;
-	messageHeader.msg_iovlen = 1;
-	messageHeader.msg_control = controlMessageBuffer;
-	messageHeader.msg_controllen = controlMessageBufferSize;
-	controlMessageHeader = CMSG_FIRSTHDR(&messageHeader);
-	(*controlMessageHeader).cmsg_level = SOL_SOCKET;
-	(*controlMessageHeader).cmsg_type = SCM_RIGHTS;
-	(*controlMessageHeader).cmsg_len = CMSG_LEN(fdSize * sizeof(int));
-	memcpy(CMSG_DATA(controlMessageHeader), fd, fdSize * sizeof(int)); /*! replace with toolkit function */
-	if(sendmsg(socket, &messageHeader, 0) == SENDMSG_FAILURE){
-		free(controlMessageBuffer);
-		ret false;
-	}
-	free(controlMessageBuffer);
-	ret true;
-}
+#include <stdio.h>
 
 
 
+#include "headers/cold/cold.hold"
+#include "headers/protocols/dreiton-protocol.hold"
+#include "headers/protocols/dreiton-transport-protocol.hold"
+#include "headers/protocols/dreiton-codec-protocol.hold"
+#include "headers/protocols/dreiton-extension-protocol.hold"
+#include "headers/dreiton-core.hold"
 
-
-
-
-
+#define DLCLOSE_SUCCESS /*-*/ (0)
 
 INITDREITONCORE(){
 	if(!dreitonCore){
 		ret false;
 	}
-	(*dreitonCore).serverChannelPath = NULL;
-	(*dreitonCore).clientChannelPath = NULL;
-	(*dreitonCore).database = NULL;
+	(*dreitonCore).transportDescriptorHandle = NULL;
+	(*dreitonCore).transportDescriptor = NULL;
+	(*dreitonCore).transportHandle = NULL;
+	(*dreitonCore).codecDescriptorHandle = NULL;
+	(*dreitonCore).codecDescriptor = NULL;
 	(*dreitonCore).clientStart = NULL;
 	(*dreitonCore).clientSize = 0;
 	(*dreitonCore).clientAllocated = 0;
@@ -180,829 +127,594 @@ INITDREITONCORE(){
 	(*dreitonCore).eventSize = 0;
 	(*dreitonCore).eventAllocated = 0;
 	(*dreitonCore).baseEvent = 0;
-	(*dreitonCore).replyEpollFd = 0;
-	(*dreitonCore).eventEpollFd = 0;
-	(*dreitonCore).signalEventFd = 0;
-	(*dreitonCore).replyLoopRunning = false;
-	(*dreitonCore).eventLoopRunning = false;
-	(*dreitonCore).registrationLoopRunning = false;
-	(*dreitonCore).replyLoopThreadCreated = false;
-	(*dreitonCore).eventLoopThreadCreated = false;
-	(*dreitonCore).registrationLoopThreadCreated = false;
-
-
-
-	/*!*/
-
-	(*dreitonCore).registrationEventFd = 0;
-	(*dreitonCore).registrationEpollFd = 0;
-	(*dreitonCore).replyEventFd = 0;
-	*((*dreitonCore).fdCopy + 0) = 0;
-	*((*dreitonCore).fdCopy + 1) = 0;
-	*((*dreitonCore).fdCopy + 2) = 0;
-
-
-
-	/*!*/
-
-	(*dreitonCore).transport.transportHandle = NULL;
-	(*dreitonCore).transport.transportDescriptor = NULL;
-
-
-
-	ret true;
-}
-SETDREITONCORESERVERCHANNELPATH(){
-	if(!dreitonCore){
-		ret false;
-	}
-	if(serverChannelPath == (*dreitonCore).serverChannelPath){
-		ret false;
-	}
-	(*dreitonCore).serverChannelPath = serverChannelPath;
-	ret true;
-}
-SETDREITONCORECLIENTCHANNELPATH(){
-	if(!dreitonCore){
-		ret false;
-	}
-	if(clientChannelPath == (*dreitonCore).clientChannelPath){
-		ret false;
-	}
-	(*dreitonCore).clientChannelPath = clientChannelPath;
-	ret true;
-}
-SETDREITONCOREDATABASE(){
-	if(!dreitonCore){
-		ret false;
-	}
-	if(database == (*dreitonCore).database){
-		ret false;
-	}
-	(*dreitonCore).database = database;
-	(*database).owner = NONE_DREITON_CORE_OWNER;
-	(*database).closeOnIdle = false;
-	ret true;
-}
-SETDREITONCOREOWNER(){
-	DreitonCoreDatabase *database;
-	if(!dreitonCore){
-		ret false;
-	}
-	database = (*dreitonCore).database;
-	if(owner == (*database).owner){
-		ret false;
-	}
-	(*database).owner = owner;
-	ret true;
-}
-SETDREITONCOREEXTENSIONBLOCKSIZE(){
-	if(!dreitonCore){
-		ret false;
-	}
-	if(serverExtensionBlockSize == (*dreitonCore).extensionBlockSize){
-		ret false;
-	}
-	(*dreitonCore).extensionBlockSize = serverExtensionBlockSize;
+	(*dreitonCore).requestReceiverCreated = false;
+	(*dreitonCore).eventReceiverCreated = false;
+	(*dreitonCore).registrationReceiverCreated = false;
 	ret true;
 }
 SETDREITONCORECLIENTBLOCKSIZE(){
+	bool success;
 	if(!dreitonCore){
 		ret false;
 	}
+	success = false;
 	if(clientBlockSize == (*dreitonCore).clientBlockSize){
-		ret false;
+		jmp emergencyExit;
 	}
 	(*dreitonCore).clientBlockSize = clientBlockSize;
-	ret true;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
 }
-BOOTDREITONCOREREPLYLOOPTHREAD(){
-	if(!dreitonCore){
-		ret false;
-	}
-	if((*dreitonCore).replyLoopThreadCreated or (*dreitonCore).replyLoopRunning){
-		ret false;
-	}
-	(*dreitonCore).replyLoopRunning = true;
-	(*dreitonCore).replyLoopThreadCreated = pthread_create(&(*dreitonCore).replyLoopThread, NULL, &dreitonCoreReplyLoop, dreitonCore) == PTHREAD_CREATE_SUCCESS;
-	if(!(*dreitonCore).replyLoopThreadCreated){
-		(*dreitonCore).replyLoopRunning = false;
-		ret false;
-	}
-	ret true;
-}
-BOOTDREITONCOREEVENTLOOPTHREAD(){
-	if(!dreitonCore){
-		ret false;
-	}
-	if((*dreitonCore).eventLoopThreadCreated or (*dreitonCore).eventLoopRunning){
-		ret false;
-	}
-	(*dreitonCore).eventLoopRunning = true;
-	(*dreitonCore).eventLoopThreadCreated = pthread_create(&(*dreitonCore).eventLoopThread, NULL, &dreitonCoreEventLoop, dreitonCore) == PTHREAD_CREATE_SUCCESS;
-	if(!(*dreitonCore).eventLoopThreadCreated){
-		(*dreitonCore).eventLoopRunning = false;
-		ret false;
-	}
-	ret true;
-}
-BOOTDREITONCOREREGISTRATIONLOOPTHREAD(){
-	if(!dreitonCore){
-		ret false;
-	}
-	if((*dreitonCore).registrationLoopThreadCreated or (*dreitonCore).registrationLoopRunning){
-		ret false;
-	}
-	(*dreitonCore).registrationLoopRunning = true;
-	(*dreitonCore).registrationLoopThreadCreated = pthread_create(&(*dreitonCore).registrationLoopThread, NULL, &dreitonCoreRegistrationLoop, dreitonCore) == PTHREAD_CREATE_SUCCESS;
-	if(!(*dreitonCore).registrationLoopThreadCreated){
-		(*dreitonCore).registrationLoopRunning = false;
-		ret false;
-	}
-	ret true;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-DREITONCOREREPLYLOOP(){
-
-
-
-	/*! success when? */
-
-
-
-	DreitonCore *const dreitonCore = arg;
-	int replyEpollFd;
+SETDREITONCOREEXTENSIONBLOCKSIZE(){
 	bool success;
 	if(!dreitonCore){
-		ret NULL;
+		ret false;
 	}
-	replyEpollFd = 0;
 	success = false;
-	if((*dreitonCore).replyEpollFd){
+	if(extensionBlockSize == (*dreitonCore).extensionBlockSize){
 		jmp emergencyExit;
 	}
-	if(!(*dreitonCore).replyLoopThreadCreated){
-		(*dreitonCore).replyLoopRunning = true;
-	}
-	replyEpollFd = epoll_create1(NONE_EPOLL_FLAG);
-	if(replyEpollFd == EPOLL_CREATE1_FAILURE){
-		replyEpollFd = 0;
-		jmp emergencyExit;
-	}
-	(*dreitonCore).replyEpollFd = replyEpollFd;
-
-
-
-	/*! put this somewhere else later, and store to local variables before storing in the core */
-
-	{
-		const char *const path = "/tmp/dreiton-shm-transport/output/libdreiton-shm-transport.so"
-		(*dreitonCore).transport.transportHandle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-		if(!(*dreitonCore).transport.transportHandle){
-			fprintf(stdout, "shm transport not loaded\n");
-		}else{
-			(*dreitonCore).transport.transportDescriptor = dlsym((*dreitonCore).transport.transportHandle, "dreitonTransportDescriptor");
-			if(!(*dreitonCore).transport.transportDescriptor){
-				fprintf(stdout, "shm transport symbol failure\n");
-				dlclose((*dreitonCore).transport.transportHandle); /*! errors? */
-			}
-		}
-	}
-
-
-
-	jmp replyLoop;
-	replyLoop:{
-		(*(*dreitonCore).transport.transportDescriptor).wait();
-		if(!(*dreitonCore).replyLoopRunning){
-			jmp emergencyExit;
-		}
-
-
-
-
-
-
-
-
-
-		struct epoll_event eventStart[128];
-		int eventAmount = epoll_wait(replyEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
-		struct epoll_event *eventCurrent;
-		struct epoll_event *eventWall;
-		eventCurrent = eventStart;
-		eventWall = eventCurrent + eventAmount;
-		jmp parseRequestLoop;
-		parseRequestLoop:{
-			if(eventCurrent < eventWall){
-				const int fd = (*eventCurrent).data.fd;
-				if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
-					if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP)){
-						jmp closeConnection;
-					}
-					jmp closeConnection;
-				}
-				if((*eventCurrent).events & EPOLLIN){
-					jmp readRequestLoop;
-					readRequestLoop:{
-						uint64 message;
-						int returnValue = read(fd, &message, sizeof(message));
-						if(fd != (*dreitonCore).registrationEventFd){
-
-
-
-
-
-
-
-
-
-							if(returnValue > 0){
-								const uint32 id = message >> 32; /*! update */
-								/*! add generation? */
-								const uint8 requestAmount = message;
-								DreitonCoreClient *client;
-								if(!requestAmount){
-									jmp closeConnection;
-								}
-								client = findDreitonCoreClientFdId(dreitonCore, fd, id);
-								if(client){
-									parseDreitonCoreClientRequests(dreitonCore, client, requestAmount);
-								}else{
-									fprintf(stdout, "could not find the client\n");
-									/*! error in communication or bad actor? */
-								}
-							}elif(returnValue == -1){
-								if(errno == EINTR){
-									jmp readRequestLoop;
-								}
-								if(errno != EAGAIN and errno != EWOULDBLOCK){
-									jmp closeConnection;
-								}
-							}else{
-								jmp closeConnection;
-								closeConnection:{
-									DreitonCoreClient *const client = findDreitonCoreClientFd(dreitonCore, fd);
-									if(client){
-										fprintf(stdout, "disconnected %u\n", (*client).clientId);
-										removeDreitonCoreClient(dreitonCore, client);
-										if((*dreitonCore).clientAllocated == 1 and (*dreitonCore).database and (*(*dreitonCore).database).closeOnIdle){
-											fprintf(stdout, "reply thread exited due to no clients\n");
-											jmp emergencyExit;
-										}
-									}
-								}
-							}
-
-
-
-
-
-
-
-
-
-						}else{
-
-
-
-
-
-
-
-
-
-							if(returnValue > 0){
-
-								/*!*/
-
-							}elif(returnValue == -1){
-								if(errno == EINTR){
-									jmp readRequestLoop;
-								}
-
-								/*!*/
-
-							}else{
-
-								/*!*/
-
-							}
-
-
-
-							if(!(*dreitonCore).replyEventFd){
-								struct epoll_event event;
-								(*dreitonCore).replyEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
-								event.events = EPOLLIN;
-								event.data.fd = (*dreitonCore).replyEventFd; /*! what data to pass? */
-								epoll_ctl((*dreitonCore).registrationEpollFd, EPOLL_CTL_ADD, (*dreitonCore).replyEventFd, &event); /*! errors? */
-							}
-
-
-
-							if(!insertDreitonCoreClient(dreitonCore, *((*dreitonCore).fdCopy + 0), *((*dreitonCore).fdCopy + 1), *((*dreitonCore).fdCopy + 2))){
-								jmp insertClientFailure;
-								insertClientFailure:{
-									const int64 shmId = 0xFFFFFFFF;
-									write((*dreitonCore).replyEventFd, &shmId, sizeof(shmId)); /*! on signal interrupt? */ /*! errors? */
-									inc eventCurrent;
-									jmp parseRequestLoop;
-								}
-							}
-							{
-								const int64 shmId = (*((*dreitonCore).clientStart + (*dreitonCore).clientAllocated - 1)).shmId; /*! update when data types are in use */
-								write((*dreitonCore).replyEventFd, &shmId, sizeof(shmId)); /*! on signal interrupt? */ /*! errors? */
-							}
-							inc eventCurrent;
-							jmp parseRequestLoop;
-
-
-
-
-
-
-
-
-
-						}
-					}
-				}
-				inc eventCurrent;
-				jmp parseRequestLoop;
-			}
-
-
-
-
-
-
-
-
-
-			jmp replyLoop;
-		}
-	}
+	(*dreitonCore).extensionBlockSize = extensionBlockSize;
+	success = true;
+	jmp emergencyExit;
 	emergencyExit:{
-		removeAllDreitonCoreClients(dreitonCore);
-		if(replyEpollFd){
-			close(replyEpollFd); /*! on signal interrupt? */
-			(*dreitonCore).replyEpollFd = 0;
-		}
-		if(!(*dreitonCore).replyLoopThreadCreated){
-			(*dreitonCore).replyLoopRunning = false;
-		}
 		if(!success){
-			ret NULL;
+			ret false;
 		}
-		ret dreitonCore;
+		ret true;
 	}
+	ret true;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-DREITONCOREEVENTLOOP(){
-	DreitonCore *const dreitonCore = arg;
-	int eventEpollFd;
+SETDREITONCOREEXTENSIONEVENTBLOCKSIZE(){
 	bool success;
 	if(!dreitonCore){
-		ret NULL;
+		ret false;
 	}
-	eventEpollFd = 0;
 	success = false;
-	if((*dreitonCore).eventEpollFd){
+	if(extensionEventBlockSize == (*dreitonCore).extensionEventBlockSize){
 		jmp emergencyExit;
 	}
-	if(!(*dreitonCore).eventLoopThreadCreated){
-		(*dreitonCore).eventLoopRunning = true;
-	}
-	eventEpollFd = epoll_create1(NONE_EPOLL_FLAG);
-	if(eventEpollFd == EPOLL_CREATE1_FAILURE){
-		eventEpollFd = 0;
-		jmp emergencyExit;
-	}
-	(*dreitonCore).eventEpollFd = eventEpollFd;
-	jmp eventLoop;
-	eventLoop:{
-		struct epoll_event eventStart[1];
-		int eventAmount = epoll_wait(eventEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
-		struct epoll_event *eventCurrent;
-		struct epoll_event *eventWall;
-		if(!(*dreitonCore).eventLoopRunning){
-			jmp emergencyExit;
-		}
-		eventCurrent = eventStart;
-		eventWall = eventCurrent + eventAmount;
-		jmp parseEventLoop;
-		parseEventLoop:{
-			if(eventCurrent < eventWall){
-				const uint64 data = (*eventCurrent).data.u64;
-				const int fd = data;
-				const uint32 extension = data >> 32;
-				if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
-					if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP)){
-
-
-
-						/*!*/
-
-
-
-						/*! exit to where? */
-					}
-
-
-
-					/*!*/
-
-
-
-					/*! exit to where? */
-				}
-				if((*eventCurrent).events & EPOLLIN){
-					jmp readGeneratedEventLoop;
-					readGeneratedEventLoop:{
-						uint64 message;
-						int returnValue = read(fd, &message, sizeof(message));
-
-
-
-						if(returnValue > 0){
-
-							/*!*/
-
-						}elif(returnValue == -1){
-
-							/*!*/
-
-						}else{
-
-							/*!*/
-
-						}
-
-
-
-						if(isValidDreitonCoreExtension(dreitonCore, extension)){
-							if((*((*dreitonCore).extensionStart + extension)).extensionReadFd == fd){
-								if(emitDreitonCoreEvent(dreitonCore, extension, message)){
-									success = true;
-								}
-							}
-						}
-
-
-
-					}
-				}
-				inc eventCurrent;
-				jmp parseEventLoop;
-			}
-			jmp eventLoop;
-		}
-	}
+	(*dreitonCore).extensionEventBlockSize = extensionEventBlockSize;
+	success = true;
+	jmp emergencyExit;
 	emergencyExit:{
-		if(eventEpollFd){
-			close(eventEpollFd); /*! on signal interrupt? */
-			(*dreitonCore).eventEpollFd = 0;
-		}
-		if(!(*dreitonCore).eventLoopThreadCreated){
-			(*dreitonCore).eventLoopRunning = false;
-		}
 		if(!success){
-			ret NULL;
+			ret false;
 		}
-		ret dreitonCore;
+		ret true;
 	}
+	ret true;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-DREITONCOREREGISTRATIONLOOP(){
-
-
-
-	/*! somehow mitigate inserting a client but failing something else, leading to a client not getting the needed data. also make sure that failure is basically impossible so this is not a point of failure. */
-
-
-
-	DreitonCore *const dreitonCore = arg;
-	int registrationEpollFd;
-	int socketConnection;
-	struct sockaddr_un address;
+LOADDREITONCORETRANSPORT(){
+	void *transportDescriptorHandle;
+	DreitonServerTransportDescriptor *transportDescriptor;
 	bool success;
 	if(!dreitonCore){
-		ret NULL;
+		ret false;
 	}
-	registrationEpollFd = 0;
-	socketConnection = 0;
 	success = false;
-	if(!(*dreitonCore).serverChannelPath or !(*dreitonCore).clientChannelPath or (*dreitonCore).registrationEpollFd){
+	if((*dreitonCore).transportDescriptor or !path){
 		jmp emergencyExit;
 	}
-	if(!(*dreitonCore).registrationLoopThreadCreated){
-		(*dreitonCore).registrationLoopRunning = true;
-	}
-	registrationEpollFd = epoll_create1(NONE_EPOLL_FLAG);
-	if(registrationEpollFd == EPOLL_CREATE1_FAILURE){
-		registrationEpollFd = 0;
+	transportDescriptorHandle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+	if(!transportDescriptorHandle){
 		jmp emergencyExit;
 	}
-	(*dreitonCore).registrationEpollFd = registrationEpollFd;
-	jmp createServerClientChannelPath;
-	createServerClientChannelPath:{
-		FILE *const file = fopen((*dreitonCore).clientChannelPath, "w");
-		if(!file){
-			jmp emergencyExit;
-		}
-		fclose(file);
-		jmp createServerRegistrationLoopConnection;
+	transportDescriptor = dlsym(transportDescriptorHandle, "dreitonServerTransportDescriptor");
+	if(!transportDescriptor){
+		jmp emergencyExit;
 	}
-	createServerRegistrationLoopConnection:{
-		uint concurrentConnectionAmount = 128; /*! parameterize */
-		socketConnection = socket(AF_UNIX, SOCK_STREAM, NONE_SOCKET_PROTOCOL); /*! errors? */
-		if(socketConnection == SOCKET_FAILURE){
-			jmp emergencyExit;
-		}
-		address.sun_family = AF_UNIX;
-		strcpy(address.sun_path, (*dreitonCore).serverChannelPath);
-		unlink((*dreitonCore).serverChannelPath); /*! errors? */
-		bind(socketConnection, (void *)&address, sizeof(address)); /*! errors? */
-		listen(socketConnection, concurrentConnectionAmount); /*! errors? */
-		jmp registrationLoop;
+	if(!(*transportDescriptor).initDreitonTransportDescriptor){
+		jmp emergencyExit;
 	}
-	registrationLoop:{
-		const int clientSocket = accept(socketConnection, NULL, NULL); /*! errors? */
-		int64 value;
-		bool registrationSuccess = false;
-		struct{
-			int32 /*-*/ readFd;
-			int32 /*-*/ writeFd;
-		} requestPipe;
-		struct{
-			int32 /*-*/ readFd;
-			int32 /*-*/ writeFd;
-		} replyPipe;
-		struct{
-			int32 /*-*/ readFd;
-			int32 /*-*/ writeFd;
-		} eventPipe;
-		if(!(*dreitonCore).registrationLoopRunning){
-			close(clientSocket); /*! on signal interrupt? */
-			jmp emergencyExit;
-		}
-		requestPipe.readFd = 0;
-		requestPipe.writeFd = 0;
-		replyPipe.readFd = 0;
-		replyPipe.writeFd = 0;
-		eventPipe.readFd = 0;
-		eventPipe.writeFd = 0;
-		if(!(*dreitonCore).replyEpollFd){
-			jmp registrationLoopEmergencyExit;
-		}
-		if(pipe((void *)&requestPipe) == PIPE_FAILURE){ /*! check for surprise errors */
-			requestPipe.readFd = 0;
-			requestPipe.writeFd = 0;
-			jmp registrationLoopEmergencyExit;
-		}
-		if(pipe((void *)&replyPipe) == PIPE_FAILURE){ /*! check for surprise errors */
-			replyPipe.readFd = 0;
-			replyPipe.writeFd = 0;
-			jmp registrationLoopEmergencyExit;
-		}
-		if(pipe((void *)&eventPipe) == PIPE_FAILURE){ /*! check for surprise errors */
-			eventPipe.readFd = 0;
-			eventPipe.writeFd = 0;
-			jmp registrationLoopEmergencyExit;
-		}
-		{
-			const int flag = fcntl(requestPipe.readFd, F_GETFL, 0); /*! errors? */
-			int returnValue;
-			if(flag == FCNTL_FAILURE){
-				jmp registrationLoopEmergencyExit;
-			}
-			returnValue = fcntl(requestPipe.readFd, F_SETFL, flag | O_NONBLOCK); /*! errors? */
-			if(returnValue == FCNTL_FAILURE){
-				jmp registrationLoopEmergencyExit;
-			}
-		}
-		{
-			struct epoll_event event;
-			event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
-			event.data.fd = requestPipe.readFd;
-			if(epoll_ctl((*dreitonCore).replyEpollFd, EPOLL_CTL_ADD, requestPipe.readFd, &event) == EPOLL_CTL_FAILURE){
-				jmp registrationLoopEmergencyExit;
-			}
-		}
-		if(!(*dreitonCore).registrationEventFd){
-			struct epoll_event event;
-			(*dreitonCore).registrationEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
-			event.events = EPOLLIN;
-			event.data.fd = (*dreitonCore).registrationEventFd;
-			epoll_ctl((*dreitonCore).replyEpollFd, EPOLL_CTL_ADD, (*dreitonCore).registrationEventFd, &event); /*! errors? */
-		}
-		{
-			const uint64 value = 1;
-			*((*dreitonCore).fdCopy + 0) = requestPipe.readFd;
-			*((*dreitonCore).fdCopy + 1) = replyPipe.writeFd;
-			*((*dreitonCore).fdCopy + 2) = eventPipe.writeFd;
-			write((*dreitonCore).registrationEventFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
-		}
-		{
-			struct epoll_event eventStart[1];
-			int eventAmount = epoll_wait(registrationEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
-			int returnValue = read((*eventStart).data.fd, &value, sizeof(value)); /*! errors? */
-			(void)eventAmount;
-			(void)returnValue;
-		}
-		{
-			int fd[3];
-			*(fd + 0) = requestPipe.writeFd;
-			*(fd + 1) = replyPipe.readFd;
-			*(fd + 2) = eventPipe.readFd;
-			if(!sendFd(clientSocket, fd, countof(fd))){ /*! errors? client might not send, how to mitigate? */
-				jmp registrationLoopEmergencyExit;
-			}
-		}
-		if(value == 0xFFFFFFFF){
-			const int32 shmId = 0;
-			send(clientSocket, &shmId, sizeof(shmId), 0); /*! error? */
-		}else{
-			const int32 shmId = value;
-			send(clientSocket, &shmId, sizeof(shmId), 0); /*! error? */
-			fprintf(stdout, "connected on %i\n", shmId);
-			registrationSuccess = true;
-			success = true;
-		}
-		jmp registrationLoopEmergencyExit;
-		registrationLoopEmergencyExit:{
-			if(requestPipe.writeFd) /*-*/ close(requestPipe.writeFd); /*! on signal interrupt? */
-			if(replyPipe.readFd) /*----*/ close(replyPipe.readFd); /*! on signal interrupt? */
-			if(eventPipe.readFd) /*----*/ close(eventPipe.readFd); /*! on signal interrupt? */
-			if(clientSocket) /*--------*/ close(clientSocket); /*! on signal interrupt? */
-			if(!registrationSuccess){
-				if(requestPipe.readFd) /*-*/ close(requestPipe.readFd); /*! on signal interrupt? */
-				if(replyPipe.writeFd) /*--*/ close(replyPipe.writeFd); /*! on signal interrupt? */
-				if(eventPipe.writeFd) /*--*/ close(eventPipe.writeFd); /*! on signal interrupt? */
-			}
-			jmp registrationLoop;
-		}
+	if(!(*(*transportDescriptor).initDreitonTransportDescriptor)(&(*dreitonCore).transportHandle)){
+		jmp emergencyExit;
 	}
+	(*dreitonCore).transportDescriptorHandle = transportDescriptorHandle;
+	(*dreitonCore).transportDescriptor = transportDescriptor;
+	success = true;
+	jmp emergencyExit;
 	emergencyExit:{
-		if((*dreitonCore).serverChannelPath){
-			unlink((*dreitonCore).serverChannelPath); /*! what do? */
-		}
-		if(socketConnection){
-			close(socketConnection); /*! on signal interrupt? */
-		}
-		if((*dreitonCore).clientChannelPath){
-			unlink((*dreitonCore).clientChannelPath); /*! what do? */
-		}
-		if(registrationEpollFd){
-			close(registrationEpollFd); /*! on signal interrupt? */
-			(*dreitonCore).registrationEpollFd = 0;
-		}
-		if(!(*dreitonCore).registrationLoopThreadCreated){
-			(*dreitonCore).registrationLoopRunning = false;
-		}
 		if(!success){
-			ret NULL;
+			ret false;
 		}
-		ret dreitonCore;
+		ret true;
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+LOADDREITONCORECODEC(){
+	void *codecDescriptorHandle;
+	DreitonCodecDescriptor *codecDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if((*dreitonCore).codecDescriptor or !path){
+		jmp emergencyExit;
+	}
+	codecDescriptorHandle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+	if(!codecDescriptorHandle){
+		jmp emergencyExit;
+	}
+	codecDescriptor = dlsym(codecDescriptorHandle, "dreitonCodecDescriptor");
+	if(!codecDescriptor){
+		jmp emergencyExit;
+	}
+	(*dreitonCore).codecDescriptorHandle = codecDescriptorHandle;
+	(*dreitonCore).codecDescriptor = codecDescriptor;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONCORETRANSPORTCLIENTBLOCKSIZE(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).setDreitonTransportDescriptorClientBlockSize){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).setDreitonTransportDescriptorClientBlockSize)((*dreitonCore).transportHandle, clientBlockSize)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONCORETRANSPORTCONCURRENTCONNECTIONAMOUNT(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).setDreitonTransportDescriptorConcurrentConnectionAmount){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).setDreitonTransportDescriptorConcurrentConnectionAmount)((*dreitonCore).transportHandle, concurrentConnectionAmount)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONCORETRANSPORTREQUESTSLOTSIZE(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).setDreitonTransportDescriptorRequestSlotSize){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).setDreitonTransportDescriptorRequestSlotSize)((*dreitonCore).transportHandle, requestSlotSize)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONCORETRANSPORTREPLYSLOTSIZE(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).setDreitonTransportDescriptorReplySlotSize){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).setDreitonTransportDescriptorReplySlotSize)((*dreitonCore).transportHandle, replySlotSize)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONCORETRANSPORTEVENTSLOTSIZE(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).setDreitonTransportDescriptorEventSlotSize){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).setDreitonTransportDescriptorEventSlotSize)((*dreitonCore).transportHandle, eventSlotSize)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONCORETRANSPORTREQUESTSIZE(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).setDreitonTransportDescriptorRequestSize){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).setDreitonTransportDescriptorRequestSize)((*dreitonCore).transportHandle, requestSize)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONCORETRANSPORTREPLYSIZE(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).setDreitonTransportDescriptorReplySize){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).setDreitonTransportDescriptorReplySize)((*dreitonCore).transportHandle, replySize)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONCORETRANSPORTEVENTSIZE(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).setDreitonTransportDescriptorEventSize){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).setDreitonTransportDescriptorEventSize)((*dreitonCore).transportHandle, eventSize)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CREATEDREITONCORETRANSPORTREQUESTRECEIVER(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if((*dreitonCore).requestReceiverCreated){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).createDreitonTransportDescriptorRequestReceiver){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).createDreitonTransportDescriptorRequestReceiver)((*dreitonCore).transportHandle)){
+		jmp emergencyExit;
+	}
+	(*dreitonCore).requestReceiverCreated = true;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CREATEDREITONCORETRANSPORTEVENTRECEIVER(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if((*dreitonCore).eventReceiverCreated){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).createDreitonTransportDescriptorEventReceiver){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).createDreitonTransportDescriptorEventReceiver)((*dreitonCore).transportHandle)){
+		jmp emergencyExit;
+	}
+	(*dreitonCore).eventReceiverCreated = true;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CREATEDREITONCORETRANSPORTREGISTRATIONRECEIVER(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if((*dreitonCore).registrationReceiverCreated){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).createDreitonTransportDescriptorRegistrationReceiver){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).createDreitonTransportDescriptorRegistrationReceiver)((*dreitonCore).transportHandle, argument)){
+		jmp emergencyExit;
+	}
+	(*dreitonCore).registrationReceiverCreated = true;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAITFORDREITONCORETRANSPORTREQUEST(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).waitForDreitonTransportDescriptorRequest){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).waitForDreitonTransportDescriptorRequest)((*dreitonCore).transportHandle, transportRequestReturn)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAITFORDREITONCORETRANSPORTEVENT(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).waitForDreitonTransportDescriptorEvent){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).waitForDreitonTransportDescriptorEvent)((*dreitonCore).transportHandle, extensionReturn, eventTypeReturn)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAITFORDREITONCORETRANSPORTREGISTRATION(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).waitForDreitonTransportDescriptorRegistration){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).waitForDreitonTransportDescriptorRegistration)((*dreitonCore).transportHandle, dataReturnSize, dataReturn)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+HANDSHAKEDREITONCORETRANSPORTREGISTRATION(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).handshakeDreitonTransportDescriptorRegistration){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).handshakeDreitonTransportDescriptorRegistration)((*dreitonCore).transportHandle, successfulHandshake, dataSize, data)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CONSUMEDREITONCORETRANSPORTREGISTRATION(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	success = false;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).consumeDreitonTransportDescriptorRegistration){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).consumeDreitonTransportDescriptorRegistration)((*dreitonCore).transportHandle)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
 INSERTDREITONCORECLIENT(){
+	DreitonServerTransportDescriptor *transportDescriptor;
 	DreitonCoreClient *client;
-	uint64 clientId;
-	int shmKey;
-	int shmId;
-	DreitonShmHeader *shmStart;
-	uint32 requestSlotSize;
-	uint32 replySlotSize;
-	uint32 eventSlotSize;
-	uint32 requestSize;
-	uint32 replySize;
-	uint32 eventSize;
-	DreitonShmHeader header;
+	bool success;
 	if(!dreitonCore){
 		ret false;
 	}
-	if(!(*dreitonCore).clientChannelPath or !requestReadFd or !replyWriteFd or !eventWriteFd){
-		ret false;
+	success = false;
+	if(!transportId or dataSize != sizeof(DreitonCoreUuid) or !dataStart){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).setDreitonTransportDescriptorClientHandle){
+		jmp emergencyExit;
 	}
 	jmp insertClient;
 	insertClient:{
 		if((*dreitonCore).clientAllocated == (*dreitonCore).clientSize){
 			void *temp;
 			if(!(*dreitonCore).clientBlockSize){
-				ret false;
+				jmp emergencyExit;
 			}
 			(*dreitonCore).clientSize += (*dreitonCore).clientBlockSize;
 			temp = realloc((*dreitonCore).clientStart, (*dreitonCore).clientSize * sizeof(DreitonCoreClient));
 			if(!temp){
 				(*dreitonCore).clientSize -= (*dreitonCore).clientBlockSize;
-				ret false;
+				jmp emergencyExit;
 			}
 			(*dreitonCore).clientStart = temp;
 			if(!(*dreitonCore).clientAllocated){
@@ -1010,388 +722,21 @@ INSERTDREITONCORECLIENT(){
 				jmp insertClient;
 			}
 		}
-		clientId = (*dreitonCore).clientAllocated;
-		requestSlotSize = 256; /*! parameterize */
-		replySlotSize = 256; /*! parameterize */
-		eventSlotSize = 256; /*! parameterize */
-		requestSize = 16 * 1024; /*! parameterize */
-		replySize = 16 * 1024; /*! parameterize */
-		eventSize = 16 * 1024; /*! parameterize */
-		shmKey = ftok((*dreitonCore).clientChannelPath, clientId); /*! writeFileToKey() function. the lower 0x(F)FFF is the number given here */
-		shmId = shmget(shmKey, sizeof(DreitonShmHeader) + requestSlotSize * sizeof(DreitonShmRequestSlot) + replySlotSize * sizeof(DreitonShmReplySlot) + eventSlotSize * sizeof(DreitonShmEventSlot) + requestSize * sizeof(uint8) + replySize * sizeof(uint8) + eventSize * sizeof(uint8), IPC_CREAT | 0666);
-		if(!shmId){
-			ret false;
-		}
-		shmStart = shmat(shmId, NULL, SHM_NONE); /*! params? */
-		if(!shmStart){
-			ret false;
-		}
-		clientId = 0 | clientId; /*! update the id sent back to have a generation and maybe a unique part */
-		header.requestSlotSize = requestSlotSize;
-		header.requestSize = requestSize;
-		header.replySlotSize = replySlotSize;
-		header.replySize = replySize;
-		header.eventSlotSize = eventSlotSize;
-		header.eventSize = eventSize;
-		header.requestSlotStartOffset = 0 + sizeof(DreitonShmHeader);
-		header.replySlotStartOffset = header.requestSlotStartOffset + requestSlotSize * sizeof(DreitonShmRequestSlot);
-		header.eventSlotStartOffset = header.replySlotStartOffset + replySlotSize * sizeof(DreitonShmReplySlot);
-		header.requestStartOffset = header.eventSlotStartOffset + eventSlotSize * sizeof(DreitonShmEventSlot);
-		header.replyStartOffset = header.requestStartOffset + requestSize * sizeof(uint8);
-		header.eventStartOffset = header.replyStartOffset + replySize * sizeof(uint8);
-		header.requestCurrentWriter = 0;
-		header.requestCurrentReader = 0;
-		header.replyCurrentWriter = 0;
-		header.replyCurrentReader = 0;
-		header.eventCurrentWriter = 0;
-		header.eventCurrentReader = 0;
-		header.clientId = clientId;
 		client = (*dreitonCore).clientStart + (*dreitonCore).clientAllocated;
-		(*client).shmStart = shmStart;
-		(*client).requestSlotStart = (void *)((uint8 *)shmStart + header.requestSlotStartOffset);
-		(*client).replySlotStart = (void *)((uint8 *)shmStart + header.replySlotStartOffset);
-		(*client).eventSlotStart = (void *)((uint8 *)shmStart + header.eventSlotStartOffset);
-		(*client).requestStart = (void *)((uint8 *)shmStart + header.requestStartOffset);
-		(*client).requestCurrent = (*client).requestStart;
-		(*client).replyStart = (void *)((uint8 *)shmStart + header.replyStartOffset);
-		(*client).replyCurrent = (*client).replyStart;
-		(*client).eventStart = (void *)((uint8 *)shmStart + header.eventStartOffset);
-		(*client).eventCurrent = (*client).eventStart;
-		(*client).shmId = shmId;
-		(*client).requestReadFd = requestReadFd;
-		(*client).replyWriteFd = replyWriteFd;
-		(*client).eventWriteFd = eventWriteFd;
-		(*client).clientId = clientId;
-
-
-
-		/*!*/
-
+		if(!(*(*transportDescriptor).setDreitonTransportDescriptorClientHandle)((*dreitonCore).transportHandle, transportId, (*dreitonCore).clientAllocated)){
+			jmp emergencyExit;
+		}
+		(*client).clientId = (*dreitonCore).clientAllocated;
+		(*client).transportId = transportId;
+		(*client).clientUuid.uuid0 = *((uint64 *)dataStart + 0);
+		(*client).clientUuid.uuid1 = *((uint64 *)dataStart + 1);
 		(*client).subscriptionStart = NULL;
+		(*client).eventOffsetStart = NULL;
 		(*client).subscriptionSize = 0;
 		(*client).subscriptionAllocated = 0;
-		(*client).eventOffsetStart = NULL;
 		(*client).eventOffsetSize = 0;
-
-
-
-		memcpy(shmStart, &header, sizeof(DreitonShmHeader));
 		inc (*dreitonCore).clientAllocated;
-		ret true;
-	}
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-PARSEDREITONCORECLIENTREQUESTS(){
-
-
-
-	/*! what happens when there is not enough space for the reply data to exist in? how do i handle that? maybe return the size via parseExtensionRequest()? malloc() the data to send later? when is later? */
-
-
-
-	uint current;
-	uint wall;
-	DreitonShmHeader *header;
-	uint32 requestCurrentReader;
-	uint32 requestSlotSize;
-	uint32 replyCurrentWriter;
-	uint32 replySize;
-
-
-
-	/*!*/
-
-	uint32 replySlotSize;
-
-
-
-	bool success;
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!(*dreitonCore).database or !isValidDreitonCoreClient(dreitonCore, client) or !requestAmount){
-		ret false;
-	}
-
-
-
-	/*! if not able to write reply, because the buffer is full, do... what? */
-
-
-
-	current = 0;
-	wall = requestAmount;
-	header = (*client).shmStart;
-	requestCurrentReader = (*header).requestCurrentReader;
-	requestSlotSize = (*header).requestSlotSize;
-	replyCurrentWriter = (*header).replyCurrentWriter;
-	replySize = (*header).replySize;
-
-
-
-	/*!*/
-
-	replySlotSize = (*header).replySlotSize;
-
-
-
-	success = false;
-	jmp parseServerClientRequestLoop;
-	parseServerClientRequestLoop:{
-		if(current < wall){
-			uint8 requestType;
-			uint8 extension;
-			bool sendReply;
-			uint32 token;
-			uint8 status;
-			uint32 replyPayloadSize;
-			uint32 extensionId;
-			jmp processRequest;
-			processRequest:{
-				DreitonShmRequestSlot *const requestSlot = (*client).requestSlotStart + requestCurrentReader;
-				GenericDreitonRequest *const request = (void *)((uint8 *)(*client).requestStart + (*requestSlot).requestStartOffset);
-				uint32 payloadStartOffset;
-				uint32 payloadSize;
-				uint32 itemAmount;
-				if((*requestSlot).requestSize != sizeof(GenericDreitonRequest) or (*requestSlot).requestStartOffset + (*requestSlot).requestSize > (*header).requestSize or (*requestSlot).requestStartOffset + (*requestSlot).requestSize + (*request).payloadSize > (*header).requestSize){
-					requestCurrentReader = (requestCurrentReader + 1) % requestSlotSize;
-					jmp sendBadRequest;
-				}
-				requestType = (*request).requestType;
-				extension = (*request).extension;
-				sendReply = (*request).sendReply;
-				token = (*request).token;
-				payloadStartOffset = (*request).payloadStartOffset;
-				payloadSize = (*request).payloadSize;
-				itemAmount = 0;
-				if(payloadStartOffset and payloadSize){
-					itemAmount = *(uint32 *)((uint8 *)request + payloadStartOffset);
-				}
-				/*! fprintf(stdout, "parsing request from client %04u   request slot @ %04u   parsed  data @ %04u %04u %04u %04u %04u %04u\n", (uint32)(client - (*dreitonCore).clientStart), requestCurrentReader, (*request).requestType, (*request).extension, (*request).sendReply, (*request).token, (*request).payloadStartOffset, (*request).payloadSize); */
-				requestCurrentReader = (requestCurrentReader + 1) % requestSlotSize;
-				status = NONE_DREITON_REPLY_STATUS;
-				replyPayloadSize = 0 * sizeof(uint8);
-				if(extension){
-					DreitonExtensionDescriptor *dreitonExtensionDescriptor;
-					if(!isValidDreitonCoreExtension(dreitonCore, extension)){
-						jmp sendBadRequest;
-					}
-					dreitonExtensionDescriptor = (*((*dreitonCore).extensionStart + extension)).extensionDescriptor;
-					if(!(*dreitonExtensionDescriptor).parseDreitonExtensionDescriptorRequest){
-						jmp sendBadRequest;
-					}
-					if(!(*(*dreitonExtensionDescriptor).parseDreitonExtensionDescriptorRequest)(request, itemAmount, &status, &replyPayloadSize)){
-						jmp sendBadRequest;
-					}
-				}else{
-					switch(requestType){
-						to NONE_DREITON_REQUEST_TYPE:{
-							jmp sendBadRequest;
-						}
-						to NO_OPERATION_DREITON_REQUEST_TYPE:{
-							if(itemAmount == NO_OPERATION_DREITON_REQUEST_ITEM_AMOUNT){
-								status |= SUCCESS_DREITON_REPLY_STATUS;
-							}
-							brk;
-						}
-						to SYNC_DREITON_REQUEST_TYPE:{
-							if(itemAmount == SYNC_DREITON_REQUEST_ITEM_AMOUNT){
-								status |= SUCCESS_DREITON_REPLY_STATUS;
-							}
-							brk;
-						}
-						to CLAIM_OWNERSHIP_DREITON_REQUEST_TYPE:{
-							if(itemAmount == CLAIM_OWNERSHIP_DREITON_REQUEST_ITEM_AMOUNT){
-								DreitonCoreDatabase *const database = (*dreitonCore).database;
-								if(!(*database).owner){
-									(*database).owner = (*client).clientId;
-									status |= SUCCESS_DREITON_REPLY_STATUS;
-								}
-							}
-							brk;
-						}
-						to CLOSE_ON_IDLE_DREITON_REQUEST_TYPE:{
-							if(itemAmount == CLOSE_ON_IDLE_DREITON_REQUEST_ITEM_AMOUNT){
-								DreitonCoreDatabase *const database = (*dreitonCore).database;
-								if((*database).owner == (*client).clientId){
-									(*database).closeOnIdle = true;
-									status |= SUCCESS_DREITON_REPLY_STATUS;
-								}
-							}
-							brk;
-						}
-						to ENABLE_EXTENSION_DREITON_REQUEST_TYPE:{
-							if(itemAmount == ENABLE_EXTENSION_DREITON_REQUEST_ITEM_AMOUNT){
-								EnableExtensionDreitonRequest enableExtensionDreitonRequest;
-								if(unpackDreitonMessage(request, ENABLE_EXTENSION_DREITON_REQUEST_ITEM_AMOUNT, &enableExtensionDreitonRequest)){
-									if(!*(enableExtensionDreitonRequest.pathStart + enableExtensionDreitonRequest.pathSize - 1)){
-										if(loadDreitonCoreExtension(dreitonCore, (*(*dreitonCore).database).owner == (*client).clientId, enableExtensionDreitonRequest.pathStart, &extensionId)){
-											const DreitonCoreExtension *const dreitonCoreExtension = (*dreitonCore).extensionStart + extensionId;
-											const DreitonExtensionDescriptor *const dreitonExtensionDescriptor = (*dreitonCoreExtension).extensionDescriptor;
-											if((*(*dreitonExtensionDescriptor).initDreitonExtensionDescriptor)()){
-												(*(*dreitonExtensionDescriptor).setDreitonExtensionDescriptorEventFd)((*dreitonCoreExtension).extensionWriteFd);
-												if((*dreitonCoreExtension).extensionReferenceCount == 1){
-													status |= SUCCESS_DREITON_REPLY_STATUS;
-												}
-												status |= SUCCESS_DREITON_REPLY_STATUS;
-												replyPayloadSize = 1 * sizeof(uint32);
-											}
-										}
-									}
-								}
-							}
-							brk;
-						}
-						to SEAL_OWNERSHIP_DREITON_REQUEST_TYPE:{
-							if(itemAmount == SEAL_OWNERSHIP_DREITON_REQUEST_ITEM_AMOUNT){
-								DreitonCoreDatabase *const database = (*dreitonCore).database;
-								if((*database).owner == (*client).clientId){
-									(*database).owner = SEALED_DREITON_CORE_OWNER;
-									status |= SUCCESS_DREITON_REPLY_STATUS;
-								}
-							}
-							brk;
-						}
-						to APPLY_FOR_EVENT_DREITON_REQUEST_TYPE:{
-							if(itemAmount == APPLY_FOR_EVENT_DREITON_REQUEST_ITEM_AMOUNT){
-								ApplyForEventDreitonRequest applyForEventDreitonRequest;
-								if(unpackDreitonMessage(request, APPLY_FOR_EVENT_DREITON_REQUEST_ITEM_AMOUNT, &applyForEventDreitonRequest)){
-									subscribeToDreitonCoreEvent(dreitonCore, client, *(uint32 *)applyForEventDreitonRequest.extensionStart, *(uint32 *)applyForEventDreitonRequest.eventMaskStart, &status);
-								}
-							}
-							brk;
-						}
-						to WITHDRAW_FROM_EVENT_DREITON_REQUEST_TYPE:{
-							if(itemAmount == WITHDRAW_FROM_EVENT_DREITON_REQUEST_ITEM_AMOUNT){
-								WithdrawFromEventDreitonRequest withdrawFromEventDreitonRequest;
-								if(unpackDreitonMessage(request, WITHDRAW_FROM_EVENT_DREITON_REQUEST_ITEM_AMOUNT, &withdrawFromEventDreitonRequest)){
-									unsubscribeFromDreitonCoreEvent(dreitonCore, client, *(uint32 *)withdrawFromEventDreitonRequest.extensionStart, *(uint32 *)withdrawFromEventDreitonRequest.eventMaskStart, &status);
-								}
-							}
-							brk;
-						}
-						off:{
-							jmp sendBadRequest;
-						}
-					}
-				}
-				replyPayloadSize = !!(status & SUCCESS_DREITON_REPLY_STATUS) * replyPayloadSize;
-				success = true;
-				jmp formReply;
-			}
-			formReply:{
-				if(sendReply and sizeof(GenericDreitonReply) + replyPayloadSize <= replySize){
-					const uint64 response = ((uint64)replyCurrentWriter << 32) | token;
-					DreitonShmReplySlot *const replySlot = (*client).replySlotStart + replyCurrentWriter;
-					GenericDreitonReply *const reply = (*client).replyCurrent;
-
-
-
-					/*! handle space in a safer way */
-
-					if((uint8 *)(*client).replyCurrent >= (uint8 *)(*client).replyStart + replySize){
-						(*client).replyCurrent = (*client).replyStart;
-					}elif((uint8 *)(*client).replyCurrent + sizeof(GenericDreitonReply) + replyPayloadSize > (uint8 *)(*client).replyStart + replySize){
-						(*client).replyCurrent = (*client).replyStart;
-					}
-
-
-
-					replyCurrentWriter = (replyCurrentWriter + 1) % replySlotSize;
-					if(status & SUCCESS_DREITON_REPLY_STATUS){
-						if(extension){
-							DreitonExtensionDescriptor *const dreitonExtensionDescriptor = (*((*dreitonCore).extensionStart + extension)).extensionDescriptor;
-							if(!(*dreitonExtensionDescriptor).parseDreitonExtensionDescriptorReply){
-								jmp sendBadRequest;
-							}
-							if(!(*(*dreitonExtensionDescriptor).parseDreitonExtensionDescriptorReply)(requestType, reply)){
-								jmp sendBadRequest;
-							}
-						}else{
-							switch(requestType){
-								to NONE_DREITON_REPLY_TYPE:{
-									jmp sendBadRequest;
-								}
-								to NO_OPERATION_DREITON_REPLY_TYPE:{
-									brk;
-								}
-								to SYNC_DREITON_REPLY_TYPE:{
-									brk;
-								}
-								to CLAIM_OWNERSHIP_DREITON_REPLY_TYPE:{
-									brk;
-								}
-								to CLOSE_ON_IDLE_DREITON_REQUEST_TYPE:{
-									brk;
-								}
-								to ENABLE_EXTENSION_DREITON_REPLY_TYPE:{
-									(*(EnableExtensionDreitonReply *)reply).extension = extensionId;
-									brk;
-								}
-								to SEAL_OWNERSHIP_DREITON_REPLY_TYPE:{
-									brk;
-								}
-								to APPLY_FOR_EVENT_DREITON_REPLY_TYPE:{
-									brk;
-								}
-								off:{
-									jmp sendBadRequest;
-								}
-							}
-						}
-					}
-					(*replySlot).replyStartOffset = (uint8 *)reply - (uint8 *)(*client).replyStart;
-					(*replySlot).replySize = sizeof(GenericDreitonReply);
-					(*reply).replyType = requestType;
-					(*reply).extension = extension;
-					(*reply).status = status;
-					(*reply).token = token;
-					(*reply).payloadStartOffset = !!replyPayloadSize * sizeof(GenericDreitonReply);
-					(*reply).payloadSize = replyPayloadSize;
-					/*! fprintf(stdout, "sending reply   to   client %04u   reply   slot @ %04u   sending back @ %04u %04u %04u %04u %04u %04u\n", (uint32)(client - (*dreitonCore).clientStart), (uint32)(replySlot - (*client).replySlotStart), (*reply).replyType, (*reply).extension, (*reply).status, (*reply).token, (*reply).payloadStartOffset, (*reply).payloadSize); */
-					write((*client).replyWriteFd, &response, sizeof(response)); /*! errors? */
-					(*client).replyCurrent += sizeof(GenericDreitonReply) + replyPayloadSize;
-					success = true;
-				}
-				inc current;
-				jmp parseServerClientRequestLoop;
-				sendBadRequest:{
-					const uint64 response = 0; /*! do something better? */
-					fprintf(stdout, "sending back  bad response\n");
-					write((*client).replyWriteFd, &response, sizeof(response)); /*! errors? */
-					inc current;
-					jmp parseServerClientRequestLoop;
-				}
-			}
-		}
-		(*header).replyCurrentWriter = replyCurrentWriter;
-		(*header).requestCurrentReader = requestCurrentReader;
+		success = true;
 		jmp emergencyExit;
 	}
 	emergencyExit:{
@@ -1400,6 +745,450 @@ PARSEDREITONCORECLIENTREQUESTS(){
 		}
 		ret true;
 	}
+}
+DECODEDREITONCOREREQUEST(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	DreitonCodecDescriptor *codecDescriptor;
+	void *frame;
+	void *header;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!isValidDreitonCoreClient(dreitonCore, client) or !requestReturn){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	codecDescriptor = (*dreitonCore).codecDescriptor;
+	if(!transportDescriptor or !codecDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).getDreitonTransportDescriptorClientRequestFrame or !(*codecDescriptor).decodeDreitonCodecMessage){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).getDreitonTransportDescriptorClientRequestFrame)((*dreitonCore).transportHandle, (*client).transportId, &frame)){
+		jmp emergencyExit;
+	}
+	if(!(*(*codecDescriptor).decodeDreitonCodecMessage)(frame, frame, &header)){
+		jmp emergencyExit;
+	}
+	(*requestReturn).header = header;
+	(*requestReturn).frame = frame;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONCOREREQUESTPAYLOADITEMAMOUNT(){
+	DreitonCodecDescriptor *codecDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	codecDescriptor = (*dreitonCore).codecDescriptor;
+	success = false;
+	if(!codecDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*codecDescriptor).getDreitonCodecDecodedPayloadItemAmount){
+		jmp emergencyExit;
+	}
+	if(!(*(*codecDescriptor).getDreitonCodecDecodedPayloadItemAmount)(frame, payloadItemAmountReturn)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONCOREMESSAGEDECODEDITEM(){
+	DreitonCodecDescriptor *codecDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	codecDescriptor = (*dreitonCore).codecDescriptor;
+	success = false;
+	if(!codecDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*codecDescriptor).getDreitonCodecDecodedItem){
+		jmp emergencyExit;
+	}
+	if(!(*(*codecDescriptor).getDreitonCodecDecodedItem)(frame, which, itemSize, itemStart)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CONSUMEDREITONCOREREQUEST(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!isValidDreitonCoreClient(dreitonCore, client)){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).consumeDreitonTransportDescriptorClientRequestFrame){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).consumeDreitonTransportDescriptorClientRequestFrame)((*dreitonCore).transportHandle, (*client).transportId)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SENDDREITONCOREREPLY(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	DreitonCodecDescriptor *codecDescriptor;
+	uint32 frameSize;
+	void *frame;
+	DreitonReplyHeader header;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!isValidDreitonCoreClient(dreitonCore, client)){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	codecDescriptor = (*dreitonCore).codecDescriptor;
+	if(!transportDescriptor or !codecDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*codecDescriptor).calculateDreitonCodecFrameSize or !(*transportDescriptor).getDreitonTransportDescriptorReplyFrame or !(*codecDescriptor).encodeDreitonCodecMessage or !(*transportDescriptor).sendDreitonTransportDescriptorReply){
+		jmp emergencyExit;
+	}
+	if(!(*(*codecDescriptor).calculateDreitonCodecFrameSize)(sizeof(DreitonReplyHeader), payloadItemAmount, payloadItemSizeStart, &frameSize)){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).getDreitonTransportDescriptorReplyFrame)((*dreitonCore).transportHandle, (*client).transportId, frameSize, &frame)){
+		jmp emergencyExit;
+	}
+	header.type = type;
+	header.extension = extension;
+	header.token = token;
+	header.status = status;
+	if(!(*(*codecDescriptor).encodeDreitonCodecMessage)(sizeof(DreitonReplyHeader), &header, payloadItemAmount, payloadItemSizeStart, payloadItemDataStart, frameSize, frame)){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).sendDreitonTransportDescriptorReply)((*dreitonCore).transportHandle, (*client).transportId, frameSize, frame)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SENDDREITONCOREERRORREPLY(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	DreitonCodecDescriptor *codecDescriptor;
+	uint32 frameSize;
+	void *frame;
+	DreitonErrorHeader header;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!isValidDreitonCoreClient(dreitonCore, client)){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	codecDescriptor = (*dreitonCore).codecDescriptor;
+	if(!transportDescriptor or !codecDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*codecDescriptor).calculateDreitonCodecFrameSize or !(*transportDescriptor).getDreitonTransportDescriptorReplyFrame or !(*codecDescriptor).encodeDreitonCodecMessage or !(*transportDescriptor).sendDreitonTransportDescriptorReply){
+		jmp emergencyExit;
+	}
+	if(!(*(*codecDescriptor).calculateDreitonCodecFrameSize)(sizeof(DreitonErrorHeader), 0, NULL, &frameSize)){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).getDreitonTransportDescriptorReplyFrame)((*dreitonCore).transportHandle, (*client).transportId, frameSize, &frame)){
+		jmp emergencyExit;
+	}
+	header.type = type;
+	header.extension = extension;
+	header.token = token;
+	header.status = status;
+	header.parameterOffset = parameterOffset;
+	header.operation = operation;
+	header.value = value;
+	if(!(*(*codecDescriptor).encodeDreitonCodecMessage)(sizeof(DreitonErrorHeader), &header, 0, NULL, NULL, frameSize, frame)){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).sendDreitonTransportDescriptorReply)((*dreitonCore).transportHandle, (*client).transportId, frameSize, frame)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SENDDREITONCOREERROREVENT(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	DreitonCodecDescriptor *codecDescriptor;
+	uint32 frameSize;
+	void *frame;
+	DreitonErrorHeader header;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!isValidDreitonCoreClient(dreitonCore, client)){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	codecDescriptor = (*dreitonCore).codecDescriptor;
+	if(!transportDescriptor or !codecDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*codecDescriptor).calculateDreitonCodecFrameSize or !(*transportDescriptor).getDreitonTransportDescriptorEventFrame or !(*codecDescriptor).encodeDreitonCodecMessage or !(*transportDescriptor).sendDreitonTransportDescriptorEvent){
+		jmp emergencyExit;
+	}
+	if(!(*(*codecDescriptor).calculateDreitonCodecFrameSize)(sizeof(DreitonErrorHeader), 0, NULL, &frameSize)){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).getDreitonTransportDescriptorEventFrame)((*dreitonCore).transportHandle, (*client).transportId, frameSize, &frame)){
+		jmp emergencyExit;
+	}
+	header.type = type;
+	header.extension = extension;
+	header.token = token;
+	header.status = status;
+	header.parameterOffset = parameterOffset;
+	header.operation = operation;
+	header.value = value;
+	if(!(*(*codecDescriptor).encodeDreitonCodecMessage)(sizeof(DreitonErrorHeader), &header, 0, NULL, NULL, frameSize, frame)){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).sendDreitonTransportDescriptorEvent)((*dreitonCore).transportHandle, (*client).transportId, frameSize, frame)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SENDDREITONCOREEVENT(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	DreitonCodecDescriptor *codecDescriptor;
+	uint32 frameSize;
+	void *frame;
+	DreitonEventHeader header;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!isValidDreitonCoreClient(dreitonCore, client)){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	codecDescriptor = (*dreitonCore).codecDescriptor;
+	if(!transportDescriptor or !codecDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*codecDescriptor).calculateDreitonCodecFrameSize or !(*transportDescriptor).getDreitonTransportDescriptorEventFrame or !(*codecDescriptor).encodeDreitonCodecMessage or !(*transportDescriptor).sendDreitonTransportDescriptorEvent){
+		jmp emergencyExit;
+	}
+	if(!(*(*codecDescriptor).calculateDreitonCodecFrameSize)(sizeof(DreitonEventHeader), payloadItemAmount, payloadItemSizeStart, &frameSize)){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).getDreitonTransportDescriptorEventFrame)((*dreitonCore).transportHandle, (*client).transportId, frameSize, &frame)){
+		jmp emergencyExit;
+	}
+	header.type = type;
+	header.extension = extension;
+	header.token = token;
+	header.status = status;
+	if(!(*(*codecDescriptor).encodeDreitonCodecMessage)(sizeof(DreitonEventHeader), &header, payloadItemAmount, payloadItemSizeStart, payloadItemDataStart, frameSize, frame)){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).sendDreitonTransportDescriptorEvent)((*dreitonCore).transportHandle, (*client).transportId, frameSize, frame)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+LOADDREITONCOREEXTENSION(){
+	void *extensionDescriptorHandle;
+	DreitonExtensionDescriptor *extensionDescriptor;
+	void *extensionHandle;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	extensionDescriptorHandle = NULL;
+	success = false;
+	if(!path or !extensionIdReturn){
+		jmp emergencyExit;
+	}
+	extensionDescriptorHandle = dlopen(path, RTLD_NOW | RTLD_LOCAL | RTLD_NOLOAD);
+	if(extensionDescriptorHandle){
+		DreitonCoreExtension *current = (*dreitonCore).extensionStart + 1;
+		DreitonCoreExtension *const wall = (*dreitonCore).extensionStart + (*dreitonCore).extensionAllocated;
+		jmp findDreitonCoreExtensionLoop;
+		findDreitonCoreExtensionLoop:{
+			if(current < wall){
+				if((*current).extensionDescriptorHandle == extensionDescriptorHandle){
+					inc (*current).extensionReferenceAmount;
+					*extensionIdReturn = current - (*dreitonCore).extensionStart;
+					success = true;
+					jmp emergencyExit;
+				}
+				inc current;
+				jmp findDreitonCoreExtensionLoop;
+			}
+		}
+	}
+	extensionDescriptorHandle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+	if(!extensionDescriptorHandle){
+		jmp emergencyExit;
+	}
+	extensionDescriptor = dlsym(extensionDescriptorHandle, "dreitonExtensionDescriptor");
+	if(!extensionDescriptor){
+		jmp emergencyExit;
+	}
+	if((*extensionDescriptor).descriptorSize != sizeof(DreitonExtensionDescriptor) or (*extensionDescriptor).protocolVersion != DREITON_EXTENSION_PROTOCOL_VERSION){
+		jmp emergencyExit;
+	}
+	jmp insertExtension;
+	insertExtension:{
+		DreitonCoreExtension *dreitonCoreExtension;
+		uint32 eventAmount;
+		if((*dreitonCore).extensionAllocated == (*dreitonCore).extensionSize){
+			void *temp;
+			if(!(*dreitonCore).extensionBlockSize){
+				jmp emergencyExit;
+			}
+			(*dreitonCore).extensionSize += (*dreitonCore).extensionBlockSize;
+			temp = realloc((*dreitonCore).extensionStart, (*dreitonCore).extensionSize * sizeof(DreitonCoreExtension));
+			if(!temp){
+				(*dreitonCore).extensionSize -= (*dreitonCore).extensionBlockSize;
+				jmp emergencyExit;
+			}
+			(*dreitonCore).extensionStart = temp;
+			if(!(*dreitonCore).extensionAllocated){
+				inc (*dreitonCore).extensionAllocated;
+				jmp insertExtension;
+			}
+		}
+		dreitonCoreExtension = (*dreitonCore).extensionStart + (*dreitonCore).extensionAllocated;
+		eventAmount = !!(*dreitonCore).extensionEventBlockSize * (*extensionDescriptor).eventAmount;
+		if((*dreitonCore).eventAllocated + eventAmount > (*dreitonCore).eventSize){
+			uint addedAmount;
+			void *temp;
+			if(!(*dreitonCore).extensionEventBlockSize){
+				jmp emergencyExit;
+			}
+			addedAmount = roundUpToMultiple((*dreitonCore).eventAllocated + eventAmount + !!(*dreitonCore).eventAllocated, (*dreitonCore).extensionEventBlockSize) - (*dreitonCore).eventSize;
+			(*dreitonCore).eventSize += addedAmount;
+			temp = realloc((*dreitonCore).eventStart, (*dreitonCore).eventSize * sizeof(DreitonCoreEvent));
+			if(!temp){
+				(*dreitonCore).eventSize -= addedAmount;
+				jmp emergencyExit;
+			}
+			(*dreitonCore).eventStart = temp;
+			if(!(*dreitonCore).eventAllocated){
+				inc (*dreitonCore).eventAllocated;
+			}
+		}
+		if((*extensionDescriptor).initDreitonExtensionDescriptor){
+			if(!(*(*extensionDescriptor).initDreitonExtensionDescriptor)(&extensionHandle)){
+				jmp emergencyExit;
+			}
+		}
+		{
+			DreitonCoreEvent *current = (*dreitonCore).eventStart + (*dreitonCore).eventAllocated;
+			DreitonCoreEvent *const wall = current + eventAmount;
+			jmp setEventLoop;
+			setEventLoop:{
+				if(current < wall){
+					(*current).subscriptionStart = NULL;
+					(*current).subscriptionSize = 0;
+					(*current).subscriptionAllocated = 0;
+					inc current;
+					jmp setEventLoop;
+				}
+			}
+		}
+		if(!(*dreitonCore).baseEvent){
+			inc (*dreitonCore).baseEvent;
+		}
+		(*dreitonCoreExtension).extensionDescriptorHandle = extensionDescriptorHandle;
+		(*dreitonCoreExtension).extensionDescriptor = extensionDescriptor;
+		(*dreitonCoreExtension).extensionHandle = extensionHandle;
+		(*dreitonCoreExtension).extensionReferenceAmount = 1;
+		(*dreitonCoreExtension).extensionBaseEvent = (*dreitonCore).baseEvent - 1;
+		(*dreitonCoreExtension).extensionEventAmount = eventAmount;
+		(*dreitonCore).eventAllocated += eventAmount;
+		(*dreitonCore).baseEvent += eventAmount;
+		*extensionIdReturn = (*dreitonCore).extensionAllocated;
+		inc (*dreitonCore).extensionAllocated;
+		success = true;
+		jmp emergencyExit;
+	}
+	emergencyExit:{
+		if(!success){
+			if(extensionDescriptorHandle){
+				dlclose(extensionDescriptorHandle); /*! errors? */
+			}
+			ret false;
+		}
+		ret true;
+	}
+}
+ROUNDUPTOMULTIPLE(){
+	ret (number + multiple - 1) / multiple * multiple;
 }
 
 
@@ -1430,220 +1219,19 @@ PARSEDREITONCORECLIENTREQUESTS(){
 
 /*!*/
 
-#define ROUNDUPTOMULTIPLE() /*-*/ bool  roundUpToMultiple(const uint64 number, const uint64 multiple)
-
-ROUNDUPTOMULTIPLE();
-
-ROUNDUPTOMULTIPLE(){
-	ret (number + multiple - 1) / multiple * multiple;
-}
-
-
-
-LOADDREITONCOREEXTENSION(){
-	const uint32 blockSize = 16; /*!*/
-	void *serverExtensionHandle;
-	DreitonExtensionDescriptor *dreitonExtensionDescriptor;
-	bool success;
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!path or !extensionIdReturn){
-		ret false;
-	}
-	serverExtensionHandle = dlopen(path, RTLD_NOW | RTLD_LOCAL | RTLD_NOLOAD);
-	success = false;
-	if(serverExtensionHandle){
-		DreitonCoreExtension *const start = (*dreitonCore).extensionStart;
-		DreitonCoreExtension *current = start + 1;
-		DreitonCoreExtension *const wall = start + (*dreitonCore).extensionAllocated;
-		jmp findDreitonCoreExtensionLoop;
-		findDreitonCoreExtensionLoop:{
-			if(current < wall){
-				if((*current).extensionHandle == serverExtensionHandle){
-					inc (*current).extensionReferenceCount;
-					*extensionIdReturn = current - start;
-					success = true;
-					jmp emergencyExit;
-				}
-				inc current;
-				jmp findDreitonCoreExtensionLoop;
-			}
-			jmp emergencyExit;
-		}
-	}
-	if(!force){
-		jmp emergencyExit;
-	}
-	serverExtensionHandle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-	if(!serverExtensionHandle){
-		jmp emergencyExit;
-	}
-	dreitonExtensionDescriptor = dlsym(serverExtensionHandle, "dreitonExtensionDescriptor");
-	if(!dreitonExtensionDescriptor){
-		jmp emergencyExit;
-	}
-	if((*dreitonExtensionDescriptor).descriptorSize != sizeof(DreitonExtensionDescriptor) or (*dreitonExtensionDescriptor).protocolVersion > DREITON_PROTOCOL_VERSION or !(*dreitonExtensionDescriptor).extensionNameSize or !(*dreitonExtensionDescriptor).extensionName or !(*dreitonExtensionDescriptor).authorNameSize or !(*dreitonExtensionDescriptor).authorName or !(*dreitonExtensionDescriptor).initDreitonExtensionDescriptor or !(*dreitonExtensionDescriptor).setDreitonExtensionDescriptorEventFd or !(*dreitonExtensionDescriptor).incrementDreitonExtensionDescriptorEventCounter or !(*dreitonExtensionDescriptor).decrementDreitonExtensionDescriptorEventCounter or !(*dreitonExtensionDescriptor).parseDreitonExtensionDescriptorRequest or !(*dreitonExtensionDescriptor).parseDreitonExtensionDescriptorReply or !(*dreitonExtensionDescriptor).parseDreitonExtensionDescriptorEvent or !(*dreitonExtensionDescriptor).finiDreitonExtensionDescriptor){
-		jmp emergencyExit;
-	}
-
-
-
-	/*! check for duplicates? */
-
-
-
-	jmp insertExtension;
-	insertExtension:{
-		DreitonCoreExtension *dreitonCoreExtension;
-		uint eventAmount;
-		struct{
-			int32 /*--*/ readFd;
-			int32 /*--*/ writeFd;
-		} extensionEventPipe;
-		if((*dreitonCore).extensionAllocated == (*dreitonCore).extensionSize){
-			void *temp;
-			if(!(*dreitonCore).extensionBlockSize){
-				jmp emergencyExit;
-			}
-			(*dreitonCore).extensionSize += (*dreitonCore).extensionBlockSize;
-			temp = realloc((*dreitonCore).extensionStart, (*dreitonCore).extensionSize * sizeof(DreitonCoreExtension));
-			if(!temp){
-				(*dreitonCore).extensionSize -= (*dreitonCore).extensionBlockSize;
-				jmp emergencyExit;
-			}
-			(*dreitonCore).extensionStart = temp;
-			if(!(*dreitonCore).extensionAllocated){
-				inc (*dreitonCore).extensionAllocated;
-				jmp insertExtension;
-			}
-		}
-		dreitonCoreExtension = (*dreitonCore).extensionStart + (*dreitonCore).extensionAllocated;
-		eventAmount = (*dreitonExtensionDescriptor).eventAmount;
-		if((*dreitonCore).eventAllocated + eventAmount > (*dreitonCore).eventSize){
-			uint addedAmount;
-			void *temp;
-			if(!blockSize){
-				jmp emergencyExit;
-			}
-			addedAmount = roundUpToMultiple((*dreitonCore).eventAllocated + eventAmount + !!(*dreitonCore).eventAllocated, blockSize) - (*dreitonCore).eventSize;
-			(*dreitonCore).eventSize += addedAmount;
-			temp = realloc((*dreitonCore).eventStart, (*dreitonCore).eventSize * sizeof(DreitonCoreEvent));
-			if(!temp){
-				(*dreitonCore).eventSize -= addedAmount;
-				jmp emergencyExit;
-			}
-			(*dreitonCore).eventStart = temp;
-			if(!(*dreitonCore).eventAllocated){
-				inc (*dreitonCore).eventAllocated;
-			}
-		}
-		{
-			DreitonCoreEvent *current = (*dreitonCore).eventStart + (*dreitonCore).eventAllocated;
-			DreitonCoreEvent *const wall = current + eventAmount;
-			jmp setEventLoop;
-			setEventLoop:{
-				if(current < wall){
-					(*current).subscriptionStart = NULL;
-					(*current).subscriptionSize = 0;
-					(*current).subscriptionAllocated = 0;
-					inc current;
-					jmp setEventLoop;
-				}
-			}
-		}
-		if(!(*dreitonCore).baseEvent){
-			inc (*dreitonCore).baseEvent;
-		}
-		if(pipe((void *)&extensionEventPipe) == PIPE_FAILURE){ /*! check for surprise errors */
-			extensionEventPipe.readFd = 0;
-			extensionEventPipe.writeFd = 0;
-		}
-		(*dreitonCoreExtension).extensionHandle = serverExtensionHandle;
-		(*dreitonCoreExtension).extensionDescriptor = dreitonExtensionDescriptor;
-		(*dreitonCoreExtension).extensionReferenceCount = 1;
-		(*dreitonCoreExtension).extensionReadFd = extensionEventPipe.readFd;
-		(*dreitonCoreExtension).extensionWriteFd = extensionEventPipe.writeFd;
-		(*dreitonCoreExtension).extensionBaseEvent = (*dreitonCore).baseEvent - 1;
-		(*dreitonCore).baseEvent += eventAmount;
-		(*dreitonCore).eventAllocated += eventAmount;
-		{
-			const int flag = fcntl(extensionEventPipe.readFd, F_GETFL, 0); /*! errors? */
-			int returnValue;
-			if(flag == FCNTL_FAILURE){
-				/*! what do? */
-			}
-			returnValue = fcntl(extensionEventPipe.readFd, F_SETFL, flag | O_NONBLOCK); /*! errors? */
-			if(returnValue == FCNTL_FAILURE){
-				/*! what do? */
-			}
-		}
-		if((*dreitonCore).eventEpollFd){
-			struct epoll_event event;
-			event.events = EPOLLIN;
-			event.data.u64 = ((uint64)(*dreitonCore).extensionAllocated << 32) | (*dreitonCoreExtension).extensionReadFd;
-			epoll_ctl((*dreitonCore).eventEpollFd, EPOLL_CTL_ADD, (*dreitonCoreExtension).extensionReadFd, &event); /*! errors? */
-		}
-		*extensionIdReturn = (*dreitonCore).extensionAllocated;
-		inc (*dreitonCore).extensionAllocated;
-		success = true;
-		jmp emergencyExit;
-	}
-	emergencyExit:{
-		if(!success){
-			if(serverExtensionHandle){
-				dlclose(serverExtensionHandle); /*! errors? */
-			}
-			ret false;
-		}
-		ret true;
-	}
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 SUBSCRIBETODREITONCOREEVENT(){
-	const uint32 blockSize = 16; /*!*/
-	DreitonCoreExtension *dreitonCoreExtension;
-	DreitonExtensionDescriptor *dreitonExtensionDescriptor;
 	uint32 eventType;
 	uint32 baseEvent;
 	bool success;
 	if(!dreitonCore){
 		ret false;
 	}
-	if((*dreitonCore).eventAllocated < 2 or !isValidDreitonCoreClient(dreitonCore, client) or !isValidDreitonCoreExtension(dreitonCore, extension) or !eventMask or !statusReturn){
-		ret false;
-	}
-	dreitonCoreExtension = (*dreitonCore).extensionStart + extension;
-	dreitonExtensionDescriptor = (*dreitonCoreExtension).extensionDescriptor;
-	eventType = 0;
-	baseEvent = (*dreitonCoreExtension).extensionBaseEvent;
 	success = false;
+	if((*dreitonCore).eventAllocated < 2 or !isValidDreitonCoreClient(dreitonCore, client) or !isValidDreitonCoreExtension(dreitonCore, extensionId) or !eventMask){
+		jmp emergencyExit;
+	}
+	eventType = 0;
+	baseEvent = (*((*dreitonCore).extensionStart + extensionId)).extensionBaseEvent;
 
 
 
@@ -1683,74 +1271,72 @@ SUBSCRIBETODREITONCOREEVENT(){
 	bitLoop:{
 		if(eventMask){
 			uint32 lowestBit = (eventMask & -eventMask) >> eventType;
-			jmp advanceEventType;
-			advanceEventType:{
+			jmp advanceEventTypeLoop;
+			advanceEventTypeLoop:{
 				uint32 realEventType;
 				bool eventTypeIsWithinBounds;
 				if(lowestBit){
 					inc eventType;
 					lowestBit >>= 1;
-					jmp advanceEventType;
+					jmp advanceEventTypeLoop;
 				}
 				realEventType = baseEvent + eventType;
 				eventTypeIsWithinBounds = realEventType < (*client).eventOffsetSize;
 				if(!eventTypeIsWithinBounds or *((*client).eventOffsetStart + realEventType) == 0xFFFFFFFF){
-					if(eventTypeIsWithinBounds and *((*client).eventOffsetStart + realEventType) != 0xFFFFFFFF){
-						*statusReturn |= SUCCESS_DREITON_REPLY_STATUS;
-					}else{
-						DreitonCoreEvent *const event = (*dreitonCore).eventStart + realEventType;
-						if((*client).subscriptionAllocated == (*client).subscriptionSize){
-							void *temp;
-							(*client).subscriptionSize += blockSize;
-							temp = realloc((*client).subscriptionStart, (*client).subscriptionSize * sizeof(DreitonCoreClientSubscription));
-							if(!temp){
-								(*client).subscriptionSize -= blockSize;
-								ret false;
-							}
-							(*client).subscriptionStart = temp;
+					DreitonCoreEvent *const event = (*dreitonCore).eventStart + realEventType;
+					if((*client).subscriptionAllocated == (*client).subscriptionSize){
+						void *temp;
+						if(!(*dreitonCore).extensionEventBlockSize){
+							jmp emergencyExit;
 						}
-						if(realEventType >= (*client).eventOffsetSize){
-							const uint size = realEventType + 1;
-							void *temp;
-							temp = realloc((*client).eventOffsetStart, size * sizeof(uint32));
-							if(!temp){
-								ret false;
-							}
-							{ /*! use toolkit function */
-								uint i;
-								for(i = (*client).eventOffsetSize; i < size - (*client).eventOffsetSize; inc i){
-									*((uint32 *)temp + i) = 0xFFFFFFFF;
-								}
-							}
-							(*client).eventOffsetStart = temp;
-							(*client).eventOffsetSize = size;
+						(*client).subscriptionSize += (*dreitonCore).extensionEventBlockSize;
+						temp = realloc((*client).subscriptionStart, (*client).subscriptionSize * sizeof(DreitonCoreClientSubscription));
+						if(!temp){
+							(*client).subscriptionSize -= (*dreitonCore).extensionEventBlockSize;
+							ret false;
 						}
-						if((*event).subscriptionAllocated == (*event).subscriptionSize){
-							void *temp;
-							(*event).subscriptionSize += blockSize;
-							temp = realloc((*event).subscriptionStart, (*event).subscriptionSize * sizeof(DreitonCoreEventSubscription));
-							if(!temp){
-								(*event).subscriptionSize -= blockSize;
-								ret false;
-							}
-							(*event).subscriptionStart = temp;
+						(*client).subscriptionStart = temp;
+					}
+					if(realEventType >= (*client).eventOffsetSize){
+						const uint size = realEventType + 1;
+						void *temp = realloc((*client).eventOffsetStart, size * sizeof(uint32));
+						if(!temp){
+							ret false;
 						}
-						if((*dreitonExtensionDescriptor).incrementDreitonExtensionDescriptorEventCounter){
-							if((*(*dreitonExtensionDescriptor).incrementDreitonExtensionDescriptorEventCounter)(eventType)){
-								DreitonCoreClientSubscription *const clientSubscription = (*client).subscriptionStart + (*client).subscriptionAllocated;
-								DreitonCoreEventSubscription *const eventSubscription = (*event).subscriptionStart + (*event).subscriptionAllocated;
-								(*clientSubscription).extension = extension;
-								(*clientSubscription).eventType = realEventType;
-								(*clientSubscription).eventSubscriptionOffset = (*event).subscriptionAllocated;
-								(*eventSubscription).clientOffset = client - (*dreitonCore).clientStart;
-								(*eventSubscription).clientSubscriptionOffset = (*client).subscriptionAllocated;
-								*((*client).eventOffsetStart + realEventType) = (*event).subscriptionAllocated;
-								inc (*client).subscriptionAllocated;
-								inc (*event).subscriptionAllocated;
-								*statusReturn |= UPDATED_DREITON_REPLY_STATUS;
-								success = true;
+						{ /*! use toolkit function */
+							uint i;
+							for(i = (*client).eventOffsetSize; i < size - (*client).eventOffsetSize; inc i){
+								*((uint32 *)temp + i) = 0xFFFFFFFF;
 							}
 						}
+						(*client).eventOffsetStart = temp;
+						(*client).eventOffsetSize = size;
+					}
+					if((*event).subscriptionAllocated == (*event).subscriptionSize){
+						void *temp;
+						if(!(*dreitonCore).extensionEventBlockSize){
+							jmp emergencyExit;
+						}
+						(*event).subscriptionSize += (*dreitonCore).extensionEventBlockSize;
+						temp = realloc((*event).subscriptionStart, (*event).subscriptionSize * sizeof(DreitonCoreEventSubscription));
+						if(!temp){
+							(*event).subscriptionSize -= (*dreitonCore).extensionEventBlockSize;
+							ret false;
+						}
+						(*event).subscriptionStart = temp;
+					}
+					{
+						DreitonCoreClientSubscription *const clientSubscription = (*client).subscriptionStart + (*client).subscriptionAllocated;
+						DreitonCoreEventSubscription *const eventSubscription = (*event).subscriptionStart + (*event).subscriptionAllocated;
+						(*clientSubscription).eventExtensionId = extensionId;
+						(*clientSubscription).eventType = realEventType;
+						(*clientSubscription).eventSubscriptionOffset = (*event).subscriptionAllocated;
+						(*eventSubscription).clientOffset = client - (*dreitonCore).clientStart;
+						(*eventSubscription).clientSubscriptionOffset = (*client).subscriptionAllocated;
+						*((*client).eventOffsetStart + realEventType) = (*event).subscriptionAllocated;
+						inc (*client).subscriptionAllocated;
+						inc (*event).subscriptionAllocated;
+						success = true;
 					}
 				}
 				eventMask &= eventMask - 1;
@@ -1766,34 +1352,19 @@ SUBSCRIBETODREITONCOREEVENT(){
 		ret true;
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 EMITDREITONCOREEVENT(){
+
+
+
+	/*! check if params need to be checked before moving into the function */
+
+#ifdef a
+	bool  emitDreitonCoreEvent(const uint16 type, const uint16 extensionId, const uint32 token, const uint8 status, const uint32 payloadItemAmount, const uint32 *const payloadItemSizeStart, const void *const *const payloadItemDataStart)
+#endif
+
+
+
+	DreitonServerTransportDescriptor *transportDescriptor;
 	uint32 realEventType;
 	DreitonCoreEvent *event;
 	DreitonCoreEventSubscription *current;
@@ -1803,14 +1374,15 @@ EMITDREITONCOREEVENT(){
 	if(!dreitonCore){
 		ret false;
 	}
-	if(!isValidDreitonCoreExtension(dreitonCore, extension) or !eventType){
-		ret false;
-	}
-	realEventType = (*((*dreitonCore).extensionStart + extension)).extensionBaseEvent + eventType;
-	if(realEventType >= (*dreitonCore).eventAllocated){
-		ret false;
-	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
 	success = false;
+	if(!transportDescriptor or !(*transportDescriptor).sendDreitonTransportDescriptorEvent or !isValidDreitonCoreExtension(dreitonCore, extensionId) or !type){
+		jmp emergencyExit;
+	}
+	realEventType = (*((*dreitonCore).extensionStart + extensionId)).extensionBaseEvent + type;
+	if(realEventType >= (*dreitonCore).eventAllocated){
+		jmp emergencyExit;
+	}
 	event = (*dreitonCore).eventStart + realEventType;
 	current = (*event).subscriptionStart;
 	wall = current + (*event).subscriptionAllocated;
@@ -1819,41 +1391,17 @@ EMITDREITONCOREEVENT(){
 	emitDreitonCoreEventLoop:{
 		if(current < wall){
 			DreitonCoreClient *const client = clientStart + (*current).clientOffset;
-			fprintf(stdout, "emitting to client %p (%u)...\n", (void *)client, (*current).clientOffset);
 			if(isValidDreitonCoreClient(dreitonCore, client)){
-				DreitonShmHeader *const header = (*client).shmStart;
-				uint32 eventCurrentWriter = (*header).eventCurrentWriter;
-				uint32 eventSize = (*header).eventSize;
-				uint32 eventPayloadSize = 0 * sizeof(uint8);
-				uint64 response = ((uint64)eventCurrentWriter << 32) | 123123; /*! what do we return beyond the slot? */
-				DreitonShmEventSlot *const eventSlot = (*client).eventSlotStart + eventCurrentWriter;
-				GenericDreitonEvent *const eventCurrent = (*client).eventCurrent;
 
 
 
-				/*! handle space in a safer way */
+				/*! optimize to do some operations before some others, add understand what there's to do with token */
 
-				if((uint8 *)(*client).eventCurrent >= (uint8 *)(*client).eventStart + eventSize){
-					(*client).eventCurrent = (*client).eventStart;
-				}elif((uint8 *)(*client).eventCurrent + sizeof(GenericDreitonEvent) + eventPayloadSize > (uint8 *)(*client).eventStart + eventSize){
-					(*client).eventCurrent = (*client).eventStart;
-				}
+				sendDreitonCoreEvent(dreitonCore, client, type, extensionId, token, status, payloadItemAmount, payloadItemSizeStart, payloadItemDataStart);
 
 
 
-				(*eventSlot).eventStartOffset = (uint8 *)eventCurrent - (uint8 *)(*client).eventStart;
-				(*eventSlot).eventSize = sizeof(GenericDreitonEvent);
-				(*eventCurrent).eventType = eventType;
-				(*eventCurrent).extension = extension;
-				(*eventCurrent).payloadStartOffset = !!eventPayloadSize * sizeof(GenericDreitonEvent);
-				(*eventCurrent).payloadSize = eventPayloadSize;
-				/*! fprintf(stdout, "sending event   to   client %04u   event   slot @ %04u   sending data @ %04u %04u %04u %04u\n", (*current).clientOffset, eventCurrentWriter, (*eventCurrent).eventType, (*eventCurrent).extension, (*eventCurrent).payloadStartOffset, (*eventCurrent).payloadSize); */
-				write((*client).eventWriteFd, &response, sizeof(response)); /*! errors? */
-				(*header).eventCurrentWriter = (eventCurrentWriter + 1) % (*header).eventSlotSize;
-				(*client).eventCurrent += sizeof(GenericDreitonEvent) + eventPayloadSize;
 				success = true;
-			}else{
-				fprintf(stdout, "-----------emit dreiton core event error-----------\nsubscribed client %u is not valid and thus cannot receive event %u\n", (*current).clientOffset, realEventType);
 			}
 			inc current;
 			jmp emitDreitonCoreEventLoop;
@@ -1867,50 +1415,19 @@ EMITDREITONCOREEVENT(){
 		ret true;
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 UNSUBSCRIBEFROMDREITONCOREEVENT(){
-	DreitonCoreExtension *dreitonCoreExtension;
-	DreitonExtensionDescriptor *dreitonExtensionDescriptor;
 	uint32 eventType;
 	uint32 baseEvent;
 	bool success;
 	if(!dreitonCore){
 		ret false;
 	}
-	if((*dreitonCore).eventAllocated < 2 or !isValidDreitonCoreClient(dreitonCore, client) or !isValidDreitonCoreExtension(dreitonCore, extension) or !eventMask or !statusReturn){
-		ret false;
-	}
-	dreitonCoreExtension = (*dreitonCore).extensionStart + extension;
-	dreitonExtensionDescriptor = (*dreitonCoreExtension).extensionDescriptor;
-	eventType = 0;
-	baseEvent = (*dreitonCoreExtension).extensionBaseEvent;
 	success = false;
+	if((*dreitonCore).eventAllocated < 2 or !isValidDreitonCoreClient(dreitonCore, client) or !isValidDreitonCoreExtension(dreitonCore, extensionId) or !eventMask){
+		jmp emergencyExit;
+	}
+	eventType = 0;
+	baseEvent = (*((*dreitonCore).extensionStart + extensionId)).extensionBaseEvent;
 	jmp bitLoop;
 	bitLoop:{
 		if(eventMask){
@@ -1927,35 +1444,28 @@ UNSUBSCRIBEFROMDREITONCOREEVENT(){
 				if(realEventType < (*client).eventOffsetSize and realEventType < (*dreitonCore).eventAllocated){
 					const uint32 eventSubscriptionOffset = *((*client).eventOffsetStart + realEventType);
 					DreitonCoreEvent *const event = (*dreitonCore).eventStart + realEventType;
-					if(eventSubscriptionOffset == 0xFFFFFFFF){
-						*statusReturn |= SUCCESS_DREITON_REPLY_STATUS;
-					}else{
-						if((*dreitonExtensionDescriptor).decrementDreitonExtensionDescriptorEventCounter){
-							if((*(*dreitonExtensionDescriptor).decrementDreitonExtensionDescriptorEventCounter)(eventType)){
-								const uint32 clientSubscriptionOffset = (*((*event).subscriptionStart + eventSubscriptionOffset)).clientSubscriptionOffset;
-								const uint32 lastClientSubscriptionOffset = (*client).subscriptionAllocated - 1;
-								const uint32 lastEventSubscriptionOffset = (*event).subscriptionAllocated - 1;
-								if(clientSubscriptionOffset != lastClientSubscriptionOffset){
-									const DreitonCoreClientSubscription lastClientSubscription = *((*client).subscriptionStart + lastClientSubscriptionOffset);
-									DreitonCoreEvent *const lastEvent = (*dreitonCore).eventStart + lastClientSubscription.eventType;
-									*((*client).subscriptionStart + clientSubscriptionOffset) = lastClientSubscription;
-									(*((*lastEvent).subscriptionStart + lastClientSubscription.eventSubscriptionOffset)).clientSubscriptionOffset = clientSubscriptionOffset;
-									*((*client).eventOffsetStart + lastClientSubscription.eventType) = eventSubscriptionOffset;
-								}
-								if(eventSubscriptionOffset != lastEventSubscriptionOffset){
-									const DreitonCoreEventSubscription lastEventSubscription = *((*event).subscriptionStart + lastEventSubscriptionOffset);
-									DreitonCoreClient *const lastClient = (*dreitonCore).clientStart + lastEventSubscription.clientOffset;
-									*((*event).subscriptionStart + eventSubscriptionOffset) = lastEventSubscription;
-									(*((*lastClient).subscriptionStart + lastEventSubscription.clientSubscriptionOffset)).eventSubscriptionOffset = eventSubscriptionOffset;
-									*((*lastClient).eventOffsetStart + realEventType) = eventSubscriptionOffset;
-								}
-								*((*client).eventOffsetStart + realEventType) = 0xFFFFFFFF;
-								dec (*client).subscriptionAllocated;
-								dec (*event).subscriptionAllocated;
-								*statusReturn |= UPDATED_DREITON_REPLY_STATUS;
-								success = true;
-							}
+					if(eventSubscriptionOffset != 0xFFFFFFFF){
+						const uint32 clientSubscriptionOffset = (*((*event).subscriptionStart + eventSubscriptionOffset)).clientSubscriptionOffset;
+						const uint32 lastClientSubscriptionOffset = (*client).subscriptionAllocated - 1;
+						const uint32 lastEventSubscriptionOffset = (*event).subscriptionAllocated - 1;
+						if(clientSubscriptionOffset != lastClientSubscriptionOffset){
+							const DreitonCoreClientSubscription lastClientSubscription = *((*client).subscriptionStart + lastClientSubscriptionOffset);
+							DreitonCoreEvent *const lastEvent = (*dreitonCore).eventStart + lastClientSubscription.eventType;
+							*((*client).subscriptionStart + clientSubscriptionOffset) = lastClientSubscription;
+							(*((*lastEvent).subscriptionStart + lastClientSubscription.eventSubscriptionOffset)).clientSubscriptionOffset = clientSubscriptionOffset;
+							*((*client).eventOffsetStart + lastClientSubscription.eventType) = eventSubscriptionOffset;
 						}
+						if(eventSubscriptionOffset != lastEventSubscriptionOffset){
+							const DreitonCoreEventSubscription lastEventSubscription = *((*event).subscriptionStart + lastEventSubscriptionOffset);
+							DreitonCoreClient *const lastClient = (*dreitonCore).clientStart + lastEventSubscription.clientOffset;
+							*((*event).subscriptionStart + eventSubscriptionOffset) = lastEventSubscription;
+							(*((*lastClient).subscriptionStart + lastEventSubscription.clientSubscriptionOffset)).eventSubscriptionOffset = eventSubscriptionOffset;
+							*((*lastClient).eventOffsetStart + realEventType) = eventSubscriptionOffset;
+						}
+						*((*client).eventOffsetStart + realEventType) = 0xFFFFFFFF;
+						dec (*client).subscriptionAllocated;
+						dec (*event).subscriptionAllocated;
+						success = true;
 					}
 				}
 				eventMask &= eventMask - 1;
@@ -1971,6 +1481,8 @@ UNSUBSCRIBEFROMDREITONCOREEVENT(){
 		ret true;
 	}
 }
+
+/*!*/
 
 
 
@@ -1999,120 +1511,110 @@ UNSUBSCRIBEFROMDREITONCOREEVENT(){
 
 
 UNLOADDREITONCOREEXTENSION(){
-
-	/*! make sure to use a data type for this one */
-
-	DreitonCoreExtension *current;
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!isValidDreitonCoreExtension(dreitonCore, extension)){
-		ret false;
-	}
-	current = (*dreitonCore).extensionStart + extension;
-	if(!force and (*current).extensionReferenceCount){
-		ret false;
-	}
-	if((*dreitonCore).eventEpollFd){
-		epoll_ctl((*dreitonCore).eventEpollFd, EPOLL_CTL_DEL, (*current).extensionWriteFd, NULL); /*! errors? */
-	}
-	close((*current).extensionWriteFd); /*! errors? */
-	close((*current).extensionReadFd); /*! errors? */
-	dlclose((*current).extensionHandle); /*! errors? */
-	(*current).extensionHandle = NULL;
-	ret true;
-}
-REMOVEDREITONCORECLIENT(){
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!isValidDreitonCoreClient(dreitonCore, client)){
-		ret false;
-	}
-	{
-		DreitonCoreClientSubscription *current = (*client).subscriptionStart;
-		DreitonCoreClientSubscription *const wall = (*client).subscriptionStart + (*client).subscriptionAllocated;
-		jmp unsubscribeEventLoop;
-		unsubscribeEventLoop:{
-			if(current < wall){
-				const uint32 eventMask = 1 << ((*current).eventType - (*((*dreitonCore).extensionStart + (*current).extension)).extensionBaseEvent - 1);
-				uint8 status;
-				unsubscribeFromDreitonCoreEvent(dreitonCore, client, (*current).extension, eventMask, &status);
-				inc current;
-				jmp unsubscribeEventLoop;
-			}
-			free((*client).subscriptionStart);
-			free((*client).eventOffsetStart);
-		}
-	}
-	if((*dreitonCore).replyEpollFd){
-		epoll_ctl((*dreitonCore).replyEpollFd, EPOLL_CTL_DEL, (*client).requestReadFd, NULL); /*! errors? */
-	}
-	shmctl((*client).shmId, IPC_RMID, NULL); /*! errors? */
-	shmdt((*client).shmStart); /*! errors? */
-	close((*client).requestReadFd); /*! on signal interrupt? */
-	close((*client).replyWriteFd); /*! on signal interrupt? */
-	close((*client).eventWriteFd); /*! on signal interrupt? */
-	(*client).clientId = 0;
-	if(client - (*dreitonCore).clientStart == (*dreitonCore).clientAllocated - 1){
-		dec (*dreitonCore).clientAllocated;
-	}
-	ret true;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-REMOVEALLDREITONCORECLIENTS(){
-	DreitonCoreClient *current;
-	DreitonCoreClient *wall;
+	DreitonCoreExtension *extension;
+	DreitonExtensionDescriptor *extensionDescriptor;
+	DreitonCoreEvent *current;
+	DreitonCoreEvent *wall;
 	bool success;
 	if(!dreitonCore){
 		ret false;
 	}
-	if(!(*dreitonCore).clientStart and !(*dreitonCore).clientSize and !(*dreitonCore).clientAllocated){
-		ret false;
-	}
-	current = (*dreitonCore).clientStart + 1;
-	wall = current + (*dreitonCore).clientAllocated;
 	success = false;
-	if((*dreitonCore).replyEpollFd){
-		jmp removeDreitonCoreClientLoop;
-		removeDreitonCoreClientLoop:{
-			if(current < wall){
-				removeDreitonCoreClient(dreitonCore, current);
-				inc current;
-				jmp removeDreitonCoreClientLoop;
+	if(!isValidDreitonCoreExtension(dreitonCore, extensionId)){
+		jmp emergencyExit;
+	}
+	extension = (*dreitonCore).extensionStart + extensionId;
+	if(!force and (*extension).extensionReferenceAmount){
+		jmp emergencyExit;
+	}
+	extensionDescriptor = (*extension).extensionDescriptor;
+	if(extensionDescriptor){
+		if((*extensionDescriptor).finiDreitonExtensionDescriptor){
+			if(!(*(*extensionDescriptor).finiDreitonExtensionDescriptor)((*extension).extensionHandle)){
+				jmp emergencyExit;
 			}
 		}
+		(*extension).extensionDescriptor = NULL;
 	}
-	free((*dreitonCore).clientStart);
-	(*dreitonCore).clientStart = NULL;
-	(*dreitonCore).clientSize = 0;
-	(*dreitonCore).clientAllocated = 0;
+	current = (*dreitonCore).eventStart + 1 + (*extension).extensionBaseEvent;
+	wall = current + (*extension).extensionEventAmount;
+	jmp freeEventLoop;
+	freeEventLoop:{
+		if(current < wall){
+			free((*current).subscriptionStart);
+			inc current;
+			jmp freeEventLoop;
+		}
+		if(dlclose((*extension).extensionDescriptorHandle) != DLCLOSE_SUCCESS){
+			jmp emergencyExit;
+		}
+		(*extension).extensionDescriptorHandle = NULL;
+		success = true;
+		jmp emergencyExit;
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+REMOVEDREITONCORECLIENT(){
+	DreitonCoreClient *client;
+	DreitonCoreClientSubscription *current;
+	DreitonCoreClientSubscription *wall;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	client = (*dreitonCore).clientStart + clientId;
+	success = false;
+	if(!isValidDreitonCoreClient(dreitonCore, client)){
+		jmp emergencyExit;
+	}
+	current = (*client).subscriptionStart;
+	wall = current + (*client).subscriptionAllocated;
+	jmp unsubscribeEventLoop;
+	unsubscribeEventLoop:{
+		if(current < wall){
+			const uint32 eventMask = 1 << ((*current).eventType - (*((*dreitonCore).extensionStart + (*current).eventExtensionId)).extensionBaseEvent - 1);
+			unsubscribeFromDreitonCoreEvent(dreitonCore, client, (*current).eventExtensionId, eventMask);
+			inc current;
+			jmp unsubscribeEventLoop;
+		}
+		free((*client).subscriptionStart);
+		free((*client).eventOffsetStart);
+		(*client).clientId = 0;
+		if(client == (*dreitonCore).clientStart + (*dreitonCore).clientAllocated - 1){
+			dec (*dreitonCore).clientAllocated;
+		}
+		success = true;
+		jmp emergencyExit;
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAKEUPDREITONCORETRANSPORTREGISTRATION(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).wakeUpDreitonTransportDescriptorRegistration){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).wakeUpDreitonTransportDescriptorRegistration)((*dreitonCore).transportHandle)){
+		jmp emergencyExit;
+	}
 	success = true;
 	jmp emergencyExit;
 	emergencyExit:{
@@ -2122,177 +1624,222 @@ REMOVEALLDREITONCORECLIENTS(){
 		ret true;
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-QUITDREITONCOREREGISTRATIONLOOPTHREAD(){
-	int socketConnection;
-	struct sockaddr_un address;
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!(*dreitonCore).registrationLoopRunning){
-		ret false;
-	}
-	socketConnection = socket(AF_UNIX, SOCK_STREAM, NONE_SOCKET_PROTOCOL);
-	if(socketConnection == SOCKET_FAILURE){
-		ret false;
-	}
-	address.sun_family = AF_UNIX;
-	strcpy(address.sun_path, (*dreitonCore).serverChannelPath); /*! replace with toolkit function */
-	(*dreitonCore).registrationLoopRunning = false;
-	connect(socketConnection, (void *)&address, sizeof(address));
-	close(socketConnection); /*! on signal interrupt? */
-	ret true;
-}
-QUITDREITONCOREEVENTLOOPTHREAD(){
-	int signalEventFd;
-	struct epoll_event event;
-	uint64 value;
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!(*dreitonCore).replyEpollFd or !(*dreitonCore).replyLoopRunning){
-		ret false;
-	}
-	signalEventFd = (*dreitonCore).signalEventFd;
-	if(!signalEventFd){
-		signalEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
-		(*dreitonCore).signalEventFd = signalEventFd;
-	}
-	event.events = EPOLLIN;
-	event.data.fd = signalEventFd; /*! what data to pass? */
-	value = 1;
-	epoll_ctl((*dreitonCore).replyEpollFd, EPOLL_CTL_ADD, signalEventFd, &event); /*! errors? */
-	(*dreitonCore).replyLoopRunning = false;
-	write(signalEventFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
-	ret true;
-}
-QUITDREITONCOREREPLYLOOPTHREAD(){
-	int signalEventFd;
-	struct epoll_event event;
-	uint64 value;
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!(*dreitonCore).eventEpollFd or !(*dreitonCore).eventLoopRunning){
-		ret false;
-	}
-	signalEventFd = (*dreitonCore).signalEventFd;
-	if(!signalEventFd){
-		signalEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
-		(*dreitonCore).signalEventFd = signalEventFd;
-	}
-	event.events = EPOLLIN;
-	event.data.fd = signalEventFd; /*! what data to pass? */
-	value = 1;
-	epoll_ctl((*dreitonCore).eventEpollFd, EPOLL_CTL_ADD, signalEventFd, &event); /*! errors? */
-	(*dreitonCore).eventLoopRunning = false;
-	write(signalEventFd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
-	ret true;
-}
-AWAITDREITONCOREREGISTRATIONLOOPTHREADEXIT(){
-	void *serverSystemReturn;
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!(*dreitonCore).registrationLoopThreadCreated){
-		ret false;
-	}
-	pthread_join((*dreitonCore).registrationLoopThread, &serverSystemReturn);
-	(*dreitonCore).registrationLoopThreadCreated = false;
-	if(!serverSystemReturn){
-		ret false;
-	}
-	ret true;
-}
-AWAITDREITONCOREEVENTLOOPTHREADEXIT(){
-	void *serverSystemReturn;
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!(*dreitonCore).replyLoopThreadCreated){
-		ret false;
-	}
-	pthread_join((*dreitonCore).replyLoopThread, &serverSystemReturn);
-	(*dreitonCore).replyLoopThreadCreated = false;
-	if(!serverSystemReturn){
-		ret false;
-	}
-	ret true;
-}
-AWAITDREITONCOREREPLYLOOPTHREADEXIT(){
-	void *serverSystemReturn;
-	if(!dreitonCore){
-		ret false;
-	}
-	if(!(*dreitonCore).eventLoopThreadCreated){
-		ret false;
-	}
-	pthread_join((*dreitonCore).eventLoopThread, &serverSystemReturn);
-	(*dreitonCore).eventLoopThreadCreated = false;
-	if(!serverSystemReturn){
-		ret false;
-	}
-	ret true;
-}
-REMOVEALLDREITONCOREEXTENSIONS(){
-	uint current;
-	uint wall;
+WAKEUPDREITONCORETRANSPORTREQUEST(){
+	DreitonServerTransportDescriptor *transportDescriptor;
 	bool success;
 	if(!dreitonCore){
 		ret false;
 	}
-	if(!(*dreitonCore).extensionStart and !(*dreitonCore).extensionSize and !(*dreitonCore).extensionAllocated){
-		ret false;
-	}
-	current = 1;
-	wall = (*dreitonCore).extensionAllocated;
 	success = false;
-	jmp removeDreitonCoreExtensionLoop;
-	removeDreitonCoreExtensionLoop:{
-		if(current < wall){
-			unloadDreitonCoreExtension(dreitonCore, current, true);
-			success = true;
-			inc current;
-			jmp removeDreitonCoreExtensionLoop;
-		}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
 		jmp emergencyExit;
 	}
+	if(!(*transportDescriptor).wakeUpDreitonTransportDescriptorRequest){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).wakeUpDreitonTransportDescriptorRequest)((*dreitonCore).transportHandle)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
 	emergencyExit:{
-		free((*dreitonCore).extensionStart);
-		(*dreitonCore).extensionStart = NULL;
-		(*dreitonCore).extensionSize = 0;
-		(*dreitonCore).extensionAllocated = 0;
 		if(!success){
 			ret false;
 		}
 		ret true;
 	}
+}
+WAKEUPDREITONCORETRANSPORTEVENT(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).wakeUpDreitonTransportDescriptorEvent){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).wakeUpDreitonTransportDescriptorEvent)((*dreitonCore).transportHandle)){
+		jmp emergencyExit;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+DESTROYDREITONCORETRANSPORTREGISTRATIONRECEIVER(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!(*dreitonCore).registrationReceiverCreated){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).destroyDreitonTransportDescriptorRegistrationReceiver){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).destroyDreitonTransportDescriptorRegistrationReceiver)((*dreitonCore).transportHandle)){
+		jmp emergencyExit;
+	}
+	(*dreitonCore).registrationReceiverCreated = false;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+DESTROYDREITONCORETRANSPORTREQUESTRECEIVER(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!(*dreitonCore).requestReceiverCreated){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).destroyDreitonTransportDescriptorRequestReceiver){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).destroyDreitonTransportDescriptorRequestReceiver)((*dreitonCore).transportHandle)){
+		jmp emergencyExit;
+	}
+	(*dreitonCore).requestReceiverCreated = false;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+DESTROYDREITONCORETRANSPORTEVENTRECEIVER(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!(*dreitonCore).eventReceiverCreated){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if(!(*transportDescriptor).destroyDreitonTransportDescriptorEventReceiver){
+		jmp emergencyExit;
+	}
+	if(!(*(*transportDescriptor).destroyDreitonTransportDescriptorEventReceiver)((*dreitonCore).transportHandle)){
+		jmp emergencyExit;
+	}
+	(*dreitonCore).eventReceiverCreated = false;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+UNLOADDREITONCORECODEC(){
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!(*dreitonCore).codecDescriptorHandle){
+		jmp emergencyExit;
+	}
+	if(dlclose((*dreitonCore).codecDescriptorHandle) != DLCLOSE_SUCCESS){
+		jmp emergencyExit;
+	}
+	(*dreitonCore).codecDescriptorHandle = NULL;
+	(*dreitonCore).codecDescriptor = NULL;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+UNLOADDREITONCORETRANSPORT(){
+	DreitonServerTransportDescriptor *transportDescriptor;
+	bool success;
+	if(!dreitonCore){
+		ret false;
+	}
+	success = false;
+	if(!(*dreitonCore).transportDescriptorHandle){
+		jmp emergencyExit;
+	}
+	transportDescriptor = (*dreitonCore).transportDescriptor;
+	if(!transportDescriptor){
+		jmp emergencyExit;
+	}
+	if((*transportDescriptor).finiDreitonTransportDescriptor){
+		if(!(*(*transportDescriptor).finiDreitonTransportDescriptor)((*dreitonCore).transportHandle)){
+			jmp emergencyExit;
+		}
+	}
+	(*dreitonCore).transportHandle = NULL;
+	if(dlclose((*dreitonCore).transportDescriptorHandle) != DLCLOSE_SUCCESS){
+		jmp emergencyExit;
+	}
+	(*dreitonCore).transportDescriptorHandle = NULL;
+	(*dreitonCore).transportDescriptor = NULL;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+FINDDREITONCORECLIENTID(){
+	DreitonCoreClient *client;
+	if(!dreitonCore){
+		ret false;
+	}
+	if(!clientReturn){
+		ret false;
+	}
+	if(!clientId or clientId >= (*dreitonCore).clientAllocated){
+		ret false;
+	}
+	client = (*dreitonCore).clientStart + clientId;
+	if(clientId != (*client).clientId){
+		ret false;
+	}
+	*clientReturn = client;
+	ret true;
 }
 ISVALIDDREITONCORECLIENT(){
 	if(!dreitonCore){
@@ -2307,7 +1854,7 @@ ISVALIDDREITONCOREEXTENSION(){
 	if(!dreitonCore){
 		ret false;
 	}
-	if(!extension or extension >= (*dreitonCore).extensionAllocated or !(*((*dreitonCore).extensionStart + extension)).extensionHandle){
+	if(!extensionId or extensionId >= (*dreitonCore).extensionAllocated or !(*((*dreitonCore).extensionStart + extensionId)).extensionDescriptorHandle){
 		ret false;
 	}
 	ret true;
@@ -2339,211 +1886,120 @@ ISVALIDDREITONCOREEXTENSION(){
 
 
 
-FINDDREITONCORECLIENTFD(){
-	DreitonCoreClient *current;
-	DreitonCoreClient *wall;
-	if(!dreitonCore){
-		ret NULL;
-	}
-	if(!(*dreitonCore).clientAllocated or !fd){
-		ret NULL;
-	}
-	current = (*dreitonCore).clientStart + 1;
-	wall = current + (*dreitonCore).clientAllocated;
-	jmp findServerClientFdLoop;
-	findServerClientFdLoop:{
-		if(current < wall){
-			if((*current).requestReadFd == fd and (*current).clientId){
-				ret current;
-			}
-			inc current;
-			jmp findServerClientFdLoop;
-		}
-		ret NULL;
-	}
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-FINDDREITONCORECLIENTFDID(){
-	DreitonCoreClient *client;
-	if(!dreitonCore){
-		ret NULL;
-	}
-	if(!fd or id >= (*dreitonCore).clientAllocated){ /*! update later when data types are added */
-		ret NULL;
-	}
-	client = (*dreitonCore).clientStart + id;
-	if(!(*client).clientId or (*client).requestReadFd != fd){
-		ret NULL;
-	}
-	ret client;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/*!*/
 
 FINIDREITONCORE(){
 	if(!dreitonCore){
 		ret false;
 	}
-
-
-
-
-
-
-
-
-
-	/*!*/
-
-	(*dreitonCore).transport.transportDescriptor = NULL;
-	(*dreitonCore).transport.transportHandle = NULL;
-
-
-
-	/*!*/
-
-	if((*dreitonCore).registrationEventFd){
-		close((*dreitonCore).registrationEventFd);
-		(*dreitonCore).registrationEventFd = 0;
+	{
+		DreitonCoreClient *current = (*dreitonCore).clientStart + 1;
+		DreitonCoreClient *wall = (*dreitonCore).clientStart + (*dreitonCore).clientAllocated;
+		jmp loop0;
+		loop0:{
+			if(current < wall){
+				DreitonCoreClient *client = current;
+				if(isValidDreitonCoreClient(dreitonCore, client)){
+					DreitonCoreClientSubscription *current = (*client).subscriptionStart;
+					DreitonCoreClientSubscription *const wall = current + (*client).subscriptionAllocated;
+					jmp unsubscribeEventLoop;
+					unsubscribeEventLoop:{
+						if(current < wall){
+							const uint32 eventMask = 1 << ((*current).eventType - (*((*dreitonCore).extensionStart + (*current).eventExtensionId)).extensionBaseEvent - 1);
+							unsubscribeFromDreitonCoreEvent(dreitonCore, client, (*current).eventExtensionId, eventMask);
+							inc current;
+							jmp unsubscribeEventLoop;
+						}
+						free((*client).subscriptionStart);
+						free((*client).eventOffsetStart);
+					}
+					(*client).clientId = 0;
+				}
+				inc current;
+				jmp loop0;
+			}
+		}
 	}
-	if((*dreitonCore).registrationEpollFd){
-		close((*dreitonCore).registrationEpollFd);
-		(*dreitonCore).registrationEpollFd = 0;
+	{
+		uint32 current = 1;
+		uint32 wall = (*dreitonCore).extensionAllocated;
+		jmp loop1;
+		loop1:{
+			if(current < wall){
+				unloadDreitonCoreExtension(dreitonCore, current, true);
+				inc current;
+				jmp loop1;
+			}
+		}
 	}
-	if((*dreitonCore).replyEventFd){
-		close((*dreitonCore).replyEventFd);
-		(*dreitonCore).replyEventFd = 0;
+	if((*dreitonCore).registrationReceiverCreated){
+		if(!destroyDreitonCoreTransportRegistrationReceiver(dreitonCore)){
+			ret false;
+		}
 	}
-	*((*dreitonCore).fdCopy + 0) = 0;
-	*((*dreitonCore).fdCopy + 1) = 0;
-	*((*dreitonCore).fdCopy + 2) = 0;
-
-
-
-
-
-
-
-
-
-	if((*dreitonCore).registrationLoopThreadCreated){
-		quitDreitonCoreRegistrationLoopThread(dreitonCore);
-		pthread_join((*dreitonCore).registrationLoopThread, NULL);
-		(*dreitonCore).registrationLoopThreadCreated = false;
+	if((*dreitonCore).requestReceiverCreated){
+		if(!destroyDreitonCoreTransportRequestReceiver(dreitonCore)){
+			ret false;
+		}
 	}
-	if((*dreitonCore).eventLoopThreadCreated){
-		quitDreitonCoreEventLoopThread(dreitonCore);
-		pthread_join((*dreitonCore).eventLoopThread, NULL);
-		(*dreitonCore).eventLoopThreadCreated = false;
+	if((*dreitonCore).eventReceiverCreated){
+		if(!destroyDreitonCoreTransportEventReceiver(dreitonCore)){
+			ret false;
+		}
 	}
-	if((*dreitonCore).replyLoopThreadCreated){
-		quitDreitonCoreReplyLoopThread(dreitonCore);
-		pthread_join((*dreitonCore).replyLoopThread, NULL);
-		(*dreitonCore).replyLoopThreadCreated = false;
+	if((*dreitonCore).codecDescriptor){
+		if(!unloadDreitonCoreCodec(dreitonCore)){
+			ret false;
+		}
 	}
-	(*dreitonCore).registrationLoopRunning = false;
-	(*dreitonCore).eventLoopRunning = false;
-	(*dreitonCore).replyLoopRunning = false;
-
-
-
-	/*! should someone else be responsible for these? namely the functions dealing with this stuff */
-
-	if((*dreitonCore).signalEventFd){
-		close((*dreitonCore).signalEventFd); /*! on signal interrupt? */ /*! errors? */
-		(*dreitonCore).signalEventFd = 0;
+	if((*dreitonCore).transportDescriptor){
+		if(!unloadDreitonCoreTransport(dreitonCore)){
+			ret false;
+		}
 	}
-
-	/*!*/
-
-#ifdef a
-	int32 /*--------*/ replyEpollFd;
-	int32 /*--------*/ eventReplyEpollFd;
-	int32 /*--------*/ signalEventFd;
-	uint32 /*-------*/ clientId;
-#endif
-
-
-
 	(*dreitonCore).baseEvent = 0;
 	free((*dreitonCore).eventStart);
 	(*dreitonCore).eventStart = NULL;
 	(*dreitonCore).eventSize = 0;
 	(*dreitonCore).eventAllocated = 0;
-
-
-
 	(*dreitonCore).extensionBlockSize = 0;
-
-
-
-	removeAllDreitonCoreExtensions(dreitonCore);
-
-
-
+	free((*dreitonCore).extensionStart);
+	(*dreitonCore).extensionStart = NULL;
+	(*dreitonCore).extensionSize = 0;
+	(*dreitonCore).extensionAllocated = 0;
 	(*dreitonCore).clientBlockSize = 0;
-
-
-
-	removeAllDreitonCoreClients(dreitonCore);
-
-	/*!*/
-
-
-
-	(*dreitonCore).database = NULL;
-	(*dreitonCore).clientChannelPath = NULL;
-	(*dreitonCore).serverChannelPath = NULL;
+	free((*dreitonCore).clientStart);
+	(*dreitonCore).clientStart = NULL;
+	(*dreitonCore).clientSize = 0;
+	(*dreitonCore).clientAllocated = 0;
 	ret true;
 }
+
+/*!*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

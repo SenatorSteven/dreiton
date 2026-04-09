@@ -1,4 +1,50 @@
 
+/*!
+	is alignment something we are concerned with, either on the server or the client side, as far as the address returned by shmat() is concerned?
+*/
+
+/*!
+	client id should have a generation.
+*/
+
+/*!
+	check if header is getting overwritten by the client. fucking cunt better be careful.
+*/
+
+/*!
+	check across all trust boundaries.
+*/
+
+/*!
+	encode data properly over tcp during opening of connection.
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /*! dreiton-shm-transport.cold
 
 MIT License
@@ -23,318 +69,2696 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
+#include <sys/shm.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+
+
+
+/*! remove later */
+
+#include <stdio.h>
+
+
 
 #include "headers/cold/cold.hold"
+#include "headers/protocols/dreiton-transport-protocol.hold"
+#include "headers/dreiton-shm-transport.hold"
 
-#define INITDREITONTRANSPORTDESCRIPTOR() /*----------------*/ bool  initDreitonTransportDescriptor(void)
-#define CREATEDREITONTRANSPORTDESCRIPTOR() /*--------------*/ bool  createDreitonTransportDescriptor(void)
-#define CREATEDREITONTRANSPORTDESCRIPTORCLIENTBUFFER() /*--*/ bool  createDreitonTransportDescriptorClientBuffer(void)
-#define WAITFORDREITONTRANSPORTDESCRIPTORREQUEST() /*------*/ bool  waitForDreitonTransportDescriptorRequest(void)
-#define SENDDREITONTRANSPORTDESCRIPTORMESSAGE() /*---------*/ bool  sendDreitonTransportDescriptorMessage(const uint32 size, const void *const buffer)
-#define RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE() /*------*/ bool  receiveDreitonTransportDescriptorMessage(uint32 *const sizeReturn, void *const *const bufferReturn)
-#define DESTROYDREITONTRANSPORTDESCRIPTORCLIENTBUFFER() /*-*/ bool  destroyDreitonTransportDescriptorClientBuffer(void)
-#define FINDDREITONTRANSPORTDESCRIPTORCLIENT() /*----------*/ bool  findDreitonTransportDescriptorClient(void)
-#define FINIDREITONTRANSPORTDESCRIPTOR() /*----------------*/ bool  finiDreitonTransportDescriptor(void)
+#define SENDMSG_FAILURE /*-------------------------------------------------*/ (-1)
+#define RECVMSG_FAILURE /*-------------------------------------------------*/ (-1)
+#define NONE_SOCKET_PROTOCOL /*--------------------------------------------*/ (0)
+#define SOCKET_FAILURE /*--------------------------------------------------*/ (-1)
+#define BIND_FAILURE /*----------------------------------------------------*/ (-1)
+#define LISTEN_FAILURE /*--------------------------------------------------*/ (-1)
+#define ACCEPT_FAILURE /*--------------------------------------------------*/ (-1)
+#define PIPE_FAILURE /*----------------------------------------------------*/ (-1)
+#define FCNTL_FAILURE /*---------------------------------------------------*/ (-1)
+#define EPOLL_CTL_FAILURE /*-----------------------------------------------*/ (-1)
+#define SHM_NONE /*--------------------------------------------------------*/ (0)
+#define SHMAT_FAILURE /*---------------------------------------------------*/ ((void *)-1)
+#define SEND_FAILURE /*----------------------------------------------------*/ (-1)
+#define CONNECT_FAILURE /*-------------------------------------------------*/ (-1)
+#define NONE_SEND_FLAG /*--------------------------------------------------*/ (0)
+#define NONE_RECV_FLAG /*--------------------------------------------------*/ (0)
+#define NONE_EPOLL_FLAG /*-------------------------------------------------*/ (0)
+#define EPOLL_CREATE1_FAILURE /*-------------------------------------------*/ (-1)
+#define RECV_FAILURE /*----------------------------------------------------*/ (-1)
+#define INFINITE_EPOLL_WAIT_TIMEOUT /*-------------------------------------*/ (-1)
+#define EVENTFD_FAILURE /*-------------------------------------------------*/ (-1)
+#define READ_FAILURE /*----------------------------------------------------*/ (-1)
+#define EPOLL_WAIT_FAILURE /*----------------------------------------------*/ (-1)
+#define NONE_FD /*---------------------------------------------------------*/ (-1)
+
+#define INITDREITONSERVERTRANSPORTDESCRIPTOR() /*--------------------------*/ bool  initDreitonServerTransportDescriptor(void **const backendReturn)
+#define SETDREITONSERVERTRANSPORTDESCRIPTORCLIENTBLOCKSIZE() /*------------*/ bool  setDreitonServerTransportDescriptorClientBlockSize(void *const backend, const uint32 clientBlockSize)
+#define SETDREITONSERVERTRANSPORTDESCRIPTORCONCURRENTCONNECTIONAMOUNT() /*-*/ bool  setDreitonServerTransportDescriptorConcurrentConnectionAmount(void *const backend, const uint32 concurrentConnectionAmount)
+#define SETDREITONSERVERTRANSPORTDESCRIPTORREQUESTSLOTSIZE() /*------------*/ bool  setDreitonServerTransportDescriptorRequestSlotSize(void *const backend, uint32 requestSlotSize)
+#define SETDREITONSERVERTRANSPORTDESCRIPTORREPLYSLOTSIZE() /*--------------*/ bool  setDreitonServerTransportDescriptorReplySlotSize(void *const backend, uint32 replySlotSize)
+#define SETDREITONSERVERTRANSPORTDESCRIPTOREVENTSLOTSIZE() /*--------------*/ bool  setDreitonServerTransportDescriptorEventSlotSize(void *const backend, uint32 eventSlotSize)
+#define SETDREITONSERVERTRANSPORTDESCRIPTORREQUESTSIZE() /*----------------*/ bool  setDreitonServerTransportDescriptorRequestSize(void *const backend, const uint32 requestSize)
+#define SETDREITONSERVERTRANSPORTDESCRIPTORREPLYSIZE() /*------------------*/ bool  setDreitonServerTransportDescriptorReplySize(void *const backend, const uint32 replySize)
+#define SETDREITONSERVERTRANSPORTDESCRIPTOREVENTSIZE() /*------------------*/ bool  setDreitonServerTransportDescriptorEventSize(void *const backend, const uint32 eventSize)
+#define CREATEDREITONSERVERTRANSPORTDESCRIPTORREQUESTRECEIVER() /*---------*/ bool  createDreitonServerTransportDescriptorRequestReceiver(void *const backend)
+#define CREATEDREITONSERVERTRANSPORTDESCRIPTOREVENTRECEIVER() /*-----------*/ bool  createDreitonServerTransportDescriptorEventReceiver(void *const backend)
+#define CREATEDREITONSERVERTRANSPORTDESCRIPTORREGISTRATIONRECEIVER() /*----*/ bool  createDreitonServerTransportDescriptorRegistrationReceiver(void *const backend, const void *const name)
+#define WAITFORDREITONSERVERTRANSPORTDESCRIPTORREQUEST() /*----------------*/ bool  waitForDreitonServerTransportDescriptorRequest(void *const backend, DreitonServerTransportRequest *const transportRequestReturn)
+#define WAITFORDREITONSERVERTRANSPORTDESCRIPTORSERVEREVENT() /*------------*/ bool  waitForDreitonServerTransportDescriptorServerEvent(void *const backend, uint32 *const extensionReturn, uint32 *const eventTypeReturn)
+#define WAITFORDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION() /*-----------*/ bool  waitForDreitonServerTransportDescriptorRegistration(void *const backend, const uint32 dataSizeReturn, void *const dataReturn)
+#define HANDSHAKEDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION() /*---------*/ bool  handshakeDreitonServerTransportDescriptorRegistration(void *const backend, const bool successfulHandshake, const uint32 dataSize, const void *const data)
+#define CONSUMEDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION() /*-----------*/ bool  consumeDreitonServerTransportDescriptorRegistration(void *const backend)
+#define SETDREITONSERVERTRANSPORTDESCRIPTORCLIENTHANDLE() /*---------------*/ bool  setDreitonServerTransportDescriptorClientHandle(void *const backend, const uint32 clientId, const uint64 clientHandle)
+#define GETDREITONSERVERTRANSPORTDESCRIPTORCLIENTREQUESTFRAME() /*---------*/ bool  getDreitonServerTransportDescriptorClientRequestFrame(void *const backend, const uint32 clientId, void **const frameReturn)
+#define GETDREITONSERVERTRANSPORTDESCRIPTORREPLYFRAME() /*-----------------*/ bool  getDreitonServerTransportDescriptorReplyFrame(void *const backend, const uint32 clientId, const uint32 frameSize, void **const frameReturn)
+#define GETDREITONSERVERTRANSPORTDESCRIPTOREVENTFRAME() /*-----------------*/ bool  getDreitonServerTransportDescriptorEventFrame(void *const backend, const uint32 clientId, const uint32 frameSize, void **const frameReturn)
+#define CONSUMEDREITONSERVERTRANSPORTDESCRIPTORCLIENTREQUESTFRAME() /*-----*/ bool  consumeDreitonServerTransportDescriptorClientRequestFrame(void *const backend, const uint32 clientId)
+#define SENDDREITONSERVERTRANSPORTDESCRIPTORREPLY() /*---------------------*/ bool  sendDreitonServerTransportDescriptorReply(void *const backend, const uint32 clientId, const uint32 frameSize, const void *const frame)
+#define SENDDREITONSERVERTRANSPORTDESCRIPTOREVENT() /*---------------------*/ bool  sendDreitonServerTransportDescriptorEvent(void *const backend, const uint32 clientId, const uint32 frameSize, const void *const frame)
+#define DESTROYDREITONTRANSPORTCLIENT() /*---------------------------------*/ bool  destroyDreitonTransportClient(ServerBackend *const backend, Client *const client)
+#define WAKEUPDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION() /*------------*/ bool  wakeUpDreitonServerTransportDescriptorRegistration(void *const backend)
+#define WAKEUPDREITONSERVERTRANSPORTDESCRIPTORREQUEST() /*-----------------*/ bool  wakeUpDreitonServerTransportDescriptorRequest(void *const backend)
+#define WAKEUPDREITONSERVERTRANSPORTDESCRIPTOREVENT() /*-------------------*/ bool  wakeUpDreitonServerTransportDescriptorEvent(void *const backend)
+#define DESTROYDREITONSERVERTRANSPORTDESCRIPTORREGISTRATIONRECEIVER() /*---*/ bool  destroyDreitonServerTransportDescriptorRegistrationReceiver(void *const backend)
+#define DESTROYDREITONSERVERTRANSPORTDESCRIPTORREQUESTRECEIVER() /*--------*/ bool  destroyDreitonServerTransportDescriptorRequestReceiver(void *const backend)
+#define DESTROYDREITONSERVERTRANSPORTDESCRIPTOREVENTRECEIVER() /*----------*/ bool  destroyDreitonServerTransportDescriptorEventReceiver(void *const backend)
+#define DESTROYALLDREITONTRANSPORTCLIENTS() /*-----------------------------*/ bool  destroyAllDreitonTransportClients(ServerBackend *const backend)
+#define ISVALIDDREITONTRANSPORTCLIENT() /*---------------------------------*/ bool  isValidDreitonTransportClient(ServerBackend *const backend, Client *const client)
+#define FINIDREITONSERVERTRANSPORTDESCRIPTOR() /*--------------------------*/ bool  finiDreitonServerTransportDescriptor(void *const backend)
+
+#define INITDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION() /*----------------*/ bool  initDreitonClientTransportDescriptorConnection(void **const backendReturn)
+#define CONNECTTODREITONCLIENTTRANSPORTDESCRIPTORCONNECTION() /*-----------*/ bool  connectToDreitonClientTransportDescriptorConnection(void *const backend, const void *const name, const uint32 dataSize, const void *const data, const uint32 dataSizeReturn, void *const dataReturn)
+#define GETDREITONCLIENTTRANSPORTDESCRIPTORREQUESTFRAME() /*---------------*/ bool  getDreitonClientTransportDescriptorRequestFrame(void *const backend, const uint32 frameSize, void **const requestFrameReturn)
+#define SENDDREITONCLIENTTRANSPORTDESCRIPTORREQUEST() /*-------------------*/ bool  sendDreitonClientTransportDescriptorRequest(void *const backend, const uint32 requestFrameSize, const void *const requestFrame)
+#define FLUSHDREITONCLIENTTRANSPORTDESCRIPTORREQUESTBUFFER() /*------------*/ bool  flushDreitonClientTransportDescriptorRequestBuffer(void *const backend)
+#define WAITFORDREITONCLIENTTRANSPORTDESCRIPTORREPLY() /*------------------*/ bool  waitForDreitonClientTransportDescriptorReply(void *const backend, void **const frameReturn, uint8 *const statusReturn)
+#define CONSUMEDREITONCLIENTTRANSPORTDESCRIPTORREPLY() /*------------------*/ bool  consumeDreitonClientTransportDescriptorReply(void *const backend, void *const reply)
+#define WAITFORDREITONCLIENTTRANSPORTDESCRIPTOREVENT() /*------------------*/ bool  waitForDreitonClientTransportDescriptorEvent(void *const backend, void **const frameReturn, uint8 *const statusReturn)
+#define CONSUMEDREITONCLIENTTRANSPORTDESCRIPTOREVENT() /*------------------*/ bool  consumeDreitonClientTransportDescriptorEvent(void *const backend, void *const event)
+#define WAKEUPDREITONCLIENTTRANSPORTDESCRIPTORREPLY() /*-------------------*/ bool  wakeUpDreitonClientTransportDescriptorReply(void *const backend, const uint8 status)
+#define WAKEUPDREITONCLIENTTRANSPORTDESCRIPTOREVENT() /*-------------------*/ bool  wakeUpDreitonClientTransportDescriptorEvent(void *const backend, const uint8 status)
+#define DISCONNECTFROMDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION() /*------*/ bool  disconnectFromDreitonClientTransportDescriptorConnection(void *const backend, const bool notifyServer)
+#define FINIDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION() /*----------------*/ bool  finiDreitonClientTransportDescriptorConnection(void *const backend)
 
 def struct{
-	uint32 /*---*/ requestSlotStartOffset;
-	uint32 /*---*/ requestSlotSize;
-	uint32 /*---*/ requestStartOffset;
-	uint32 /*---*/ requestSize;
-	uint32 /*---*/ requestCurrentWriter;
-	uint32 /*---*/ requestCurrentReader;
-	uint32 /*---*/ replySlotStartOffset;
-	uint32 /*---*/ replySlotSize;
-	uint32 /*---*/ replyStartOffset;
-	uint32 /*---*/ replySize;
-	uint32 /*---*/ replyCurrentWriter;
-	uint32 /*---*/ replyCurrentReader;
-	uint32 /*---*/ eventSlotStartOffset;
-	uint32 /*---*/ eventSlotSize;
-	uint32 /*---*/ eventStartOffset;
-	uint32 /*---*/ eventSize;
-	uint32 /*---*/ eventCurrentWriter;
-	uint32 /*---*/ eventCurrentReader;
-	uint32 /*---*/ clientId;
+	uint32 /*------------------*/ requestSlotStartOffset;
+	uint32 /*------------------*/ replySlotStartOffset;
+	uint32 /*------------------*/ eventSlotStartOffset;
+	uint32 /*------------------*/ requestStartOffset;
+	uint32 /*------------------*/ replyStartOffset;
+	uint32 /*------------------*/ eventStartOffset;
+	uint32 /*------------------*/ requestSlotSize;
+	uint32 /*------------------*/ replySlotSize;
+	uint32 /*------------------*/ eventSlotSize;
+	uint32 /*------------------*/ requestSize;
+	uint32 /*------------------*/ replySize;
+	uint32 /*------------------*/ eventSize;
+	uint32 /*------------------*/ requestCurrentWriter;
+	uint32 /*------------------*/ requestCurrentReader;
+	uint32 /*------------------*/ replyCurrentWriter;
+	uint32 /*------------------*/ replyCurrentReader;
+	uint32 /*------------------*/ eventCurrentWriter;
+	uint32 /*------------------*/ eventCurrentReader;
+	uint32 /*------------------*/ clientId;
+	uint8 /*-------------------*/ pad0[4];
 } Header;
 
 def struct{
-	Header * /*-*/ shmStart;
-	int32 /*----*/ shmId;
-	int32 /*----*/ requestReadFd;
-	int32 /*----*/ requestWriteFd;
-	int32 /*----*/ replyReadFd;
-	int32 /*----*/ replyWriteFd;
-	int32 /*----*/ eventReadFd;
-	int32 /*----*/ eventWriteFd;
-	uint8 /*----*/ pad0[4];
+	uint32 /*------------------*/ messageStartOffset;
+} MessageSlot;
+
+def struct{
+	Header * /*----------------*/ shmStart;
+	MessageSlot * /*-----------*/ requestSlotStart;
+	MessageSlot * /*-----------*/ replySlotStart;
+	MessageSlot * /*-----------*/ eventSlotStart;
+	void * /*------------------*/ requestStart;
+	void * /*------------------*/ replyStart;
+	void * /*------------------*/ eventStart;
+	void * /*------------------*/ requestCurrent;
+	void * /*------------------*/ replyCurrent;
+	void * /*------------------*/ eventCurrent;
+	uint32 /*------------------*/ requestSlotSize;
+	uint32 /*------------------*/ replySlotSize;
+	uint32 /*------------------*/ eventSlotSize;
+	uint32 /*------------------*/ requestSize;
+	uint32 /*------------------*/ replySize;
+	uint32 /*------------------*/ eventSize;
+	int32 /*-------------------*/ shmId;
+	int32 /*-------------------*/ requestFd;
+	int32 /*-------------------*/ replyFd;
+	int32 /*-------------------*/ eventFd;
+	void * /*------------------*/ handshakeDataStart;
+	uint32 /*------------------*/ handshakeDataSize;
+	uint32 /*------------------*/ id;
+	uint64 /*------------------*/ handle;
 } Client;
 
 def struct{
+	char * /*------------------*/ connectionName;
+	Client * /*----------------*/ clientStart;
+	void * /*------------------*/ handshakeDataStart;
+	uint32 /*------------------*/ clientSize;
+	uint32 /*------------------*/ clientAllocated;
+	uint32 /*------------------*/ clientBlockSize;
+	uint32 /*------------------*/ concurrentConnectionAmount;
+	uint32 /*------------------*/ requestSlotSize;
+	uint32 /*------------------*/ replySlotSize;
+	uint32 /*------------------*/ eventSlotSize;
+	uint32 /*------------------*/ requestSize;
+	uint32 /*------------------*/ replySize;
+	uint32 /*------------------*/ eventSize;
+	int32 /*-------------------*/ registrationEpollFd;
+	int32 /*-------------------*/ requestEpollFd;
+	int32 /*-------------------*/ eventEpollFd;
+	int32 /*-------------------*/ socketFd;
+	int32 /*-------------------*/ shmKey;
+	int32 /*-------------------*/ newClientFd;
+	uint32 /*------------------*/ handshakeDataSize;
+	int32 /*-------------------*/ requestReadFd;
+	int32 /*-------------------*/ requestWriteFd;
+	int32 /*-------------------*/ eventReadFd;
+	int32 /*-------------------*/ eventWriteFd;
+	int32 /*-------------------*/ signalRegistrationFd;
+	int32 /*-------------------*/ signalRequestFd;
+	int32 /*-------------------*/ signalEventFd;
+} ServerBackend;
+
+def struct{
+	Header * /*----------------*/ shmStart;
+	MessageSlot * /*-----------*/ requestSlotStart;
+	MessageSlot * /*-----------*/ replySlotStart;
+	MessageSlot * /*-----------*/ eventSlotStart;
+	void * /*------------------*/ requestStart;
+	void * /*------------------*/ replyStart;
+	void * /*------------------*/ eventStart;
+	void * /*------------------*/ requestCurrent;
+	void * /*------------------*/ replyCurrent;
+	void * /*------------------*/ eventCurrent;
+	uint32 /*------------------*/ requestSlotSize;
+	uint32 /*------------------*/ replySlotSize;
+	uint32 /*------------------*/ eventSlotSize;
+	uint32 /*------------------*/ requestSize;
+	uint32 /*------------------*/ replySize;
+	uint32 /*------------------*/ eventSize;
+	int32 /*-------------------*/ shmId;
+	int32 /*-------------------*/ requestFd;
+	int32 /*-------------------*/ replyFd;
+	int32 /*-------------------*/ eventFd;
+	int32 /*-------------------*/ replyEpollFd;
+	int32 /*-------------------*/ eventEpollFd;
+	int32 /*-------------------*/ signalReplyFd;
+	int32 /*-------------------*/ signalEventFd;
+	uint32 /*------------------*/ requestAmount;
+	uint32 /*------------------*/ id;
+} ClientBackend;
+
+INITDREITONSERVERTRANSPORTDESCRIPTOR();
+SETDREITONSERVERTRANSPORTDESCRIPTORCLIENTBLOCKSIZE();
+SETDREITONSERVERTRANSPORTDESCRIPTORCONCURRENTCONNECTIONAMOUNT();
+SETDREITONSERVERTRANSPORTDESCRIPTORREQUESTSLOTSIZE();
+SETDREITONSERVERTRANSPORTDESCRIPTORREPLYSLOTSIZE();
+SETDREITONSERVERTRANSPORTDESCRIPTOREVENTSLOTSIZE();
+SETDREITONSERVERTRANSPORTDESCRIPTORREQUESTSIZE();
+SETDREITONSERVERTRANSPORTDESCRIPTORREPLYSIZE();
+SETDREITONSERVERTRANSPORTDESCRIPTOREVENTSIZE();
+CREATEDREITONSERVERTRANSPORTDESCRIPTORREQUESTRECEIVER();
+CREATEDREITONSERVERTRANSPORTDESCRIPTOREVENTRECEIVER();
+CREATEDREITONSERVERTRANSPORTDESCRIPTORREGISTRATIONRECEIVER();
+WAITFORDREITONSERVERTRANSPORTDESCRIPTORREQUEST();
+WAITFORDREITONSERVERTRANSPORTDESCRIPTORSERVEREVENT();
+WAITFORDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION();
+HANDSHAKEDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION();
+CONSUMEDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION();
+SETDREITONSERVERTRANSPORTDESCRIPTORCLIENTHANDLE();
+GETDREITONSERVERTRANSPORTDESCRIPTORCLIENTREQUESTFRAME();
+GETDREITONSERVERTRANSPORTDESCRIPTORREPLYFRAME();
+GETDREITONSERVERTRANSPORTDESCRIPTOREVENTFRAME();
+CONSUMEDREITONSERVERTRANSPORTDESCRIPTORCLIENTREQUESTFRAME();
+SENDDREITONSERVERTRANSPORTDESCRIPTORREPLY();
+SENDDREITONSERVERTRANSPORTDESCRIPTOREVENT();
+DESTROYDREITONTRANSPORTCLIENT();
+WAKEUPDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION();
+WAKEUPDREITONSERVERTRANSPORTDESCRIPTORREQUEST();
+WAKEUPDREITONSERVERTRANSPORTDESCRIPTOREVENT();
+DESTROYDREITONSERVERTRANSPORTDESCRIPTORREGISTRATIONRECEIVER();
+DESTROYDREITONSERVERTRANSPORTDESCRIPTORREQUESTRECEIVER();
+DESTROYDREITONSERVERTRANSPORTDESCRIPTOREVENTRECEIVER();
+DESTROYALLDREITONTRANSPORTCLIENTS();
+ISVALIDDREITONTRANSPORTCLIENT();
+FINIDREITONSERVERTRANSPORTDESCRIPTOR();
+
+INITDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION();
+CONNECTTODREITONCLIENTTRANSPORTDESCRIPTORCONNECTION();
+GETDREITONCLIENTTRANSPORTDESCRIPTORREQUESTFRAME();
+SENDDREITONCLIENTTRANSPORTDESCRIPTORREQUEST();
+FLUSHDREITONCLIENTTRANSPORTDESCRIPTORREQUESTBUFFER();
+WAITFORDREITONCLIENTTRANSPORTDESCRIPTORREPLY();
+CONSUMEDREITONCLIENTTRANSPORTDESCRIPTORREPLY();
+WAITFORDREITONCLIENTTRANSPORTDESCRIPTOREVENT();
+CONSUMEDREITONCLIENTTRANSPORTDESCRIPTOREVENT();
+WAKEUPDREITONCLIENTTRANSPORTDESCRIPTORREPLY();
+WAKEUPDREITONCLIENTTRANSPORTDESCRIPTOREVENT();
+DISCONNECTFROMDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION();
+FINIDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION();
+
+const DreitonServerTransportDescriptor /*-*/ dreitonServerTransportDescriptor = {
+	  sizeof(DreitonServerTransportDescriptor)
+	, DREITON_SHM_TRANSPORT_PROTOCOL_VERSION
+	, DREITON_SHM_TRANSPORT_TRANSPORT_VERSION
+	, lengthof(DREITON_SHM_TRANSPORT_TRANSPORT_NAME)
+	, lengthof(DREITON_SHM_TRANSPORT_AUTHOR_NAME)
+	, {0, 0, 0, 0}
+	, DREITON_SHM_TRANSPORT_TRANSPORT_NAME
+	, DREITON_SHM_TRANSPORT_AUTHOR_NAME
+	, &initDreitonServerTransportDescriptor
+	, &setDreitonServerTransportDescriptorClientBlockSize
+	, &setDreitonServerTransportDescriptorConcurrentConnectionAmount
+	, &setDreitonServerTransportDescriptorRequestSlotSize
+	, &setDreitonServerTransportDescriptorReplySlotSize
+	, &setDreitonServerTransportDescriptorEventSlotSize
+	, &setDreitonServerTransportDescriptorRequestSize
+	, &setDreitonServerTransportDescriptorReplySize
+	, &setDreitonServerTransportDescriptorEventSize
+	, &createDreitonServerTransportDescriptorRequestReceiver
+	, &createDreitonServerTransportDescriptorEventReceiver
+	, &createDreitonServerTransportDescriptorRegistrationReceiver
+	, &waitForDreitonServerTransportDescriptorRequest
+	, &waitForDreitonServerTransportDescriptorServerEvent
+	, &waitForDreitonServerTransportDescriptorRegistration
+	, &handshakeDreitonServerTransportDescriptorRegistration
+	, &consumeDreitonServerTransportDescriptorRegistration
+	, &setDreitonServerTransportDescriptorClientHandle
+	, &getDreitonServerTransportDescriptorClientRequestFrame
+	, &getDreitonServerTransportDescriptorReplyFrame
+	, &getDreitonServerTransportDescriptorEventFrame
+	, &consumeDreitonServerTransportDescriptorClientRequestFrame
+	, &sendDreitonServerTransportDescriptorReply
+	, &sendDreitonServerTransportDescriptorEvent
+	, &wakeUpDreitonServerTransportDescriptorRegistration
+	, &wakeUpDreitonServerTransportDescriptorRequest
+	, &wakeUpDreitonServerTransportDescriptorEvent
+	, &destroyDreitonServerTransportDescriptorRegistrationReceiver
+	, &destroyDreitonServerTransportDescriptorRequestReceiver
+	, &destroyDreitonServerTransportDescriptorEventReceiver
+	, &finiDreitonServerTransportDescriptor
+};
+
+const DreitonClientTransportDescriptor /*-*/ dreitonClientTransportDescriptor = {
+	  sizeof(DreitonClientTransportDescriptor)
+	, DREITON_SHM_TRANSPORT_PROTOCOL_VERSION
+	, DREITON_SHM_TRANSPORT_TRANSPORT_VERSION
+	, lengthof(DREITON_SHM_TRANSPORT_TRANSPORT_NAME)
+	, lengthof(DREITON_SHM_TRANSPORT_AUTHOR_NAME)
+	, {0, 0, 0, 0}
+	, DREITON_SHM_TRANSPORT_TRANSPORT_NAME
+	, DREITON_SHM_TRANSPORT_AUTHOR_NAME
+	, &initDreitonClientTransportDescriptorConnection
+	, &connectToDreitonClientTransportDescriptorConnection
+	, &getDreitonClientTransportDescriptorRequestFrame
+	, &sendDreitonClientTransportDescriptorRequest
+	, &flushDreitonClientTransportDescriptorRequestBuffer
+	, &waitForDreitonClientTransportDescriptorReply
+	, &consumeDreitonClientTransportDescriptorReply
+	, &waitForDreitonClientTransportDescriptorEvent
+	, &consumeDreitonClientTransportDescriptorEvent
+	, &wakeUpDreitonClientTransportDescriptorReply
+	, &wakeUpDreitonClientTransportDescriptorEvent
+	, &disconnectFromDreitonClientTransportDescriptorConnection
+	, &finiDreitonClientTransportDescriptorConnection
+};
 
 
 
-	/*! used by server */
-
-	Client * /*-*/ clientStart;
-	uint32 /*---*/ clientSize;
-	uint32 /*---*/ clientAllocated;
-	uint32 /*---*/ clientBlockSize;
-	uint32 /*---*/ clientId;
 
 
 
-	/*! used by client */
+
+
+
+/*!*/
+
+#define SENDFD() /*----*/ local bool  sendFd(const int socket, const int *const fd, const uint fdSize)
+#define RECEIVEFD() /*-*/ local bool  receiveFd(const int socket, const uint fdSize, int *const fdReturn)
+
+SENDFD(){
+	uint controlMessageBufferSize;
+	char *controlMessageBuffer;
+	char mandatoryPayloadByte;
+	struct iovec payload;
+	struct msghdr messageHeader = {0};
+	struct cmsghdr *controlMessageHeader;
+	if(socket == NONE_FD or !fd or !fdSize){
+		ret false;
+	}
+	controlMessageBufferSize = CMSG_SPACE(fdSize * sizeof(int));
+	if(!(controlMessageBuffer = malloc(controlMessageBufferSize))){
+		ret false;
+	}
+	memset(controlMessageBuffer, 0, controlMessageBufferSize * sizeof(uint8));
+	mandatoryPayloadByte = 1;
+	payload.iov_base = &mandatoryPayloadByte;
+	payload.iov_len = 1;
+	messageHeader.msg_iov = &payload;
+	messageHeader.msg_iovlen = 1;
+	messageHeader.msg_control = controlMessageBuffer;
+	messageHeader.msg_controllen = controlMessageBufferSize;
+	controlMessageHeader = CMSG_FIRSTHDR(&messageHeader);
+	(*controlMessageHeader).cmsg_level = SOL_SOCKET;
+	(*controlMessageHeader).cmsg_type = SCM_RIGHTS;
+	(*controlMessageHeader).cmsg_len = CMSG_LEN(fdSize * sizeof(int));
+	memcpy(CMSG_DATA(controlMessageHeader), fd, fdSize * sizeof(int)); /*! replace with toolkit function */
+	if(sendmsg(socket, &messageHeader, 0) == SENDMSG_FAILURE){
+		free(controlMessageBuffer);
+		ret false;
+	}
+	free(controlMessageBuffer);
+	ret true;
+}
+RECEIVEFD(){
+	uint controlMessageBufferSize;
+	char *controlMessageBuffer;
+	char mandatoryPayloadByte;
+	struct iovec payload;
+	struct msghdr messageHeader = {0};
+	struct cmsghdr *controlMessageHeader;
+	if(socket == NONE_FD or !fdSize or !fdReturn){
+		ret false;
+	}
+	controlMessageBufferSize = CMSG_SPACE(fdSize * sizeof(int));
+	if(!(controlMessageBuffer = malloc(controlMessageBufferSize))){
+		ret false;
+	}
+	payload.iov_base = &mandatoryPayloadByte;
+	payload.iov_len = 1;
+	messageHeader.msg_iov = &payload;
+	messageHeader.msg_iovlen = 1;
+	messageHeader.msg_control = controlMessageBuffer;
+	messageHeader.msg_controllen = controlMessageBufferSize;
+	if(recvmsg(socket, &messageHeader, 0) == RECVMSG_FAILURE){
+		free(controlMessageBuffer);
+		ret false;
+	}
+	controlMessageHeader = CMSG_FIRSTHDR(&messageHeader);
+	if(!controlMessageHeader or (*controlMessageHeader).cmsg_level != SOL_SOCKET or (*controlMessageHeader).cmsg_type != SCM_RIGHTS){
+		free(controlMessageBuffer);
+		ret false;
+	}
+	memcpy(fdReturn, CMSG_DATA(controlMessageHeader), fdSize * sizeof(int)); /*! replace with toolkit function */
+	free(controlMessageBuffer);
+	ret true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*!*/
+
+#define FINDCLIENTFD() /*--------*/ Client * findClientFd(ServerBackend *const backend, const int fd)
+#define REMOVEDREITONCLIENT() /*-*/ bool     removeDreitonClient(ServerBackend *const backend)
+#define SENDSERVEREVENT() /*-----*/ bool     sendServerEvent(void *const backend, const uint32 extension, const uint32 eventType)
+
+FINDCLIENTFD();
+REMOVEDREITONCLIENT();
+SENDSERVEREVENT();
+
+FINDCLIENTFD(){
+	Client *current;
+	Client *wall;
+	if(!backend){
+		ret NULL;
+	}
+	if(!(*backend).clientAllocated or fd == NONE_FD){
+		ret NULL;
+	}
+	current = (*backend).clientStart + 1;
+	wall = current + (*backend).clientAllocated;
+	jmp findClientLoop;
+	findClientLoop:{
+		if(current < wall){
+			if((*current).requestFd == fd and (*current).id){
+				ret current;
+			}
+			inc current;
+			jmp findClientLoop;
+		}
+		ret NULL;
+	}
+}
+REMOVEDREITONCLIENT(){
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+
+
 
 	/*!*/
 
 
 
-} Backend;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SENDSERVEREVENT(){
+	uint64 message;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	if(!extension and !eventType){
+		jmp emergencyExit;
+	}
+	success = false;
+	message = ((uint64)extension << 32) | eventType;
+	write((*(ServerBackend *)backend).eventWriteFd, &message, sizeof(message)); /*! errors? */
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
 
-INITDREITONTRANSPORTDESCRIPTOR();
-CREATEDREITONTRANSPORTDESCRIPTOR();
-CREATEDREITONTRANSPORTDESCRIPTORCLIENTBUFFER();
-WAITFORDREITONTRANSPORTDESCRIPTORREQUEST();
-SENDDREITONTRANSPORTDESCRIPTORMESSAGE();
-RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE();
-DESTROYDREITONTRANSPORTDESCRIPTORCLIENTBUFFER();
-FINDDREITONTRANSPORTDESCRIPTORCLIENT();
-FINIDREITONTRANSPORTDESCRIPTOR();
+/*!*/
 
-local Backend /*--------------------*/ backend;
 
-const DreitonTransportDescriptor /*-*/ dreitonTransportDescriptor = {
-	  initDreitonTransportDescriptor
-	, createDreitonTransportDescriptorClientBuffer
-	, waitForDreitonTransportDescriptorRequest
-	, sendDreitonTransportDescriptorMessage
-	, receiveDreitonTransportDescriptorMessage
-	, destroyDreitonTransportDescriptorClientBuffer
-	, finiDreitonTransportDescriptor
-};
 
-INITDREITONTRANSPORTDESCRIPTOR(){
-	backend.clientStart = NULL;
-	backend.clientSize = 0;
-	backend.clientAllocated = 0;
-	backend.clientBlockSize = 16; /*!*/
-	backend.clientId = 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+INITDREITONSERVERTRANSPORTDESCRIPTOR(){
+	ServerBackend *backend;
+	if(!backendReturn){
+		ret false;
+	}
+	backend = malloc(1 * sizeof(ServerBackend));
+	if(!backend){
+		ret false;
+	}
+	(*backend).connectionName = NULL;
+	(*backend).clientStart = NULL;
+	(*backend).clientSize = 0;
+	(*backend).clientAllocated = 0;
+	(*backend).clientBlockSize = 0;
+	(*backend).concurrentConnectionAmount = 0;
+	(*backend).requestSlotSize = 0;
+	(*backend).replySlotSize = 0;
+	(*backend).eventSlotSize = 0;
+	(*backend).requestSize = 0;
+	(*backend).replySize = 0;
+	(*backend).eventSize = 0;
+	(*backend).registrationEpollFd = NONE_FD;
+	(*backend).requestEpollFd = NONE_FD;
+	(*backend).eventEpollFd = NONE_FD;
+	(*backend).socketFd = NONE_FD;
+	(*backend).shmKey = 0;
+	(*backend).newClientFd = NONE_FD;
+	(*backend).handshakeDataStart = NULL;
+	(*backend).handshakeDataSize = 0;
+	(*backend).requestReadFd = NONE_FD;
+	(*backend).requestWriteFd = NONE_FD;
+	(*backend).eventReadFd = NONE_FD;
+	(*backend).eventWriteFd = NONE_FD;
+	(*backend).signalRegistrationFd = NONE_FD;
+	(*backend).signalRequestFd = NONE_FD;
+	(*backend).signalEventFd = NONE_FD;
+	*backendReturn = backend;
 	ret true;
 }
-CREATEDREITONTRANSPORTDESCRIPTOR(){
-
-
-
-	/*! create as either client or server */
-
-
-
-	ret true;
+SETDREITONSERVERTRANSPORTDESCRIPTORCLIENTBLOCKSIZE(){
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if(clientBlockSize == (*(ServerBackend *)backend).clientBlockSize){
+		jmp emergencyExit;
+	}
+	(*(ServerBackend *)backend).clientBlockSize = clientBlockSize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
 }
-CREATEDREITONTRANSPORTDESCRIPTORCLIENTBUFFER(){
-	fprintf(stdout, "destroy shm client buffer\n");
-	ret true;
+SETDREITONSERVERTRANSPORTDESCRIPTORCONCURRENTCONNECTIONAMOUNT(){
+
+
+
+	/*! this cannot change after set. update to reflect that. */
+
+
+
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if(concurrentConnectionAmount == (*(ServerBackend *)backend).concurrentConnectionAmount){
+		jmp emergencyExit;
+	}
+	(*(ServerBackend *)backend).concurrentConnectionAmount = concurrentConnectionAmount;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
 }
-WAITFORDREITONTRANSPORTDESCRIPTORREQUEST(){
-	fprintf(stdout, "wait shm\n");
+SETDREITONSERVERTRANSPORTDESCRIPTORREQUESTSLOTSIZE(){
 
 
 
+	/*! this cannot change after set. update to reflect that. */
 
 
 
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	requestSlotSize += requestSlotSize % 2;
+	if(requestSlotSize == (*(ServerBackend *)backend).requestSlotSize){
+		jmp emergencyExit;
+	}
+	(*(ServerBackend *)backend).requestSlotSize = requestSlotSize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONSERVERTRANSPORTDESCRIPTORREPLYSLOTSIZE(){
 
 
 
+	/*! this cannot change after set. update to reflect that. */
+
+
+
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	replySlotSize += replySlotSize % 2;
+	if(replySlotSize == (*(ServerBackend *)backend).replySlotSize){
+		jmp emergencyExit;
+	}
+	(*(ServerBackend *)backend).replySlotSize = replySlotSize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONSERVERTRANSPORTDESCRIPTOREVENTSLOTSIZE(){
+
+
+
+	/*! this cannot change after set. update to reflect that. */
+
+
+
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	eventSlotSize += eventSlotSize % 2;
+	if(eventSlotSize == (*(ServerBackend *)backend).eventSlotSize){
+		jmp emergencyExit;
+	}
+	(*(ServerBackend *)backend).eventSlotSize = eventSlotSize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONSERVERTRANSPORTDESCRIPTORREQUESTSIZE(){
+
+
+
+	/*! this cannot change after set. update to reflect that. */
+
+
+
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if(requestSize == (*(ServerBackend *)backend).requestSize){
+		jmp emergencyExit;
+	}
+	(*(ServerBackend *)backend).requestSize = requestSize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONSERVERTRANSPORTDESCRIPTORREPLYSIZE(){
+
+
+
+	/*! this cannot change after set. update to reflect that. */
+
+
+
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if(replySize == (*(ServerBackend *)backend).replySize){
+		jmp emergencyExit;
+	}
+	(*(ServerBackend *)backend).replySize = replySize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SETDREITONSERVERTRANSPORTDESCRIPTOREVENTSIZE(){
+
+
+
+	/*! this cannot change after set. update to reflect that. */
+
+
+
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if(eventSize == (*(ServerBackend *)backend).eventSize){
+		jmp emergencyExit;
+	}
+	(*(ServerBackend *)backend).eventSize = eventSize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CREATEDREITONSERVERTRANSPORTDESCRIPTORREQUESTRECEIVER(){
+	int requestEpollFd;
+	bool success;
+	struct{
+		int32 /*-*/ readFd;
+		int32 /*-*/ writeFd;
+	} requestPipe;
+	if(!backend){
+		ret false;
+	}
+	requestEpollFd = NONE_FD;
+	requestPipe.readFd = NONE_FD;
+	requestPipe.writeFd = NONE_FD;
+	success = false;
+	if((*(ServerBackend *)backend).requestEpollFd != NONE_FD){
+		jmp emergencyExit;
+	}
+	requestEpollFd = epoll_create1(NONE_EPOLL_FLAG);
+	if(requestEpollFd == EPOLL_CREATE1_FAILURE){
+		jmp emergencyExit;
+	}
+	if(pipe((void *)&requestPipe) == PIPE_FAILURE){ /*! check for surprise errors */
+		jmp emergencyExit;
+	}
 	{
-		struct epoll_event eventStart[128];
-		int eventAmount = epoll_wait(replyEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
-		struct epoll_event *eventCurrent;
-		struct epoll_event *eventWall;
-		eventCurrent = eventStart;
-		eventWall = eventCurrent + eventAmount;
-		jmp parseRequestLoop;
-		parseRequestLoop:{
-			if(eventCurrent < eventWall){
-				const int fd = (*eventCurrent).data.fd;
-				if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
-					if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP)){
+		const int flag = fcntl(requestPipe.readFd, F_GETFL, 0); /*! errors? */
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		if(fcntl(requestPipe.readFd, F_SETFL, flag | O_NONBLOCK) == FCNTL_FAILURE){ /*! errors? */
+			jmp emergencyExit;
+		}
+	}
+	{
+		struct epoll_event event;
+		event.events = EPOLLIN;
+		event.data.fd = requestPipe.readFd;
+		if(epoll_ctl(requestEpollFd, EPOLL_CTL_ADD, requestPipe.readFd, &event) == EPOLL_CTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
+	(*(ServerBackend *)backend).requestEpollFd = requestEpollFd;
+	(*(ServerBackend *)backend).requestReadFd = requestPipe.readFd;
+	(*(ServerBackend *)backend).requestWriteFd = requestPipe.writeFd;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			if(requestPipe.writeFd != NONE_FD) /*-*/ close(requestPipe.writeFd);
+			if(requestPipe.readFd != NONE_FD) /*--*/ close(requestPipe.readFd);
+			if(requestEpollFd != NONE_FD) /*------*/ close(requestEpollFd);
+			ret false;
+		}
+		ret true;
+	}
+}
+CREATEDREITONSERVERTRANSPORTDESCRIPTOREVENTRECEIVER(){
+	int eventEpollFd;
+	bool success;
+	struct{
+		int32 /*-*/ readFd;
+		int32 /*-*/ writeFd;
+	} eventPipe;
+	if(!backend){
+		ret false;
+	}
+	eventEpollFd = NONE_FD;
+	eventPipe.readFd = NONE_FD;
+	eventPipe.writeFd = NONE_FD;
+	success = false;
+	if((*(ServerBackend *)backend).eventEpollFd != NONE_FD){
+		jmp emergencyExit;
+	}
+	eventEpollFd = epoll_create1(NONE_EPOLL_FLAG);
+	if(eventEpollFd == EPOLL_CREATE1_FAILURE){
+		jmp emergencyExit;
+	}
+	if(pipe((void *)&eventPipe) == PIPE_FAILURE){ /*! check for surprise errors */
+		jmp emergencyExit;
+	}
+	{
+		const int flag = fcntl(eventPipe.readFd, F_GETFL, 0); /*! errors? */
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		if(fcntl(eventPipe.readFd, F_SETFL, flag | O_NONBLOCK) == FCNTL_FAILURE){ /*! errors? */
+			jmp emergencyExit;
+		}
+	}
+	{
+		struct epoll_event event;
+		event.events = EPOLLIN;
+		event.data.fd = eventPipe.readFd;
+		if(epoll_ctl(eventEpollFd, EPOLL_CTL_ADD, eventPipe.readFd, &event) == EPOLL_CTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
+	(*(ServerBackend *)backend).eventEpollFd = eventEpollFd;
+	(*(ServerBackend *)backend).eventReadFd = eventPipe.readFd;
+	(*(ServerBackend *)backend).eventWriteFd = eventPipe.writeFd;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			if(eventPipe.writeFd != NONE_FD) /*-*/ close(eventPipe.writeFd);
+			if(eventPipe.readFd != NONE_FD) /*--*/ close(eventPipe.readFd);
+			if(eventEpollFd != NONE_FD) /*------*/ close(eventEpollFd);
+			ret false;
+		}
+		ret true;
+	}
+}
+CREATEDREITONSERVERTRANSPORTDESCRIPTORREGISTRATIONRECEIVER(){
+	int registrationEpollFd;
+	int socketFd;
+	struct sockaddr_un address;
+	uint connectionNameSize;
+	char *connectionNameStart;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	registrationEpollFd = NONE_FD;
+	socketFd = NONE_FD;
+	success = false;
+	if((*(ServerBackend *)backend).registrationEpollFd != NONE_FD or !name){
+		jmp emergencyExit;
+	}
+	registrationEpollFd = epoll_create1(NONE_EPOLL_FLAG);
+	if(registrationEpollFd == EPOLL_CREATE1_FAILURE){
+		jmp emergencyExit;
+	}
+	socketFd = socket(AF_UNIX, SOCK_STREAM, NONE_SOCKET_PROTOCOL);
+	if(socketFd == SOCKET_FAILURE){
+		jmp emergencyExit;
+	}
+	{
+		const int flag = fcntl(socketFd, F_GETFL, 0); /*! errors? */
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		if(fcntl(socketFd, F_SETFL, flag | O_NONBLOCK) == FCNTL_FAILURE){ /*! errors? */
+			jmp emergencyExit;
+		}
+	}
+	{
+		struct epoll_event event;
+		event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
+		event.data.fd = socketFd;
+		if(epoll_ctl(registrationEpollFd, EPOLL_CTL_ADD, socketFd, &event) == EPOLL_CTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
+	address.sun_family = AF_UNIX;
+	strcpy(address.sun_path, name); /*! replace with toolkit function */
+	unlink(name);
+	if(bind(socketFd, (void *)&address, sizeof(address)) == BIND_FAILURE){
+		jmp emergencyExit;
+	}
+	if(listen(socketFd, (*(ServerBackend *)backend).concurrentConnectionAmount) == LISTEN_FAILURE){
+		jmp emergencyExit;
+	}
+	connectionNameSize = strlen(name);
+	connectionNameStart = malloc(connectionNameSize * sizeof(char));
+	if(!connectionNameStart){
+		jmp emergencyExit;
+	}
+	memcpy(connectionNameStart, name, connectionNameSize * sizeof(char));
+	(*(ServerBackend *)backend).registrationEpollFd = registrationEpollFd;
+	(*(ServerBackend *)backend).connectionName = connectionNameStart;
+	(*(ServerBackend *)backend).socketFd = socketFd;
+	(*(ServerBackend *)backend).shmKey = ftok(name, 0) >> 8; /*! writeFileToKey() function. */
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			if(socketFd != NONE_FD) /*------------*/ close(socketFd); /*! errors? */
+			if(registrationEpollFd != NONE_FD) /*-*/ close(registrationEpollFd); /*! errors? */
+			ret false;
+		}
+		ret true;
+	}
+}
+WAITFORDREITONSERVERTRANSPORTDESCRIPTORREQUEST(){
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ServerBackend *)backend).requestEpollFd == NONE_FD or !transportRequestReturn){
+		jmp emergencyExit;
+	}
+	jmp requestLoop;
+	requestLoop:{
+		struct epoll_event event[1];
+		int fd;
+		Client *client;
+		if(epoll_wait((*(ServerBackend *)backend).requestEpollFd, event, countof(event), INFINITE_EPOLL_WAIT_TIMEOUT) == EPOLL_WAIT_FAILURE){ /*! errors? */
+			jmp emergencyExit;
+		}
+		fd = (*event).data.fd;
+		if((*event).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+			if((*event).events & EPOLLERR){
+				/*! handle error */
+			}
+			client = findClientFd(backend, fd);
+			jmp closeConnection;
+		}
+		if(!((*event).events & EPOLLIN)){
+			jmp requestLoop;
+		}
+		jmp readRequestLoop;
+		readRequestLoop:{
+			uint64 message;
+			int returnValue = read(fd, &message, sizeof(message));
+			if(fd == (*(ServerBackend *)backend).signalRequestFd){
+				jmp emergencyExit;
+			}
+			if(returnValue > 0){
+				if(fd == (*(ServerBackend *)backend).requestReadFd){
+					client = (*(ServerBackend *)backend).clientStart + (message >> 32);
+					if(!isValidDreitonTransportClient(backend, client)){
+						jmp requestLoop;
+					}
+					(*transportRequestReturn).operation = CONNECT_DREITON_TRANSPORT_REQUEST_OPERATION;
+					(*transportRequestReturn).clientId = message >> 32;
+					(*transportRequestReturn).dataStart = (*client).handshakeDataStart;
+					(*transportRequestReturn).dataSize = (*client).handshakeDataSize;
+					(*client).handshakeDataStart = NULL;
+					fprintf(stdout, "transport: connected %u\n", (uint32)(message >> 32));
+				}else{
+					const uint32 clientId = message >> 32;
+					const uint32 requestAmount = message;
+					client = (*(ServerBackend *)backend).clientStart + clientId;
+					if(!isValidDreitonTransportClient(backend, client)){
+						jmp requestLoop;
+					}
+					if(!requestAmount){
 						jmp closeConnection;
 					}
-					jmp closeConnection;
+					(*transportRequestReturn).operation = REQUEST_DREITON_TRANSPORT_REQUEST_OPERATION;
+					(*transportRequestReturn).clientId = clientId;
+					(*transportRequestReturn).clientHandle = (*client).handle;
+					(*transportRequestReturn).requestAmount = requestAmount;
 				}
-				if((*eventCurrent).events & EPOLLIN){
-					jmp readRequestLoop;
-					readRequestLoop:{
-						uint64 message;
-						int returnValue = read(fd, &message, sizeof(message));
-						if(fd != (*dreitonCore).registrationEventFd){
-
-
-
-
-
-
-
-
-
-							if(returnValue > 0){
-								const uint32 id = message >> 32; /*! update */
-								/*! add generation? */
-								const uint8 requestAmount = message;
-								DreitonCoreClient *client;
-								if(!requestAmount){
-									jmp closeConnection;
-								}
-								client = findDreitonCoreClientFdId(dreitonCore, fd, id);
-								if(client){
-									parseDreitonCoreClientRequests(dreitonCore, client, requestAmount);
-								}else{
-									fprintf(stdout, "could not find the client\n");
-									/*! error in communication or bad actor? */
-								}
-							}elif(returnValue == -1){
-								if(errno == EINTR){
-									jmp readRequestLoop;
-								}
-								if(errno != EAGAIN and errno != EWOULDBLOCK){
-									jmp closeConnection;
-								}
-							}else{
-								jmp closeConnection;
-								closeConnection:{
-									DreitonCoreClient *const client = findDreitonCoreClientFd(dreitonCore, fd);
-									if(client){
-										fprintf(stdout, "disconnected %u\n", (*client).clientId);
-										removeDreitonCoreClient(dreitonCore, client);
-										if((*dreitonCore).clientAllocated == 1 and (*dreitonCore).database and (*(*dreitonCore).database).closeOnIdle){
-											fprintf(stdout, "reply thread exited due to no clients\n");
-											jmp emergencyExit;
-										}
-									}
-								}
-							}
-
-
-
-
-
-
-
-
-
-						}else{
-
-
-
-
-
-
-
-
-
-							if(returnValue > 0){
-
-								/*!*/
-
-							}elif(returnValue == -1){
-								if(errno == EINTR){
-									jmp readRequestLoop;
-								}
-
-								/*!*/
-
-							}else{
-
-								/*!*/
-
-							}
-
-
-
-							if(!(*dreitonCore).replyEventFd){
-								struct epoll_event event;
-								(*dreitonCore).replyEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
-								event.events = EPOLLIN;
-								event.data.fd = (*dreitonCore).replyEventFd; /*! what data to pass? */
-								epoll_ctl((*dreitonCore).registrationEpollFd, EPOLL_CTL_ADD, (*dreitonCore).replyEventFd, &event); /*! errors? */
-							}
-
-
-
-							if(!insertDreitonCoreClient(dreitonCore, *((*dreitonCore).fdCopy + 0), *((*dreitonCore).fdCopy + 1), *((*dreitonCore).fdCopy + 2))){
-								jmp insertClientFailure;
-								insertClientFailure:{
-									const int64 shmId = 0xFFFFFFFF;
-									write((*dreitonCore).replyEventFd, &shmId, sizeof(shmId)); /*! on signal interrupt? */ /*! errors? */
-									inc eventCurrent;
-									jmp parseRequestLoop;
-								}
-							}
-							{
-								const int64 shmId = (*((*dreitonCore).clientStart + (*dreitonCore).clientAllocated - 1)).shmId; /*! update when data types are in use */
-								write((*dreitonCore).replyEventFd, &shmId, sizeof(shmId)); /*! on signal interrupt? */ /*! errors? */
-							}
-							inc eventCurrent;
-							jmp parseRequestLoop;
-
-
-
-
-
-
-
-
-
-						}
-					}
-				}
-				inc eventCurrent;
-				jmp parseRequestLoop;
+				success = true;
+				jmp emergencyExit;
 			}
+			if(returnValue == READ_FAILURE){
+				if(errno == EINTR){
+					jmp readRequestLoop;
+				}
+			}
+			jmp requestLoop;
+		}
+		closeConnection:{
+			const uint32 clientId = (*client).id;
+			fprintf(stdout, "transport: disconnected %u\n", (uint32)clientId);
+			if(!destroyDreitonTransportClient(backend, client)){
+				jmp requestLoop;
+			}
+			(*transportRequestReturn).operation = DISCONNECT_DREITON_TRANSPORT_REQUEST_OPERATION;
+			(*transportRequestReturn).clientId = clientId;
+			success = true;
+			jmp emergencyExit;
+		}
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAITFORDREITONSERVERTRANSPORTDESCRIPTORSERVEREVENT(){
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ServerBackend *)backend).eventEpollFd == NONE_FD or !extensionReturn or !eventTypeReturn){
+		jmp emergencyExit;
+	}
+	jmp eventLoop;
+	eventLoop:{
+		struct epoll_event event[1];
+		int fd;
+		if(epoll_wait((*(ServerBackend *)backend).eventEpollFd, event, countof(event), INFINITE_EPOLL_WAIT_TIMEOUT) == EPOLL_WAIT_FAILURE){ /*! errors? */
+			jmp emergencyExit;
+		}
+		if(!((*event).events & EPOLLIN)){
+			jmp eventLoop;
+		}
+		fd = (*event).data.fd;
+		jmp readEventLoop;
+		readEventLoop:{
+			uint64 message;
+			int returnValue = read(fd, &message, sizeof(message));
+			if(fd != (*(ServerBackend *)backend).eventReadFd){
+				if(fd == (*(ServerBackend *)backend).signalEventFd){
+					jmp emergencyExit;
+				}
+				jmp eventLoop;
+			}
+			if(returnValue > 0){
+				*extensionReturn = message >> 32;
+				*eventTypeReturn = message;
+				success = true;
+				jmp eventLoop;
+			}
+			if(returnValue == READ_FAILURE){
+				if(errno == EINTR){
+					jmp readEventLoop;
+				}
+			}
+			jmp eventLoop;
+		}
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAITFORDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION(){
+	int clientFd;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	clientFd = NONE_FD;
+	success = false;
+	if((*(ServerBackend *)backend).registrationEpollFd == NONE_FD or (*(ServerBackend *)backend).requestEpollFd == NONE_FD or (dataSizeReturn and !dataReturn)){
+		jmp emergencyExit;
+	}
+	jmp registrationLoop;
+	registrationLoop:{
+		struct epoll_event event[1];
+		int fd;
+		if(epoll_wait((*(ServerBackend *)backend).registrationEpollFd, event, countof(event), INFINITE_EPOLL_WAIT_TIMEOUT) == EPOLL_WAIT_FAILURE){ /*! errors? */
+			jmp emergencyExit;
+		}
+		if(!((*event).events & EPOLLIN)){
+			jmp registrationLoop;
+		}
+		fd = (*event).data.fd;
+		if(fd != (*(ServerBackend *)backend).socketFd){
+			if(fd == (*(ServerBackend *)backend).signalRegistrationFd){
+				jmp emergencyExit;
+			}
+			jmp registrationLoop;
+		}
+		clientFd = accept((*(ServerBackend *)backend).socketFd, NULL, NULL);
+		if(clientFd == ACCEPT_FAILURE){
+			jmp emergencyExit;
+		}
+		if(dataSizeReturn){
+			if(recv(clientFd, dataReturn, dataSizeReturn, NONE_RECV_FLAG) == RECV_FAILURE){ /*! this fails? what do? */
+				jmp emergencyExit;
+			}
+		}
+		if((*(ServerBackend *)backend).newClientFd != NONE_FD){
+			close((*(ServerBackend *)backend).newClientFd); /*! errors? */
+		}
+		(*(ServerBackend *)backend).newClientFd = clientFd;
+		success = true;
+		jmp emergencyExit;
+	}
+	emergencyExit:{
+		if(!success){
+			if(clientFd != NONE_FD){
+				close(clientFd); /*! on signal interrupt? */
+			}
+			ret false;
+		}
+		ret true;
+	}
+}
+HANDSHAKEDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION(){
+	void **handshakeDataStart;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ServerBackend *)backend).newClientFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	handshakeDataStart = &(*(ServerBackend *)backend).handshakeDataStart;
+	if(*handshakeDataStart){
+		free(*handshakeDataStart);
+	}
+	*handshakeDataStart = malloc(dataSize * sizeof(uint8));
+	if(!*handshakeDataStart){
+		jmp emergencyExit;
+	}
+	memcpy(*handshakeDataStart, data, dataSize * sizeof(uint8));
+	(*(ServerBackend *)backend).handshakeDataSize = dataSize;
+	if(dataSize and data){
+		if(send((*(ServerBackend *)backend).newClientFd, data, dataSize, NONE_SEND_FLAG) == SEND_FAILURE){ /*! errors? client might not send, how to mitigate? */
+			jmp emergencyExit;
+		}
+	}
+	if(!successfulHandshake){
+		close((*(ServerBackend *)backend).newClientFd); /*! on signal interrupt? */
+		(*(ServerBackend *)backend).newClientFd = NONE_FD;
+	}
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CONSUMEDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION(){
+	int clientFd;
+	uint32 requestSlotSize;
+	uint32 replySlotSize;
+	uint32 eventSlotSize;
+	uint32 requestSize;
+	uint32 replySize;
+	uint32 eventSize;
+	uint32 requestSlotMemorySize;
+	uint32 replySlotMemorySize;
+	uint32 eventSlotMemorySize;
+	uint32 requestMemorySize;
+	uint32 replyMemorySize;
+	uint32 eventMemorySize;
+	uint32 clientId;
+	int shmId;
+	void *shmStart;
+	Header header;
+	Client *client;
+	bool success;
+	struct{
+		int32 /*-*/ readFd;
+		int32 /*-*/ writeFd;
+	} requestPipe;
+	struct{
+		int32 /*-*/ readFd;
+		int32 /*-*/ writeFd;
+	} replyPipe;
+	struct{
+		int32 /*-*/ readFd;
+		int32 /*-*/ writeFd;
+	} eventPipe;
+	if(!backend){
+		ret false;
+	}
+	requestPipe.readFd = NONE_FD;
+	requestPipe.writeFd = NONE_FD;
+	replyPipe.readFd = NONE_FD;
+	replyPipe.writeFd = NONE_FD;
+	eventPipe.readFd = NONE_FD;
+	eventPipe.writeFd = NONE_FD;
+	clientFd = NONE_FD;
+	success = false;
+	if((*(ServerBackend *)backend).registrationEpollFd == NONE_FD or (*(ServerBackend *)backend).requestEpollFd == NONE_FD or (*(ServerBackend *)backend).newClientFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	clientFd = (*(ServerBackend *)backend).newClientFd;
+	if(pipe((void *)&requestPipe) == PIPE_FAILURE){ /*! check for surprise errors */
+		jmp emergencyExit;
+	}
+	if(pipe((void *)&replyPipe) == PIPE_FAILURE){ /*! check for surprise errors */
+		jmp emergencyExit;
+	}
+	if(pipe((void *)&eventPipe) == PIPE_FAILURE){ /*! check for surprise errors */
+		jmp emergencyExit;
+	}
+	{
+		int fd[3];
+		*(fd + 0) = requestPipe.writeFd;
+		*(fd + 1) = replyPipe.readFd;
+		*(fd + 2) = eventPipe.readFd;
+		if(!sendFd(clientFd, fd, countof(fd))){ /*! errors? client might not send, how to mitigate? */
+			jmp emergencyExit;
+		}
+	}
+	{
+		const int flag = fcntl(requestPipe.readFd, F_GETFL, 0); /*! errors? */
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		if(fcntl(requestPipe.readFd, F_SETFL, flag | O_NONBLOCK) == FCNTL_FAILURE){ /*! errors? */
+			jmp emergencyExit;
+		}
+	}
+	{
+		struct epoll_event event;
+		event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
+		event.data.fd = requestPipe.readFd;
+		if(epoll_ctl((*(ServerBackend *)backend).requestEpollFd, EPOLL_CTL_ADD, requestPipe.readFd, &event) == EPOLL_CTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
+	jmp insertClient;
+	insertClient:{
+		if((*(ServerBackend *)backend).clientAllocated == (*(ServerBackend *)backend).clientSize){
+			void *temp;
+			if(!(*(ServerBackend *)backend).clientBlockSize){
+				jmp emergencyExit;
+			}
+			(*(ServerBackend *)backend).clientSize += (*(ServerBackend *)backend).clientBlockSize;
+			temp = realloc((*(ServerBackend *)backend).clientStart, (*(ServerBackend *)backend).clientSize * sizeof(Client));
+			if(!temp){
+				(*(ServerBackend *)backend).clientSize -= (*(ServerBackend *)backend).clientBlockSize;
+				jmp emergencyExit;
+			}
+			(*(ServerBackend *)backend).clientStart = temp;
+			if(!(*(ServerBackend *)backend).clientAllocated){
+				inc (*(ServerBackend *)backend).clientAllocated;
+				jmp insertClient;
+			}
+		}
+		requestSlotSize = (*(ServerBackend *)backend).requestSlotSize;
+		replySlotSize = (*(ServerBackend *)backend).replySlotSize;
+		eventSlotSize = (*(ServerBackend *)backend).eventSlotSize;
+		requestSize = (*(ServerBackend *)backend).requestSize;
+		replySize = (*(ServerBackend *)backend).replySize;
+		eventSize = (*(ServerBackend *)backend).eventSize;
+		requestSlotMemorySize = (requestSlotSize * sizeof(MessageSlot) + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+		replySlotMemorySize = (replySlotSize * sizeof(MessageSlot) + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+		eventSlotMemorySize = (eventSlotSize * sizeof(MessageSlot) + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+		requestMemorySize = (requestSize * sizeof(uint8) + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+		replyMemorySize = (replySize * sizeof(uint8) + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+		eventMemorySize = (eventSize * sizeof(uint8) + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+		clientId = (*(ServerBackend *)backend).clientAllocated;
+		shmId = shmget((clientId << 16) | (*(ServerBackend *)backend).shmKey, sizeof(Header) + requestSlotMemorySize + replySlotMemorySize + eventSlotMemorySize + requestMemorySize + replyMemorySize + eventMemorySize, IPC_CREAT | 0666);
+		if(!shmId){
+			jmp emergencyExit;
+		}
+		shmStart = shmat(shmId, NULL, SHM_NONE); /*! params? */
+		if(shmStart == SHMAT_FAILURE){
+			jmp emergencyExit;
+		}
+		header.requestSlotStartOffset = 0 + sizeof(Header);
+		header.replySlotStartOffset = header.requestSlotStartOffset + requestSlotMemorySize;
+		header.eventSlotStartOffset = header.replySlotStartOffset + replySlotMemorySize;
+		header.requestStartOffset = header.eventSlotStartOffset + eventSlotMemorySize;
+		header.replyStartOffset = header.requestStartOffset + requestMemorySize;
+		header.eventStartOffset = header.replyStartOffset + replyMemorySize;
+		header.requestSlotSize = requestSlotSize;
+		header.replySlotSize = replySlotSize;
+		header.eventSlotSize = eventSlotSize;
+		header.requestSize = requestSize;
+		header.replySize = replySize;
+		header.eventSize = eventSize;
+		header.requestCurrentWriter = 0;
+		header.requestCurrentReader = 0;
+		header.replyCurrentWriter = 0;
+		header.replyCurrentReader = 0;
+		header.eventCurrentWriter = 0;
+		header.eventCurrentReader = 0;
+		header.clientId = clientId;
+		client = (*(ServerBackend *)backend).clientStart + clientId;
+		(*client).shmStart = shmStart;
+		(*client).shmId = shmId;
+		(*client).requestSlotStart = (void *)((uint8 *)shmStart + header.requestSlotStartOffset);
+		(*client).replySlotStart = (void *)((uint8 *)shmStart + header.replySlotStartOffset);
+		(*client).eventSlotStart = (void *)((uint8 *)shmStart + header.eventSlotStartOffset);
+		(*client).requestStart = (void *)((uint8 *)shmStart + header.requestStartOffset);
+		(*client).replyStart = (void *)((uint8 *)shmStart + header.replyStartOffset);
+		(*client).eventStart = (void *)((uint8 *)shmStart + header.eventStartOffset);
+		(*client).requestCurrent = (*client).requestStart;
+		(*client).replyCurrent = (*client).replyStart;
+		(*client).eventCurrent = (*client).eventStart;
+		(*client).requestSlotSize = requestSlotSize;
+		(*client).replySlotSize = replySlotSize;
+		(*client).eventSlotSize = eventSlotSize;
+		(*client).requestSize = requestSize;
+		(*client).replySize = replySize;
+		(*client).eventSize = eventSize;
+		(*client).requestFd = requestPipe.readFd;
+		(*client).replyFd = replyPipe.writeFd;
+		(*client).eventFd = eventPipe.writeFd;
+		(*client).handshakeDataStart = (*(ServerBackend *)backend).handshakeDataStart;
+		(*client).handshakeDataSize = (*(ServerBackend *)backend).handshakeDataSize;
+		(*client).id = clientId;
+		(*client).handle = 0;
+		memcpy(shmStart, &header, sizeof(Header)); /*! replace with toolkit function */
+		if(send(clientFd, &shmId, sizeof(shmId), 0) == SEND_FAILURE){ /*! errors? client might not send, how to mitigate? */
+			jmp emergencyExit;
+		}
+		{
+			const uint64 message = ((uint64)clientId << 32) | 0;
+			write((*(ServerBackend *)backend).requestWriteFd, &message, sizeof(message)); /*! errors? */
+		}
+		(*(ServerBackend *)backend).handshakeDataStart = NULL;
+		(*(ServerBackend *)backend).handshakeDataSize = 0;
+		inc (*(ServerBackend *)backend).clientAllocated;
+		success = true;
+		jmp emergencyExit;
+		emergencyExit:{
+			if(clientFd != NONE_FD) /*------------*/ close(clientFd); /*! on signal interrupt? */
+			if(requestPipe.writeFd != NONE_FD) /*-*/ close(requestPipe.writeFd); /*! on signal interrupt? */
+			if(replyPipe.readFd != NONE_FD) /*----*/ close(replyPipe.readFd); /*! on signal interrupt? */
+			if(eventPipe.readFd != NONE_FD) /*----*/ close(eventPipe.readFd); /*! on signal interrupt? */
+			if(!success){
+				if(requestPipe.readFd != NONE_FD) /*-*/ close(requestPipe.readFd); /*! on signal interrupt? */
+				if(replyPipe.writeFd != NONE_FD) /*--*/ close(replyPipe.writeFd); /*! on signal interrupt? */
+				if(eventPipe.writeFd != NONE_FD) /*--*/ close(eventPipe.writeFd); /*! on signal interrupt? */
+				ret false;
+			}
+			(*(ServerBackend *)backend).newClientFd = NONE_FD;
+			ret true;
+		}
+	}
+}
+SETDREITONSERVERTRANSPORTDESCRIPTORCLIENTHANDLE(){
+	Client *client;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	client = (*(ServerBackend *)backend).clientStart + clientId;
+	success = false;
+	if(!isValidDreitonTransportClient(backend, client)){
+		jmp emergencyExit;
+	}
+	(*client).handle = clientHandle;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONSERVERTRANSPORTDESCRIPTORCLIENTREQUESTFRAME(){
+	Client *client;
+	Header *header;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	client = (*(ServerBackend *)backend).clientStart + clientId;
+	success = false;
+	if(!isValidDreitonTransportClient(backend, client) or !frameReturn){
+		jmp emergencyExit;
+	}
+	header = (*client).shmStart;
+	*frameReturn = (uint8 *)(*client).requestStart + (*((*client).requestSlotStart + (*header).requestCurrentReader)).messageStartOffset;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONSERVERTRANSPORTDESCRIPTORREPLYFRAME(){
+	Client *client;
+	uint8 *replyCurrent;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	client = (*(ServerBackend *)backend).clientStart + clientId;
+	success = false;
+	if(!isValidDreitonTransportClient(backend, client) or !frameSize or frameSize > (*client).replySize or !frameReturn){
+		jmp emergencyExit;
+	}
+
+
+
+	/*! we do not know if there is space to put this at the start of the pool. keep track of that. */
+
+	replyCurrent = (*client).replyCurrent;
+	{
+		uint8 *const replyStart = (*client).replyStart;
+		if(replyCurrent + frameSize > replyStart + (*client).replySize){
+			replyCurrent = replyStart;
 		}
 	}
 
 
 
+	*frameReturn = replyCurrent;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONSERVERTRANSPORTDESCRIPTOREVENTFRAME(){
+	Client *client;
+	uint8 *eventCurrent;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	client = (*(ServerBackend *)backend).clientStart + clientId;
+	success = false;
+	if(!isValidDreitonTransportClient(backend, client) or !frameSize or frameSize > (*client).eventSize or !frameReturn){
+		jmp emergencyExit;
+	}
+
+
+
+	/*! we do not know if there is space to put this at the start of the pool. keep track of that. */
+
+	eventCurrent = (*client).eventCurrent;
+	{
+		uint8 *const eventStart = (*client).eventStart;
+		if(eventCurrent + frameSize > eventStart + (*client).eventSize){
+			eventCurrent = eventStart;
+		}
+	}
+
+
+
+	*frameReturn = eventCurrent;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CONSUMEDREITONSERVERTRANSPORTDESCRIPTORCLIENTREQUESTFRAME(){
+	Client *client;
+	Header *header;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	client = (*(ServerBackend *)backend).clientStart + clientId;
+	success = false;
+	if(!isValidDreitonTransportClient(backend, client)){
+		jmp emergencyExit;
+	}
+	header = (*client).shmStart;
+	(*header).requestCurrentReader = ((*header).requestCurrentReader + 1) % (*header).requestSlotSize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SENDDREITONSERVERTRANSPORTDESCRIPTORREPLY(){
+	Client *client;
+	uint8 *replyStart;
+	Header *header;
+	MessageSlot *slot;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	client = (*(ServerBackend *)backend).clientStart + clientId;
+	success = false;
+	if(!isValidDreitonTransportClient(backend, client) or !frameSize){
+		jmp emergencyExit;
+	}
+	replyStart = (*client).replyStart;
+	if((uint8 *)frame < replyStart or (uint8 *)frame >= replyStart + (*(ServerBackend *)backend).replySize){
+		jmp emergencyExit;
+	}
+	header = (*client).shmStart;
+	slot = (*client).replySlotStart + (*header).replyCurrentWriter;
+	(*slot).messageStartOffset = (uint8 *)frame - replyStart;
+	(*client).replyCurrent = (uint8 *)frame + frameSize;
+	{
+		const uint64 message = ((uint64)clientId << 32) | (*header).replyCurrentWriter;
+		write((*client).replyFd, &message, sizeof(message)); /*! errors? */
+	}
+	(*header).replyCurrentWriter = ((*header).replyCurrentWriter + 1) % (*header).replySlotSize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SENDDREITONSERVERTRANSPORTDESCRIPTOREVENT(){
+	Client *client;
+	uint8 *eventStart;
+	Header *header;
+	MessageSlot *slot;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	client = (*(ServerBackend *)backend).clientStart + clientId;
+	success = false;
+	if(!isValidDreitonTransportClient(backend, client) or !frameSize){
+		jmp emergencyExit;
+	}
+	eventStart = (*client).eventStart;
+	if((uint8 *)frame < eventStart or (uint8 *)frame >= eventStart + (*(ServerBackend *)backend).eventSize){
+		jmp emergencyExit;
+	}
+	header = (*client).shmStart;
+	slot = (*client).eventSlotStart + (*header).eventCurrentWriter;
+	(*slot).messageStartOffset = (uint8 *)frame - eventStart;
+	(*client).eventCurrent = (uint8 *)frame + frameSize;
+	{
+		const uint64 message = ((uint64)clientId << 32) | (*header).eventCurrentWriter;
+		write((*client).eventFd, &message, sizeof(message)); /*! errors? */
+	}
+	(*header).eventCurrentWriter = ((*header).eventCurrentWriter + 1) % (*header).eventSlotSize;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+DESTROYDREITONTRANSPORTCLIENT(){
+	if(!backend){
+		ret false;
+	}
+	if(!isValidDreitonTransportClient(backend, client)){
+		ret false;
+	}
+	free((*client).handshakeDataStart);
+	shmctl((*client).shmId, IPC_RMID, NULL); /*! errors? */
+	shmdt((*client).shmStart); /*! errors? */
+	close((*client).eventFd); /*! errors? */
+	close((*client).replyFd); /*! errors? */
+	close((*client).requestFd); /*! errors? */
+	(*client).id = 0;
+	ret true;
+}
+WAKEUPDREITONSERVERTRANSPORTDESCRIPTORREGISTRATION(){
+	int fd;
+	struct epoll_event event;
+	uint64 value;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ServerBackend *)backend).registrationEpollFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	fd = (*(ServerBackend *)backend).signalRegistrationFd;
+	if(fd == NONE_FD){
+		fd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+		if(fd == EVENTFD_FAILURE){
+			jmp emergencyExit;
+		}
+		(*(ServerBackend *)backend).signalRegistrationFd = fd;
+	}
+	event.events = EPOLLIN;
+	event.data.fd = fd;
+	value = 1;
+	if(epoll_ctl((*(ServerBackend *)backend).registrationEpollFd, EPOLL_CTL_ADD, fd, &event) == EPOLL_CTL_FAILURE){ /*! errors? */
+		jmp emergencyExit;
+	}
+	write(fd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAKEUPDREITONSERVERTRANSPORTDESCRIPTORREQUEST(){
+	int fd;
+	struct epoll_event event;
+	uint64 value;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ServerBackend *)backend).requestEpollFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	fd = (*(ServerBackend *)backend).signalRequestFd;
+	if(fd == NONE_FD){
+		fd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+		if(fd == EVENTFD_FAILURE){
+			jmp emergencyExit;
+		}
+		(*(ServerBackend *)backend).signalRequestFd = fd;
+	}
+	event.events = EPOLLIN;
+	event.data.fd = fd;
+	value = 1;
+	if(epoll_ctl((*(ServerBackend *)backend).requestEpollFd, EPOLL_CTL_ADD, fd, &event) == EPOLL_CTL_FAILURE){ /*! errors? */
+		jmp emergencyExit;
+	}
+	write(fd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAKEUPDREITONSERVERTRANSPORTDESCRIPTOREVENT(){
+	int fd;
+	struct epoll_event event;
+	uint64 value;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ServerBackend *)backend).eventEpollFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	fd = (*(ServerBackend *)backend).signalEventFd;
+	if(fd == NONE_FD){
+		fd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+		if(fd == EVENTFD_FAILURE){
+			jmp emergencyExit;
+		}
+		(*(ServerBackend *)backend).signalEventFd = fd;
+	}
+	event.events = EPOLLIN;
+	event.data.fd = fd;
+	value = 1;
+	if(epoll_ctl((*(ServerBackend *)backend).eventEpollFd, EPOLL_CTL_ADD, fd, &event) == EPOLL_CTL_FAILURE){ /*! errors? */
+		jmp emergencyExit;
+	}
+	write(fd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+DESTROYDREITONSERVERTRANSPORTDESCRIPTORREGISTRATIONRECEIVER(){
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ServerBackend *)backend).socketFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	close((*(ServerBackend *)backend).registrationEpollFd); /*! errors? */
+	free((*(ServerBackend *)backend).connectionName);
+	close((*(ServerBackend *)backend).socketFd); /*! errors? */
+	if((*(ServerBackend *)backend).newClientFd != NONE_FD){
+		close((*(ServerBackend *)backend).newClientFd); /*! errors? */
+		(*(ServerBackend *)backend).newClientFd = NONE_FD;
+	}
+	(*(ServerBackend *)backend).registrationEpollFd = NONE_FD;
+	(*(ServerBackend *)backend).connectionName = NULL;
+	(*(ServerBackend *)backend).socketFd = NONE_FD;
+	(*(ServerBackend *)backend).shmKey = 0;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+DESTROYDREITONSERVERTRANSPORTDESCRIPTORREQUESTRECEIVER(){
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ServerBackend *)backend).requestEpollFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	close((*(ServerBackend *)backend).requestEpollFd); /*! errors? */
+	close((*(ServerBackend *)backend).requestReadFd); /*! errors? */
+	close((*(ServerBackend *)backend).requestWriteFd); /*! errors? */
+	(*(ServerBackend *)backend).requestEpollFd = NONE_FD;
+	(*(ServerBackend *)backend).requestReadFd = NONE_FD;
+	(*(ServerBackend *)backend).requestWriteFd = NONE_FD;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+DESTROYDREITONSERVERTRANSPORTDESCRIPTOREVENTRECEIVER(){
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ServerBackend *)backend).eventEpollFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	close((*(ServerBackend *)backend).eventEpollFd); /*! errors? */
+	close((*(ServerBackend *)backend).eventReadFd); /*! errors? */
+	close((*(ServerBackend *)backend).eventWriteFd); /*! errors? */
+	(*(ServerBackend *)backend).eventEpollFd = NONE_FD;
+	(*(ServerBackend *)backend).eventReadFd = NONE_FD;
+	(*(ServerBackend *)backend).eventWriteFd = NONE_FD;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+DESTROYALLDREITONTRANSPORTCLIENTS(){
+	Client *current;
+	Client *wall;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if(!(*backend).clientStart){
+		jmp emergencyExit;
+	}
+	current = (*backend).clientStart + 1;
+	wall = (*backend).clientStart + (*backend).clientAllocated;
+	jmp destroyClientLoop;
+	destroyClientLoop:{
+		if(current < wall){
+			if((*current).id){
+				destroyDreitonTransportClient(backend, current);
+			}
+			inc current;
+			jmp destroyClientLoop;
+		}
+		free((*backend).clientStart);
+		(*backend).clientStart = NULL;
+		(*backend).clientSize = 0;
+		(*backend).clientAllocated = 0;
+		success = true;
+		jmp emergencyExit;
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+ISVALIDDREITONTRANSPORTCLIENT(){
+	if(!backend){
+		ret false;
+	}
+	if(client <= (*backend).clientStart or client >= (*backend).clientStart + (*backend).clientAllocated or !(*client).id){
+		ret false;
+	}
+	ret true;
+}
+FINIDREITONSERVERTRANSPORTDESCRIPTOR(){
+	if(!backend){
+		ret false;
+	}
+	if((*(ServerBackend *)backend).registrationEpollFd != NONE_FD){
+		if(!destroyDreitonServerTransportDescriptorRegistrationReceiver(backend)){
+			ret false;
+		}
+	}
+	if((*(ServerBackend *)backend).requestEpollFd != NONE_FD){
+		if(!destroyDreitonServerTransportDescriptorRequestReceiver(backend)){
+			ret false;
+		}
+	}
+	if((*(ServerBackend *)backend).eventEpollFd != NONE_FD){
+		if(!destroyDreitonServerTransportDescriptorEventReceiver(backend)){
+			ret false;
+		}
+	}
+	if((*(ServerBackend *)backend).signalRegistrationFd != NONE_FD){
+		close((*(ServerBackend *)backend).signalRegistrationFd);
+		(*(ServerBackend *)backend).signalRegistrationFd = NONE_FD;
+	}
+	if((*(ServerBackend *)backend).signalRequestFd != NONE_FD){
+		close((*(ServerBackend *)backend).signalRequestFd);
+		(*(ServerBackend *)backend).signalRequestFd = NONE_FD;
+	}
+	if((*(ServerBackend *)backend).signalEventFd != NONE_FD){
+		close((*(ServerBackend *)backend).signalEventFd);
+		(*(ServerBackend *)backend).signalEventFd = NONE_FD;
+	}
+	destroyAllDreitonTransportClients(backend);
+	free((*(ServerBackend *)backend).handshakeDataStart);
+	free(backend);
+	ret true;
+}
 
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+INITDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION(){
+	ClientBackend *backend;
+	if(!backendReturn){
+		ret false;
+	}
+	backend = malloc(1 * sizeof(ClientBackend));
+	if(!backend){
+		ret false;
+	}
+	(*backend).shmStart = NULL;
+	(*backend).requestSlotStart = NULL;
+	(*backend).replySlotStart = NULL;
+	(*backend).eventSlotStart = NULL;
+	(*backend).requestStart = NULL;
+	(*backend).replyStart = NULL;
+	(*backend).eventStart = NULL;
+	(*backend).requestCurrent = NULL;
+	(*backend).replyCurrent = NULL;
+	(*backend).eventCurrent = NULL;
+	(*backend).requestSlotSize = 0;
+	(*backend).replySlotSize = 0;
+	(*backend).eventSlotSize = 0;
+	(*backend).requestSize = 0;
+	(*backend).replySize = 0;
+	(*backend).eventSize = 0;
+	(*backend).shmId = 0;
+	(*backend).requestFd = NONE_FD;
+	(*backend).replyFd = NONE_FD;
+	(*backend).eventFd = NONE_FD;
+	(*backend).replyEpollFd = NONE_FD;
+	(*backend).eventEpollFd = NONE_FD;
+	(*backend).signalReplyFd = NONE_FD;
+	(*backend).signalEventFd = NONE_FD;
+	(*backend).id = 0;
+	(*backend).requestAmount = 0;
+	*backendReturn = backend;
 	ret true;
 }
-SENDDREITONTRANSPORTDESCRIPTORMESSAGE(){
-	(void)size;
-	(void)buffer;
-	fprintf(stdout, "send shm message\n");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*!*/
+
+CONNECTTODREITONCLIENTTRANSPORTDESCRIPTORCONNECTION(){
+	int clientFd;
+	struct sockaddr_un address;
+	int replyEpollFd;
+	int eventEpollFd;
+	int requestWriteFd;
+	int replyReadFd;
+	int eventReadFd;
+	struct epoll_event event;
+	int shmId;
+	Header *shmStart;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	clientFd = NONE_FD;
+	replyEpollFd = NONE_FD;
+	eventEpollFd = NONE_FD;
+	requestWriteFd = NONE_FD;
+	replyReadFd = NONE_FD;
+	eventReadFd = NONE_FD;
+	success = false;
+	if(!name or !dataSize or !data or !dataSizeReturn or !dataReturn){
+		jmp emergencyExit;
+	}
+	clientFd = socket(AF_UNIX, SOCK_STREAM, NONE_SOCKET_PROTOCOL);
+	if(clientFd == SOCKET_FAILURE){
+		jmp emergencyExit;
+	}
+	address.sun_family = AF_UNIX;
+	strcpy(address.sun_path, name); /*! replace with toolkit function */
+	if(connect(clientFd, (void *)&address, sizeof(address)) == CONNECT_FAILURE){
+		jmp emergencyExit;
+	}
+	if(send(clientFd, data, dataSize, NONE_SEND_FLAG) == SEND_FAILURE){ /*! errors? client might not send, how to mitigate? */
+		jmp emergencyExit;
+	}
+	if(recv(clientFd, dataReturn, dataSizeReturn, NONE_RECV_FLAG) == RECV_FAILURE){ /*! this fails? what do? */
+		jmp emergencyExit;
+	}
+	replyEpollFd = epoll_create1(NONE_EPOLL_FLAG); /*! check for surprise errors */
+	if(replyEpollFd == EPOLL_CREATE1_FAILURE){
+		replyEpollFd = NONE_FD;
+		jmp emergencyExit;
+	}
+	eventEpollFd = epoll_create1(NONE_EPOLL_FLAG); /*! check for surprise errors */
+	if(eventEpollFd == EPOLL_CREATE1_FAILURE){
+		eventEpollFd = NONE_FD;
+		jmp emergencyExit;
+	}
+	{
+		int fd[3];
+		if(!receiveFd(clientFd, countof(fd), fd)){ /*! this fails? what do? */
+			jmp emergencyExit;
+		}
+		requestWriteFd = *(fd + 0);
+		replyReadFd = *(fd + 1);
+		eventReadFd = *(fd + 2);
+	}
+	{
+		const int flag = fcntl(replyReadFd, F_GETFL, 0); /*! errors? */
+		int returnValue;
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		returnValue = fcntl(replyReadFd, F_SETFL, flag | O_NONBLOCK); /*! errors? */
+		if(returnValue == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
+	{
+		const int flag = fcntl(eventReadFd, F_GETFL, 0); /*! errors? */
+		int returnValue;
+		if(flag == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+		returnValue = fcntl(eventReadFd, F_SETFL, flag | O_NONBLOCK); /*! errors? */
+		if(returnValue == FCNTL_FAILURE){
+			jmp emergencyExit;
+		}
+	}
+	event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
+	event.data.fd = replyReadFd;
+	if(epoll_ctl(replyEpollFd, EPOLL_CTL_ADD, replyReadFd, &event) == EPOLL_CTL_FAILURE){
+		jmp emergencyExit;
+	}
+	event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR;
+	event.data.fd = eventReadFd;
+	if(epoll_ctl(eventEpollFd, EPOLL_CTL_ADD, eventReadFd, &event) == EPOLL_CTL_FAILURE){
+		jmp emergencyExit;
+	}
+	if(recv(clientFd, &shmId, sizeof(shmId), 0) == RECV_FAILURE){ /*! this fails? what do? */
+		jmp emergencyExit;
+	}
+	if(!shmId){
+		jmp emergencyExit;
+	}
+	shmStart = shmat(shmId, NULL, SHM_NONE);
+	if(shmStart == SHMAT_FAILURE){
+		jmp emergencyExit;
+	}
+	(*(ClientBackend *)backend).shmStart = shmStart;
+	(*(ClientBackend *)backend).shmId = shmId;
+	(*(ClientBackend *)backend).requestSlotStart = (void *)((uint8 *)shmStart + (*shmStart).requestSlotStartOffset);
+	(*(ClientBackend *)backend).replySlotStart = (void *)((uint8 *)shmStart + (*shmStart).replySlotStartOffset);
+	(*(ClientBackend *)backend).eventSlotStart = (void *)((uint8 *)shmStart + (*shmStart).eventSlotStartOffset);
+	(*(ClientBackend *)backend).requestStart = (void *)((uint8 *)shmStart + (*shmStart).requestStartOffset);
+	(*(ClientBackend *)backend).replyStart = (void *)((uint8 *)shmStart + (*shmStart).replyStartOffset);
+	(*(ClientBackend *)backend).eventStart = (void *)((uint8 *)shmStart + (*shmStart).eventStartOffset);
+	(*(ClientBackend *)backend).requestCurrent = (*(ClientBackend *)backend).requestStart;
+	(*(ClientBackend *)backend).replyCurrent = (*(ClientBackend *)backend).replyStart;
+	(*(ClientBackend *)backend).eventCurrent = (*(ClientBackend *)backend).eventStart;
+	(*(ClientBackend *)backend).requestSlotSize = (*shmStart).requestSlotSize;
+	(*(ClientBackend *)backend).replySlotSize = (*shmStart).replySlotSize;
+	(*(ClientBackend *)backend).eventSlotSize = (*shmStart).eventSlotSize;
+	(*(ClientBackend *)backend).requestSize = (*shmStart).requestSize;
+	(*(ClientBackend *)backend).replySize = (*shmStart).replySize;
+	(*(ClientBackend *)backend).eventSize = (*shmStart).eventSize;
+	(*(ClientBackend *)backend).requestFd = requestWriteFd;
+	(*(ClientBackend *)backend).replyFd = replyReadFd;
+	(*(ClientBackend *)backend).eventFd = eventReadFd;
+	(*(ClientBackend *)backend).replyEpollFd = replyEpollFd;
+	(*(ClientBackend *)backend).eventEpollFd = eventEpollFd;
+	(*(ClientBackend *)backend).id = (*shmStart).clientId;
+	(*(ClientBackend *)backend).requestAmount = 0;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(clientFd != NONE_FD){
+			close(clientFd); /*! errors? */
+		}
+		if(!success){
+			if(eventEpollFd != NONE_FD) /*---*/ close(eventEpollFd); /*! on signal interrupt? */
+			if(replyEpollFd != NONE_FD) /*---*/ close(replyEpollFd); /*! on signal interrupt? */
+			if(eventReadFd != NONE_FD) /*----*/ close(eventReadFd); /*! on signal interrupt? */
+			if(replyReadFd != NONE_FD) /*----*/ close(replyReadFd); /*! on signal interrupt? */
+			if(requestWriteFd != NONE_FD) /*-*/ close(requestWriteFd); /*! on signal interrupt? */
+			ret false;
+		}
+		ret true;
+	}
+}
+GETDREITONCLIENTTRANSPORTDESCRIPTORREQUESTFRAME(){
+
+
+
+	/*!
+		but... surely we have to wait until a slot is open to write a request if we just flushed, right?
+
+		this is gonna be a rough issue to deal with. you should with epoll but... what do you do with the reply? copy to local buffer?
+
+		the requestCurrent pointer is now also in the mix.
+
+		maybe store to local buffer and put on the channel once there is space, because the client's current is less than the server's current.
+	*/
+
+
+
+	uint8 *requestCurrent;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if(!frameSize or !requestFrameReturn){
+		jmp emergencyExit;
+	}
+	if(frameSize > (*(ClientBackend *)backend).requestSize){
+		jmp emergencyExit;
+	}
+
+
+
+	/*! we do not know if there is space to put this at the start of the pool. keep track of that. */
+
+	requestCurrent = (*(ClientBackend *)backend).requestCurrent;
+	{
+		uint8 *const requestStart = (*(ClientBackend *)backend).requestStart;
+		if(requestCurrent + frameSize > requestStart + (*(ClientBackend *)backend).requestSize){
+			requestCurrent = requestStart;
+		}
+	}
+
+
+
+	/*! if the amount is full and you flush then we still have no space for writing the request */
+
+	if((*(ClientBackend *)backend).requestAmount == (*(ClientBackend *)backend).requestSlotSize){
+		if(!flushDreitonClientTransportDescriptorRequestBuffer(backend)){
+			if((*(ClientBackend *)backend).requestAmount){
+				jmp emergencyExit;
+			}
+		}
+	}
+	*requestFrameReturn = requestCurrent;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+SENDDREITONCLIENTTRANSPORTDESCRIPTORREQUEST(){
+	Header *header;
+	uint8 *requestStart;
+	MessageSlot *slot;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	header = (*(ClientBackend *)backend).shmStart;
+	requestStart = (*(ClientBackend *)backend).requestStart;
+	success = false;
+	if(!header or !requestFrameSize or (uint8 *)requestFrame < requestStart or (uint8 *)requestFrame >= requestStart + (*(ClientBackend *)backend).requestSize){
+		jmp emergencyExit;
+	}
+	slot = (*(ClientBackend *)backend).requestSlotStart + (*header).requestCurrentWriter;
+	(*slot).messageStartOffset = (uint8 *)requestFrame - requestStart;
+	(*(ClientBackend *)backend).requestCurrent = (uint8 *)requestFrame + requestFrameSize;
+	(*header).requestCurrentWriter = ((*header).requestCurrentWriter + 1) % (*header).requestSlotSize;
+	inc (*(ClientBackend *)backend).requestAmount;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+FLUSHDREITONCLIENTTRANSPORTDESCRIPTORREQUESTBUFFER(){
+	uint64 message;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ClientBackend *)backend).requestFd == NONE_FD or !(*(ClientBackend *)backend).requestAmount){
+		jmp emergencyExit;
+	}
+	message = ((uint64)(*(ClientBackend *)backend).id << 32) | (*(ClientBackend *)backend).requestAmount; /*! add generation? */
+	write((*(ClientBackend *)backend).requestFd, &message, sizeof(message)); /*! errors? */
+	(*(ClientBackend *)backend).requestAmount = 0;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+WAITFORDREITONCLIENTTRANSPORTDESCRIPTORREPLY(){
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ClientBackend *)backend).replyEpollFd == NONE_FD or !frameReturn or !statusReturn){
+		jmp emergencyExit;
+	}
+	jmp replyLoop;
+	replyLoop:{
+		struct epoll_event event[1];
+		int fd;
+		if(epoll_wait((*(ClientBackend *)backend).replyEpollFd, event, countof(event), INFINITE_EPOLL_WAIT_TIMEOUT) == EPOLL_WAIT_FAILURE){ /*! errors? */
+			*statusReturn = FAILURE_DREITON_TRANSPORT_STATUS;
+			jmp emergencyExit;
+		}
+		if((*event).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+			*statusReturn = NONE_DREITON_TRANSPORT_STATUS;
+			if((*event).events & (EPOLLRDHUP | EPOLLHUP)){
+				*statusReturn |= HANG_UP_DREITON_TRANSPORT_STATUS;
+			}
+			if((*event).events & EPOLLERR){
+				*statusReturn |= ERROR_DREITON_TRANSPORT_STATUS;
+			}
+			jmp emergencyExit;
+		}
+		if(!((*event).events & EPOLLIN)){
+			jmp replyLoop;
+		}
+		fd = (*event).data.fd;
+		jmp readReplyLoop;
+		readReplyLoop:{
+			uint64 message;
+			int returnValue = read(fd, &message, sizeof(message));
+			if(returnValue > 0){
+				uint32 replyCurrentReader;
+				if(fd == (*(ClientBackend *)backend).signalReplyFd){
+					*statusReturn = message;
+					jmp emergencyExit;
+				}
+				replyCurrentReader = message;
+				*frameReturn = (uint8 *)(*(ClientBackend *)backend).replyStart + (*((*(ClientBackend *)backend).replySlotStart + replyCurrentReader)).messageStartOffset;
+				*statusReturn = SUCCESS_DREITON_TRANSPORT_STATUS;
+				success = true;
+				jmp emergencyExit;
+			}
+			if(returnValue == READ_FAILURE){
+				if(errno == EINTR){
+					jmp readReplyLoop;
+				}
+			}
+			jmp replyLoop;
+		}
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CONSUMEDREITONCLIENTTRANSPORTDESCRIPTORREPLY(){
+
+
+
+	/*! support consuming more than one, since the replies will not be in order. */
+
+	/*! how is this supposed to work with the params? */
+
+
+
+	Header *header;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+
+
+
+	/*!*/
+
+	(void)reply;
+
+
+
+	header = (*(ClientBackend *)backend).shmStart;
+	(*header).replyCurrentReader = ((*header).replyCurrentReader + 1) % (*header).replySlotSize;
+
+
+
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAITFORDREITONCLIENTTRANSPORTDESCRIPTOREVENT(){
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ClientBackend *)backend).eventEpollFd == NONE_FD or !frameReturn or !statusReturn){
+		jmp emergencyExit;
+	}
+	jmp eventLoop;
+	eventLoop:{
+		struct epoll_event event[1];
+		int fd;
+		if(epoll_wait((*(ClientBackend *)backend).eventEpollFd, event, countof(event), INFINITE_EPOLL_WAIT_TIMEOUT) == EPOLL_WAIT_FAILURE){ /*! errors? */
+			*statusReturn = FAILURE_DREITON_TRANSPORT_STATUS;
+			jmp emergencyExit;
+		}
+		if((*event).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+			*statusReturn = NONE_DREITON_TRANSPORT_STATUS;
+			if((*event).events & (EPOLLRDHUP | EPOLLHUP)){
+				*statusReturn |= HANG_UP_DREITON_TRANSPORT_STATUS;
+			}
+			if((*event).events & EPOLLERR){
+				*statusReturn |= ERROR_DREITON_TRANSPORT_STATUS;
+			}
+			jmp emergencyExit;
+		}
+		if(!((*event).events & EPOLLIN)){
+			jmp eventLoop;
+		}
+		fd = (*event).data.fd;
+		jmp readEventLoop;
+		readEventLoop:{
+			uint64 message;
+			int returnValue = read(fd, &message, sizeof(message));
+			if(returnValue > 0){
+				uint32 eventCurrentReader;
+				if(fd == (*(ClientBackend *)backend).signalEventFd){
+					*statusReturn = message;
+					jmp emergencyExit;
+				}
+				eventCurrentReader = message;
+				*frameReturn = (uint8 *)(*(ClientBackend *)backend).eventStart + (*((*(ClientBackend *)backend).eventSlotStart + eventCurrentReader)).messageStartOffset;
+				*statusReturn = SUCCESS_DREITON_TRANSPORT_STATUS;
+				success = true;
+				jmp emergencyExit;
+			}
+			if(returnValue == READ_FAILURE){
+				if(errno == EINTR){
+					jmp readEventLoop;
+				}
+			}
+			jmp eventLoop;
+		}
+	}
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+CONSUMEDREITONCLIENTTRANSPORTDESCRIPTOREVENT(){
+
+
+
+	/*! look at the comments on the equivalent one for the replies and decide if this falls under the same heaven and earthen hells. */
+
+
+
+	Header *header;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+
+
+
+	/*!*/
+
+	(void)event;
+
+
+
+	header = (*(ClientBackend *)backend).shmStart;
+	(*header).replyCurrentReader = ((*header).replyCurrentReader + 1) % (*header).replySlotSize;
+
+
+
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+
+/*!*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+WAKEUPDREITONCLIENTTRANSPORTDESCRIPTORREPLY(){
+	int fd;
+	struct epoll_event event;
+	uint64 value;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ClientBackend *)backend).eventEpollFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	fd = (*(ClientBackend *)backend).signalReplyFd;
+	if(fd == NONE_FD){
+		fd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+		if(fd == EVENTFD_FAILURE){
+			jmp emergencyExit;
+		}
+		(*(ClientBackend *)backend).signalReplyFd = fd;
+	}
+	event.events = EPOLLIN;
+	event.data.fd = fd;
+	value = status;
+	if(epoll_ctl((*(ClientBackend *)backend).replyEpollFd, EPOLL_CTL_ADD, fd, &event) == EPOLL_CTL_FAILURE){ /*! errors? */
+		jmp emergencyExit;
+	}
+	write(fd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+WAKEUPDREITONCLIENTTRANSPORTDESCRIPTOREVENT(){
+	int fd;
+	struct epoll_event event;
+	uint64 value;
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if((*(ClientBackend *)backend).eventEpollFd == NONE_FD){
+		jmp emergencyExit;
+	}
+	fd = (*(ClientBackend *)backend).signalEventFd;
+	if(fd == NONE_FD){
+		fd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+		if(fd == EVENTFD_FAILURE){
+			jmp emergencyExit;
+		}
+		(*(ClientBackend *)backend).signalEventFd = fd;
+	}
+	event.events = EPOLLIN;
+	event.data.fd = fd;
+	value = status;
+	if(epoll_ctl((*(ClientBackend *)backend).eventEpollFd, EPOLL_CTL_ADD, fd, &event) == EPOLL_CTL_FAILURE){ /*! errors? */
+		jmp emergencyExit;
+	}
+	write(fd, &value, sizeof(value)); /*! on signal interrupt? */ /*! errors? */
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*!*/
+
+DISCONNECTFROMDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION(){
+	struct epoll_event epollEventStart[1];
+	bool success;
+	if(!backend){
+		ret false;
+	}
+	success = false;
+	if(notifyServer){
+		const uint64 message = ((uint64)(*(ClientBackend *)backend).id << 32) | 0;
+		write((*(ClientBackend *)backend).requestFd, &message, sizeof(message)); /*! errors? */
+		epoll_wait((*(ClientBackend *)backend).replyEpollFd, epollEventStart, countof(epollEventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
+	}
+	if((*(ClientBackend *)backend).signalEventFd != NONE_FD){
+		close((*(ClientBackend *)backend).signalEventFd); /*! errors? */
+	}
+	if((*(ClientBackend *)backend).signalReplyFd != NONE_FD){
+		close((*(ClientBackend *)backend).signalReplyFd); /*! errors? */
+	}
+	close((*(ClientBackend *)backend).eventEpollFd); /*! errors? */
+	close((*(ClientBackend *)backend).replyEpollFd); /*! errors? */
+	close((*(ClientBackend *)backend).eventFd); /*! errors? */
+	close((*(ClientBackend *)backend).replyFd); /*! errors? */
+	close((*(ClientBackend *)backend).requestFd); /*! errors? */
+	shmdt((*(ClientBackend *)backend).shmStart); /*! errors? */
+	(*(ClientBackend *)backend).shmStart = NULL;
+	(*(ClientBackend *)backend).requestSlotStart = NULL;
+	(*(ClientBackend *)backend).replySlotStart = NULL;
+	(*(ClientBackend *)backend).eventSlotStart = NULL;
+	(*(ClientBackend *)backend).requestStart = NULL;
+	(*(ClientBackend *)backend).replyStart = NULL;
+	(*(ClientBackend *)backend).eventStart = NULL;
+	(*(ClientBackend *)backend).requestCurrent = NULL;
+	(*(ClientBackend *)backend).replyCurrent = NULL;
+	(*(ClientBackend *)backend).eventCurrent = NULL;
+	(*(ClientBackend *)backend).requestSlotSize = 0;
+	(*(ClientBackend *)backend).replySlotSize = 0;
+	(*(ClientBackend *)backend).eventSlotSize = 0;
+	(*(ClientBackend *)backend).requestSize = 0;
+	(*(ClientBackend *)backend).replySize = 0;
+	(*(ClientBackend *)backend).eventSize = 0;
+	(*(ClientBackend *)backend).shmId = 0;
+	(*(ClientBackend *)backend).requestFd = NONE_FD;
+	(*(ClientBackend *)backend).replyFd = NONE_FD;
+	(*(ClientBackend *)backend).eventFd = NONE_FD;
+	(*(ClientBackend *)backend).replyEpollFd = NONE_FD;
+	(*(ClientBackend *)backend).eventEpollFd = NONE_FD;
+	(*(ClientBackend *)backend).signalReplyFd = NONE_FD;
+	(*(ClientBackend *)backend).signalEventFd = NONE_FD;
+	(*(ClientBackend *)backend).id = 0;
+	(*(ClientBackend *)backend).requestAmount = 0;
+	success = true;
+	jmp emergencyExit;
+	emergencyExit:{
+		if(!success){
+			ret false;
+		}
+		ret true;
+	}
+}
+FINIDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION(){
+	if(!backend){
+		ret false;
+	}
+	if((*(ClientBackend *)backend).shmStart){
+		if(!disconnectFromDreitonClientTransportDescriptorConnection(backend, false)){
+			ret false;
+		}
+	}
+	free(backend);
 	ret true;
 }
-RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE(){
-	(void)sizeReturn;
-	(void)bufferReturn;
-	fprintf(stdout, "receive shm message\n");
-	ret true;
-}
-DESTROYDREITONTRANSPORTDESCRIPTORCLIENTBUFFER(){
-	fprintf(stdout, "destroy shm client buffer\n");
-	ret true;
-}
-FINDDREITONTRANSPORTDESCRIPTORCLIENT(){
-	fprintf(stdout, "find shm client\n");
-	ret true;
-}
-FINIDREITONTRANSPORTDESCRIPTOR(){
-	fprintf(stdout, "fini shm\n");
-	backend.clientId = 0;
-	backend.clientBlockSize = 0;
-	free(backend.clientStart);
-	backend.clientStart = NULL;
-	backend.clientSize = 0;
-	backend.clientAllocated = 0;
-	ret true;
-}
+
+/*!*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

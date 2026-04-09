@@ -24,41 +24,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE. */
 
 #include <stdint.h>
-#include <unistd.h>
+#include <stdlib.h>
 
 #include "headers/cold/cold.hold"
-#include "headers/dreiton-protocol.hold"
-#include "headers/dreiton-codec.hold"
-#include "headers/dreiton-extension.hold"
+#include "headers/protocols/dreiton-protocol.hold"
+#include "headers/protocols/dreiton-extension-protocol.hold"
 #include "headers/dreiton-base-extension.hold"
 
-#define INITDREITONEXTENSIONDESCRIPTOR() /*------------------*/ bool  initDreitonExtensionDescriptor(void)
-#define SETDREITONEXTENSIONDESCRIPTOREVENTFD() /*------------*/ bool  setDreitonExtensionDescriptorEventFd(const int fd)
-#define INCREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER() /*-*/ bool  incrementDreitonExtensionDescriptorEventCounter(const uint32 eventType)
-#define DECREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER() /*-*/ bool  decrementDreitonExtensionDescriptorEventCounter(const uint32 eventType)
-#define PARSEDREITONEXTENSIONDESCRIPTORREQUEST() /*----------*/ bool  parseDreitonExtensionDescriptorRequest(const GenericDreitonRequest *const request, const uint32 itemAmount, uint8 *const statusReturn, uint32 *const payloadSizeReturn)
-#define PARSEDREITONEXTENSIONDESCRIPTORREPLY() /*------------*/ bool  parseDreitonExtensionDescriptorReply(const uint8 replyType, GenericDreitonReply *const replyReturn)
-#define PARSEDREITONEXTENSIONDESCRIPTOREVENT() /*------------*/ bool  parseDreitonExtensionDescriptorEvent(void)
-#define FINIDREITONEXTENSIONDESCRIPTOR() /*------------------*/ bool  finiDreitonExtensionDescriptor(void)
+#define MAX_REPLY_ITEM_AMOUNT /*--------------------*/ (1)
+#define MAX_EVENT_ITEM_AMOUNT /*--------------------*/ (1)
+
+#define INITDREITONEXTENSIONDESCRIPTOR() /*---------*/ bool  initDreitonExtensionDescriptor(void **const databaseReturn)
+#define PARSEDREITONEXTENSIONDESCRIPTORREQUEST() /*-*/ bool  parseDreitonExtensionDescriptorRequest(void *const database, const uint16 type, const uint32 payloadItemAmount, const void *const frame, bool (*getDreitonDecodedItem)(const void *const frame, const uint32 which, uint32 *const itemSizeReturn, void **const itemStartReturn), DreitonExtensionErrorSignature *const errorSignatureReturn, DreitonExtensionEventSignature *const eventSignatureReturn, uint8 *const statusReturn)
+#define PARSEDREITONEXTENSIONDESCRIPTORREPLY() /*---*/ bool  parseDreitonExtensionDescriptorReply(void *const database, const uint16 type, DreitonExtensionReplySignature *const replySignatureReturn)
+#define FINIDREITONEXTENSIONDESCRIPTOR() /*---------*/ bool  finiDreitonExtensionDescriptor(void *const database)
 
 def struct{
-	uint32 /*-*/ writeFd;
-	uint32 /*-*/ magicNumberChangedEventClientAmount;
-	uint32 /*-*/ magicNumber;
+	void ** /*--*/ replyDataStart;
+	uint32 * /*-*/ replySizeStart;
+	void ** /*--*/ eventDataStart;
+	uint32 * /*-*/ eventSizeStart;
+	uint32 /*---*/ magicNumber;
+	uint8 /*----*/ pad0[4];
+	uint8 /*----*/ replyPool[MAX_REPLY_ITEM_AMOUNT * (sizeof(void *) + sizeof(uint32))];
+	uint8 /*----*/ eventPool[MAX_EVENT_ITEM_AMOUNT * (sizeof(void *) + sizeof(uint32))];
 } Database;
 
 INITDREITONEXTENSIONDESCRIPTOR();
-SETDREITONEXTENSIONDESCRIPTOREVENTFD();
-INCREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER();
-DECREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER();
 PARSEDREITONEXTENSIONDESCRIPTORREQUEST();
 PARSEDREITONEXTENSIONDESCRIPTORREPLY();
-PARSEDREITONEXTENSIONDESCRIPTOREVENT();
 FINIDREITONEXTENSIONDESCRIPTOR();
 
-local Database /*-------------*/ database;
-
-DreitonExtensionDescriptor /*-*/ dreitonExtensionDescriptor = {
+const DreitonExtensionDescriptor /*-*/ dreitonExtensionDescriptor = {
 	  sizeof(DreitonExtensionDescriptor)
 	, DREITON_BASE_PROTOCOL_VERSION
 	, DREITON_BASE_EXTENSION_VERSION
@@ -68,100 +65,125 @@ DreitonExtensionDescriptor /*-*/ dreitonExtensionDescriptor = {
 	, DREITON_BASE_EXTENSION_NAME
 	, DREITON_BASE_AUTHOR_NAME
 	, &initDreitonExtensionDescriptor
-	, &setDreitonExtensionDescriptorEventFd
-	, &incrementDreitonExtensionDescriptorEventCounter
-	, &decrementDreitonExtensionDescriptorEventCounter
 	, &parseDreitonExtensionDescriptorRequest
 	, &parseDreitonExtensionDescriptorReply
-	, &parseDreitonExtensionDescriptorEvent
 	, &finiDreitonExtensionDescriptor
 };
 
 INITDREITONEXTENSIONDESCRIPTOR(){
-	database.writeFd = 0;
-	database.magicNumberChangedEventClientAmount = 0;
-	database.magicNumber = 0;
-	ret true;
-}
-SETDREITONEXTENSIONDESCRIPTOREVENTFD(){
-	database.writeFd = fd;
-	ret true;
-}
-INCREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER(){
-	switch(eventType){
-		to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ /*---------------------------------------------*/ ret false;
-		to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ inc database.magicNumberChangedEventClientAmount; ret true;
-		off: /*---------------------------------------------*/ /*---------------------------------------------*/ ret false;
-	}
-}
-DECREMENTDREITONEXTENSIONDESCRIPTOREVENTCOUNTER(){
-	switch(eventType){
-		to NONE_DREITON_BASE_EVENT_TYPE: /*-----------------*/ /*---------------------------------------------*/ ret false;
-		to MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE: /*-*/ dec database.magicNumberChangedEventClientAmount; ret true;
-		off: /*---------------------------------------------*/ /*---------------------------------------------*/ ret false;
-	}
-}
-
-
-
-bool notifyDreitonForEvent(const int fd){
-	const uint64 value = 1;
-	write(fd, &value, sizeof(value));
-	ret true;
-}
-
-
-
-PARSEDREITONEXTENSIONDESCRIPTORREQUEST(){
-	uint8 requestType;
-	if(!request or !statusReturn or !payloadSizeReturn){
+	Database *database;
+	if(!databaseReturn){
 		ret false;
 	}
-	requestType = (*request).requestType;
-	switch(requestType){
+	database = malloc(1 * sizeof(Database));
+	if(!database){
+		ret false;
+	}
+	(*(Database *)database).replyDataStart = (void *)&(*(Database *)database).replyPool;
+	(*(Database *)database).replySizeStart = (void *)((uint8 *)&(*(Database *)database).replyPool + MAX_REPLY_ITEM_AMOUNT * sizeof(void *));
+	(*(Database *)database).eventDataStart = (void *)&(*(Database *)database).eventPool;
+	(*(Database *)database).eventSizeStart = (void *)((uint8 *)&(*(Database *)database).eventPool + MAX_EVENT_ITEM_AMOUNT * sizeof(void *));
+	(*(Database *)database).magicNumber = 0;
+	*databaseReturn = database;
+	ret true;
+}
+PARSEDREITONEXTENSIONDESCRIPTORREQUEST(){
+	if(!database){
+		ret false;
+	}
+	if(!frame or !getDreitonDecodedItem or !errorSignatureReturn or !eventSignatureReturn or !statusReturn){
+		ret false;
+	}
+	switch(type){
 		to NONE_DREITON_BASE_REQUEST_TYPE:{
-			ret false;
+			*statusReturn = REQUEST_DREITON_ERROR_STATUS;
+			jmp returnError;
 		}
 		to GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE:{
-			if(itemAmount == GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT){
-				*statusReturn |= SUCCESS_DREITON_REPLY_STATUS;
-				*payloadSizeReturn = 1 * sizeof(uint32);
+			if(payloadItemAmount != GET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT){
+				(*errorSignatureReturn).value = payloadItemAmount;
+				*statusReturn = PAYLOAD_DREITON_ERROR_STATUS;
+				jmp returnError;
 			}
+			*statusReturn = SUCCESS_DREITON_REPLY_STATUS;
 			ret true;
 		}
 		to SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_TYPE:{
-			if(itemAmount == SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT){
-				SetMagicNumberDreitonBaseRequest setMagicNumberDreitonBaseRequest;
-				if(unpackDreitonMessage(request, SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT, &setMagicNumberDreitonBaseRequest)){
-					const uint32 magicNumber = *(uint32 *)setMagicNumberDreitonBaseRequest.magicNumberStart;
-					if(database.magicNumberChangedEventClientAmount and magicNumber != database.magicNumber){
-						notifyDreitonForEvent(database.writeFd);
-						*statusReturn |= UPDATED_DREITON_REPLY_STATUS;
-					}
-					database.magicNumber = magicNumber;
-					*statusReturn |= SUCCESS_DREITON_REPLY_STATUS;
-				}
+			uint32 magicNumberSize;
+			void *magicNumberStart;
+			void **dataStart;
+			uint32 *sizeStart;
+			if(payloadItemAmount != SET_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_AMOUNT){
+				(*errorSignatureReturn).value = payloadItemAmount;
+				*statusReturn = PAYLOAD_DREITON_ERROR_STATUS;
+				jmp returnError;
 			}
+			if(!(*getDreitonDecodedItem)(frame, SET_MAGIC_NUMBER_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_OFFSET, &magicNumberSize, &magicNumberStart)){
+				*statusReturn = FAILURE_DREITON_ERROR_STATUS;
+				jmp returnError;
+			}
+			if(magicNumberSize != sizeof(uint32)){
+				(*errorSignatureReturn).parameterOffset = SET_MAGIC_NUMBER_MAGIC_NUMBER_DREITON_BASE_REQUEST_ITEM_OFFSET;
+				(*errorSignatureReturn).value = magicNumberSize;
+				*statusReturn = VALUE_DREITON_ERROR_STATUS;
+				jmp returnError;
+			}
+			if(*(uint32 *)magicNumberStart == (*(Database *)database).magicNumber){
+				*statusReturn = SUCCESS_DREITON_REQUEST_STATUS;
+				ret true;
+			}
+			(*(Database *)database).magicNumber = *(uint32 *)magicNumberStart;
+			dataStart = (*(Database *)database).eventDataStart;
+			sizeStart = (*(Database *)database).eventSizeStart;
+			*(dataStart + MAGIC_NUMBER_CHANGED_MAGIC_NUMBER_DREITON_BASE_EVENT_ITEM_OFFSET) = (void *)&(*(Database *)database).magicNumber;
+			*(sizeStart + MAGIC_NUMBER_CHANGED_MAGIC_NUMBER_DREITON_BASE_EVENT_ITEM_OFFSET) = sizeof(uint32);
+			(*eventSignatureReturn).type = MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_TYPE;
+			(*eventSignatureReturn).status = SUCCESS_DREITON_EVENT_STATUS;
+			(*eventSignatureReturn).itemAmount = MAGIC_NUMBER_CHANGED_DREITON_BASE_EVENT_ITEM_AMOUNT;
+			(*eventSignatureReturn).dataStart = dataStart;
+			(*eventSignatureReturn).sizeStart = sizeStart;
+			*statusReturn = UPDATE_DREITON_REQUEST_STATUS;
 			ret true;
 		}
 		off:{
-			ret false;
+			*statusReturn = REQUEST_DREITON_ERROR_STATUS;
+			jmp returnError;
 		}
+	}
+	returnError:{
+		(*errorSignatureReturn).operation = type;
+		ret false;
 	}
 }
 PARSEDREITONEXTENSIONDESCRIPTORREPLY(){
-	if(!replyReturn){
+	if(!database){
 		ret false;
 	}
-	switch(replyType){
+	if(!replySignatureReturn){
+		ret false;
+	}
+	switch(type){
 		to NONE_DREITON_BASE_REPLY_TYPE:{
 			ret false;
 		}
 		to GET_MAGIC_NUMBER_DREITON_BASE_REPLY_TYPE:{
-			(*(GetMagicNumberDreitonBaseReply *)replyReturn).magicNumber = database.magicNumber;
+			void **dataStart = (*(Database *)database).replyDataStart;
+			uint32 *sizeStart = (*(Database *)database).replySizeStart;
+			*(dataStart + GET_MAGIC_NUMBER_MAGIC_NUMBER_DREITON_BASE_REPLY_ITEM_OFFSET) = (void *)&(*(Database *)database).magicNumber;
+			*(sizeStart + GET_MAGIC_NUMBER_MAGIC_NUMBER_DREITON_BASE_REPLY_ITEM_OFFSET) = sizeof(uint32);
+			(*replySignatureReturn).type = GET_MAGIC_NUMBER_DREITON_BASE_REPLY_TYPE;
+			(*replySignatureReturn).status = SUCCESS_DREITON_REPLY_STATUS;
+			(*replySignatureReturn).itemAmount = GET_MAGIC_NUMBER_DREITON_BASE_REPLY_ITEM_AMOUNT;
+			(*replySignatureReturn).dataStart = dataStart;
+			(*replySignatureReturn).sizeStart = sizeStart;
 			ret true;
 		}
 		to SET_MAGIC_NUMBER_DREITON_BASE_REPLY_TYPE:{
+			(*replySignatureReturn).type = SET_MAGIC_NUMBER_DREITON_BASE_REPLY_TYPE;
+			(*replySignatureReturn).status = SUCCESS_DREITON_REPLY_STATUS;
+			(*replySignatureReturn).itemAmount = SET_MAGIC_NUMBER_DREITON_BASE_REPLY_ITEM_AMOUNT;
+			(*replySignatureReturn).dataStart = NULL;
+			(*replySignatureReturn).sizeStart = NULL;
 			ret true;
 		}
 		off:{
@@ -169,20 +191,11 @@ PARSEDREITONEXTENSIONDESCRIPTORREPLY(){
 		}
 	}
 }
-PARSEDREITONEXTENSIONDESCRIPTOREVENT(){
-
-
-
-	/*!*/
-
-
-
-	ret true;
-}
 FINIDREITONEXTENSIONDESCRIPTOR(){
-	database.magicNumber = 0;
-	database.magicNumberChangedEventClientAmount = 0;
-	database.writeFd = 0;
+	if(!database){
+		ret false;
+	}
+	free(database);
 	ret true;
 }
 
