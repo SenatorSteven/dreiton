@@ -1,5 +1,285 @@
 
 #ifdef a
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "headers/cold/cold.hold"
+
+#define SHM
+
+#define SETDREITONCORETRANSPORTDESCRIPTOR() /*--*/ bool  setDreitonCoreTransportDescriptor(DreitonCore *const dreitonCore, const DreitonTransportDescriptor *const dreitonTransportDescriptor)
+#define SENDDREITONCORETRANSPORTMESSAGE() /*----*/ bool  sendDreitonCoreTransportMessage(DreitonCore *const dreitonCore, const uint32 size, const void *const buffer)
+#define RECEIVEDREITONCORETRANSPORTMESSAGE() /*-*/ bool  receiveDreitonCoreTransportMessage(DreitonCore *const dreitonCore, uint32 *const sizeReturn, void *const *const bufferReturn)
+
+def struct{
+	bool /*-*/ (*initDreitonTransportDescriptor)(void);
+	bool /*-*/ (*sendDreitonTransportDescriptorMessage)(const uint32 size, const void *const buffer);
+	bool /*-*/ (*receiveDreitonTransportDescriptorMessage)(uint32 *const size, void *const *const buffer);
+	bool /*-*/ (*finiDreitonTransportDescriptor)(void);
+} DreitonTransportDescriptor;
+
+def struct{
+	const DreitonTransportDescriptor * /*-*/ dreitonTransportDescriptor;
+} DreitonCore;
+
+SETDREITONCORETRANSPORTDESCRIPTOR();
+SENDDREITONCORETRANSPORTMESSAGE();
+RECEIVEDREITONCORETRANSPORTMESSAGE();
+
+SETDREITONCORETRANSPORTDESCRIPTOR(){
+	if(!dreitonCore or !dreitonTransportDescriptor){
+		ret false;
+	}
+
+
+
+	/*! load here */
+
+
+
+	if(!(*dreitonTransportDescriptor).initDreitonTransportDescriptor or !(*dreitonTransportDescriptor).sendDreitonTransportDescriptorMessage or !(*dreitonTransportDescriptor).receiveDreitonTransportDescriptorMessage or !(*dreitonTransportDescriptor).finiDreitonTransportDescriptor){
+		ret false;
+	}
+	(*dreitonCore).dreitonTransportDescriptor = dreitonTransportDescriptor;
+
+
+
+	ret true;
+}
+SENDDREITONCORETRANSPORTMESSAGE(){
+	if(!dreitonCore or !size or !buffer){
+		ret false;
+	}
+	if((*(*dreitonCore).dreitonTransportDescriptor).sendDreitonTransportDescriptorMessage){
+		(*(*(*dreitonCore).dreitonTransportDescriptor).sendDreitonTransportDescriptorMessage)(size, buffer);
+	}
+	ret true;
+}
+RECEIVEDREITONCORETRANSPORTMESSAGE(){
+	if(!dreitonCore or !sizeReturn or !bufferReturn){
+		ret false;
+	}
+	if((*(*dreitonCore).dreitonTransportDescriptor).receiveDreitonTransportDescriptorMessage){
+		(*(*(*dreitonCore).dreitonTransportDescriptor).receiveDreitonTransportDescriptorMessage)(sizeReturn, bufferReturn);
+	}
+	ret true;
+}
+
+
+
+
+
+
+
+
+
+#ifdef SHM
+#ifdef a
+#endif
+	/*! SHM, communication through pipe */
+
+	#define INITDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  initDreitonTransportDescriptor(void)
+	#define SENDDREITONTRANSPORTDESCRIPTORMESSAGE() /*----*/ bool  sendDreitonTransportDescriptorMessage(const uint32 size, const void *const buffer)
+	#define RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE() /*-*/ bool  receiveDreitonTransportDescriptorMessage(uint32 *const sizeReturn, void *const *const bufferReturn)
+	#define FINIDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  finiDreitonTransportDescriptor(void)
+
+	def struct{
+		void * /*-*/ shmStart;
+		int32 /*--*/ shmId;
+		uint8 /*--*/ pad0[4];
+	} Backend;
+
+	INITDREITONTRANSPORTDESCRIPTOR();
+	SENDDREITONTRANSPORTDESCRIPTORMESSAGE();
+	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE();
+	FINIDREITONTRANSPORTDESCRIPTOR();
+
+	const DreitonTransportDescriptor dreitonTransportDescriptor = {
+		  initDreitonTransportDescriptor
+		, sendDreitonTransportDescriptorMessage
+		, receiveDreitonTransportDescriptorMessage
+		, finiDreitonTransportDescriptor
+	};
+
+	INITDREITONTRANSPORTDESCRIPTOR(){
+		fprintf(stdout, "init shm\n");
+		ret true;
+	}
+	SENDDREITONTRANSPORTDESCRIPTORMESSAGE(){
+		(void)size;
+		(void)buffer;
+		fprintf(stdout, "send shm\n");
+		ret true;
+	}
+	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE(){
+		(void)sizeReturn;
+		(void)bufferReturn;
+		fprintf(stdout, "receive shm\n");
+		ret true;
+	}
+	FINIDREITONTRANSPORTDESCRIPTOR(){
+		fprintf(stdout, "fini shm\n");
+		ret true;
+	}
+#endif
+
+#ifdef TCP
+#ifdef a
+#endif
+	/*! TCP, communication through socket */
+
+	#define INITDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  initDreitonTransportDescriptor(void)
+	#define SENDDREITONTRANSPORTDESCRIPTORMESSAGE() /*----*/ bool  sendDreitonTransportDescriptorMessage(const uint32 size, const void *const buffer)
+	#define RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE() /*-*/ bool  receiveDreitonTransportDescriptorMessage(uint32 *const sizeReturn, void *const *const bufferReturn)
+	#define FINIDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  finiDreitonTransportDescriptor(void)
+
+	def struct{
+		int32 /*-*/ fd;
+	} Backend;
+
+	INITDREITONTRANSPORTDESCRIPTOR();
+	SENDDREITONTRANSPORTDESCRIPTORMESSAGE();
+	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE();
+	FINIDREITONTRANSPORTDESCRIPTOR();
+
+	const DreitonTransportDescriptor dreitonTransportDescriptor = {
+		  initDreitonTransportDescriptor
+		, sendDreitonTransportDescriptorMessage
+		, receiveDreitonTransportDescriptorMessage
+		, finiDreitonTransportDescriptor
+	};
+
+	INITDREITONTRANSPORTDESCRIPTOR(){
+		fprintf(stdout, "init tcp\n");
+		ret true;
+	}
+	SENDDREITONTRANSPORTDESCRIPTORMESSAGE(){
+		(void)size;
+		(void)buffer;
+		fprintf(stdout, "send tcp\n");
+		ret true;
+	}
+	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE(){
+		(void)sizeReturn;
+		(void)bufferReturn;
+		fprintf(stdout, "receive tcp\n");
+		ret true;
+	}
+	FINIDREITONTRANSPORTDESCRIPTOR(){
+		fprintf(stdout, "fini tcp\n");
+		ret true;
+	}
+#endif
+
+#ifdef UDP
+#ifdef a
+#endif
+	/*! UDP, communication through socket */
+
+	#define INITDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  initDreitonTransportDescriptor(void)
+	#define SENDDREITONTRANSPORTDESCRIPTORMESSAGE() /*----*/ bool  sendDreitonTransportDescriptorMessage(const uint32 size, const void *const buffer)
+	#define RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE() /*-*/ bool  receiveDreitonTransportDescriptorMessage(uint32 *const sizeReturn, void *const *const bufferReturn)
+	#define FINIDREITONTRANSPORTDESCRIPTOR() /*-----------*/ bool  finiDreitonTransportDescriptor(void)
+
+	def struct{
+		int32 /*-*/ fd;
+	} Backend;
+
+	INITDREITONTRANSPORTDESCRIPTOR();
+	SENDDREITONTRANSPORTDESCRIPTORMESSAGE();
+	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE();
+	FINIDREITONTRANSPORTDESCRIPTOR();
+
+	const DreitonTransportDescriptor dreitonTransportDescriptor = {
+		  initDreitonTransportDescriptor
+		, sendDreitonTransportDescriptorMessage
+		, receiveDreitonTransportDescriptorMessage
+		, finiDreitonTransportDescriptor
+	};
+
+	INITDREITONTRANSPORTDESCRIPTOR(){
+		fprintf(stdout, "init udp\n");
+		ret true;
+	}
+	SENDDREITONTRANSPORTDESCRIPTORMESSAGE(){
+		(void)size;
+		(void)buffer;
+		fprintf(stdout, "send udp\n");
+		ret true;
+	}
+	RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE(){
+		(void)sizeReturn;
+		(void)bufferReturn;
+		fprintf(stdout, "receive udp\n");
+		ret true;
+	}
+	FINIDREITONTRANSPORTDESCRIPTOR(){
+		fprintf(stdout, "fini udp\n");
+		ret true;
+	}
+#endif
+
+
+
+
+
+
+
+
+
+int main(void){
+	DreitonCore dreitonCore;
+	setDreitonCoreTransportDescriptor(&dreitonCore, &dreitonTransportDescriptor);
+
+
+
+	sendDreitonCoreTransportMessage(&dreitonCore, lengthof("hello") + 1, "hello");
+	{
+		uint32 size;
+		void *buffer;
+		receiveDreitonCoreTransportMessage(&dreitonCore, &size, &buffer);
+	}
+
+
+
+#ifdef a
+	fprintf(stdout, "%s backend active\n", networkBackend? "udp" : "shm");
+#endif
+
+
+
+	ret 0;
+}
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#ifdef a
 	/*!blockAllSignals:*/{
 		sigset_t signalSet;
 		sigfillset(&signalSet);

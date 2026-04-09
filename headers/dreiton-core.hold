@@ -78,42 +78,62 @@ def struct{
 } DreitonCoreDatabase;
 
 def struct{
+	void * /*---------------------------*/ transportHandle;
+	DreitonTransportDescriptor * /*-----*/ transportDescriptor;
+} DreitonCoreTransport;
+
+
+
+
+
+
+
+
+
+/*! is this better? */
+
+def struct{
+	GenericDreitonMessage * /*----------*/ dataStart;
+	uint32 /*---------------------------*/ dataSize;
+	uint32 /*---------------------------*/ dataHead;
+	uint32 /*---------------------------*/ dataTail;
+} DreitonCoreRing1;
+
+
+
+
+
+
+
+
+
+def struct{
+	uint32 /*---------------------------*/ startOffset;
+	uint32 /*---------------------------*/ size;
+} DreitonCoreRingSlot;
+
+def struct{
+	DreitonCoreRingSlot * /*------------*/ slotStart;
+	GenericDreitonMessage * /*----------*/ start;
+	GenericDreitonMessage * /*----------*/ current;
+} DreitonCoreRing;
+
+def struct{
 	uint32 /*---------------------------*/ extension;
 	uint32 /*---------------------------*/ eventType;
 	uint32 /*---------------------------*/ eventSubscriptionOffset;
 } DreitonCoreClientSubscription;
 
 def struct{
-	DreitonShmHeader * /*---------------*/ shmStart;
-	DreitonShmRequestSlot * /*----------*/ requestSlotStart;
-	DreitonShmReplySlot * /*------------*/ replySlotStart;
-	DreitonShmEventSlot * /*------------*/ eventSlotStart;
-	GenericDreitonRequest * /*----------*/ requestStart;
-	GenericDreitonRequest * /*----------*/ requestCurrent;
-	GenericDreitonReply * /*------------*/ replyStart;
-	GenericDreitonReply * /*------------*/ replyCurrent;
-	GenericDreitonEvent * /*------------*/ eventStart;
-	GenericDreitonEvent * /*------------*/ eventCurrent;
-	int32 /*----------------------------*/ shmId;
-	int32 /*----------------------------*/ requestReadFd;
-	int32 /*----------------------------*/ replyWriteFd;
-	int32 /*----------------------------*/ eventWriteFd;
-	uint32 /*---------------------------*/ clientId;
-	uint8 /*----------------------------*/ pad0[4];
-
-
-
-	/*!*/
-
+	DreitonCoreRing /*------------------*/ requestSlotRing;
+	DreitonCoreRing /*------------------*/ replySlotRing;
+	DreitonCoreRing /*------------------*/ eventSlotRing;
 	DreitonCoreClientSubscription * /*--*/ subscriptionStart;
 	uint32 * /*-------------------------*/ eventOffsetStart;
 	uint32 /*---------------------------*/ subscriptionSize;
 	uint32 /*---------------------------*/ subscriptionAllocated;
 	uint32 /*---------------------------*/ eventOffsetSize;
-	uint8 /*----------------------------*/ pad1[4];
-
-
-
+	uint32 /*---------------------------*/ clientId;
 } DreitonCoreClient;
 
 def struct{
@@ -137,9 +157,10 @@ def struct{
 } DreitonCoreEvent;
 
 def struct{
-	const char * /*---------------------*/ serverChannelPath;
-	const char * /*---------------------*/ clientChannelPath;
+	const char * /*---------------------*/ serverChannelPath; /*! is this used in non-shm? */
+	const char * /*---------------------*/ clientChannelPath; /*! used in shm only? */
 	DreitonCoreDatabase * /*------------*/ database;
+	DreitonCoreTransport /*-------------*/ transport;
 	DreitonCoreClient * /*--------------*/ clientStart;
 	DreitonCoreExtension * /*-----------*/ extensionStart;
 	DreitonCoreEvent * /*---------------*/ eventStart;
@@ -177,18 +198,24 @@ def struct{
 
 
 
-#ifdef a
-	/*! not implemented */
+} DreitonCore;
 
+
+
+
+
+
+
+
+
+/*!*/
+
+#ifdef a
 	DreitonCoreExtensionRingBuffer * /*-*/ extensionRingBufferStart;
-	uint32 /*---------------------------*/ eExtensionRingBufferSize;
+	uint32 /*---------------------------*/ extensionRingBufferSize;
 	uint32 /*---------------------------*/ extensionRingBufferAllocated;
 	uint32 /*---------------------------*/ extensionRingBufferBlockSize;
 #endif
-
-
-
-} DreitonCore;
 
 #ifdef a
 def struct{
@@ -200,6 +227,14 @@ def struct{
 	uint32 /*---------------------------*/ eventCurrentReader;
 } DreitonCoreExtensionRingBuffer;
 #endif
+
+
+
+
+
+
+
+
 
 INITDREITONCORE();
 SETDREITONCORESERVERCHANNELPATH();

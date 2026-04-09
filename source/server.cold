@@ -80,9 +80,22 @@ int main(const int argumentSize, const char *const *const argumentStart){
 	/*! actually use the server name */
 
 	initDreitonCore(&dreitonCore);
+
+
+
+	/*! does this mean anything if non-shm used? */
+
 	setDreitonCoreServerChannelPath(&dreitonCore, "/dev/shm/registration-form");
 	setDreitonCoreClientChannelPath(&dreitonCore, "/dev/shm/client-writer");
+
+
+
+	/*! why set database? */
+
 	setDreitonCoreDatabase(&dreitonCore, &database);
+
+
+
 	setDreitonCoreOwner(&dreitonCore, NONE_DREITON_CORE_OWNER);
 	setDreitonCoreExtensionBlockSize(&dreitonCore, 16);
 	setDreitonCoreClientBlockSize(&dreitonCore, 16);

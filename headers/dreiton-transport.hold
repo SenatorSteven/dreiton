@@ -1,34 +1,4 @@
 
-/*!
-	make it more generic to allow for tcp and udp as well as shm.
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*! dreiton-transport.hold
 
 MIT License
@@ -62,41 +32,16 @@ SOFTWARE. */
 #endif
 
 def struct{
-	uint32 /*-*/ requestSlotStartOffset;
-	uint32 /*-*/ requestSlotSize;
-	uint32 /*-*/ requestStartOffset;
-	uint32 /*-*/ requestSize;
-	uint32 /*-*/ requestCurrentWriter;
-	uint32 /*-*/ requestCurrentReader;
-	uint32 /*-*/ replySlotStartOffset;
-	uint32 /*-*/ replySlotSize;
-	uint32 /*-*/ replyStartOffset;
-	uint32 /*-*/ replySize;
-	uint32 /*-*/ replyCurrentWriter;
-	uint32 /*-*/ replyCurrentReader;
-	uint32 /*-*/ eventSlotStartOffset;
-	uint32 /*-*/ eventSlotSize;
-	uint32 /*-*/ eventStartOffset;
-	uint32 /*-*/ eventSize;
-	uint32 /*-*/ eventCurrentWriter;
-	uint32 /*-*/ eventCurrentReader;
-	uint32 /*-*/ clientId;
-} DreitonShmHeader;
-
-def struct{
-	uint32 /*-*/ requestStartOffset;
-	uint32 /*-*/ requestSize;
-} DreitonShmRequestSlot;
-
-def struct{
-	uint32 /*-*/ replyStartOffset;
-	uint32 /*-*/ replySize;
-} DreitonShmReplySlot;
-
-def struct{
-	uint32 /*-*/ eventStartOffset;
-	uint32 /*-*/ eventSize;
-} DreitonShmEventSlot;
+	bool /*-*/ (*initDreitonTransportDescriptor)(void);
+	bool /*-*/ (*createDreitonTransportDescriptor)(void);
+	bool /*-*/ (*createDreitonTransportDescriptorClientBuffer)(void);
+	bool /*-*/ (*waitForDreitonTransportDescriptorRequest)(void);
+	bool /*-*/ (*sendDreitonTransportDescriptorMessage)(const uint32 size, const void *const buffer);
+	bool /*-*/ (*receiveDreitonTransportDescriptorMessage)(uint32 *const size, void *const *const buffer);
+	bool /*-*/ (*destroyDreitonTransportDescriptorClientBuffer)(void);
+	bool /*-*/ (*findDreitonTransportDescriptorClient)(void);
+	bool /*-*/ (*finiDreitonTransportDescriptor)(void);
+} DreitonTransportDescriptor;
 
 #ifdef  COLD_INCLUDED
 #undef  COLD_INCLUDED

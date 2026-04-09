@@ -1,0 +1,340 @@
+
+/*! dreiton-shm-transport.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#include <stdint.h>
+
+#include "headers/cold/cold.hold"
+
+#define INITDREITONTRANSPORTDESCRIPTOR() /*----------------*/ bool  initDreitonTransportDescriptor(void)
+#define CREATEDREITONTRANSPORTDESCRIPTOR() /*--------------*/ bool  createDreitonTransportDescriptor(void)
+#define CREATEDREITONTRANSPORTDESCRIPTORCLIENTBUFFER() /*--*/ bool  createDreitonTransportDescriptorClientBuffer(void)
+#define WAITFORDREITONTRANSPORTDESCRIPTORREQUEST() /*------*/ bool  waitForDreitonTransportDescriptorRequest(void)
+#define SENDDREITONTRANSPORTDESCRIPTORMESSAGE() /*---------*/ bool  sendDreitonTransportDescriptorMessage(const uint32 size, const void *const buffer)
+#define RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE() /*------*/ bool  receiveDreitonTransportDescriptorMessage(uint32 *const sizeReturn, void *const *const bufferReturn)
+#define DESTROYDREITONTRANSPORTDESCRIPTORCLIENTBUFFER() /*-*/ bool  destroyDreitonTransportDescriptorClientBuffer(void)
+#define FINDDREITONTRANSPORTDESCRIPTORCLIENT() /*----------*/ bool  findDreitonTransportDescriptorClient(void)
+#define FINIDREITONTRANSPORTDESCRIPTOR() /*----------------*/ bool  finiDreitonTransportDescriptor(void)
+
+def struct{
+	uint32 /*---*/ requestSlotStartOffset;
+	uint32 /*---*/ requestSlotSize;
+	uint32 /*---*/ requestStartOffset;
+	uint32 /*---*/ requestSize;
+	uint32 /*---*/ requestCurrentWriter;
+	uint32 /*---*/ requestCurrentReader;
+	uint32 /*---*/ replySlotStartOffset;
+	uint32 /*---*/ replySlotSize;
+	uint32 /*---*/ replyStartOffset;
+	uint32 /*---*/ replySize;
+	uint32 /*---*/ replyCurrentWriter;
+	uint32 /*---*/ replyCurrentReader;
+	uint32 /*---*/ eventSlotStartOffset;
+	uint32 /*---*/ eventSlotSize;
+	uint32 /*---*/ eventStartOffset;
+	uint32 /*---*/ eventSize;
+	uint32 /*---*/ eventCurrentWriter;
+	uint32 /*---*/ eventCurrentReader;
+	uint32 /*---*/ clientId;
+} Header;
+
+def struct{
+	Header * /*-*/ shmStart;
+	int32 /*----*/ shmId;
+	int32 /*----*/ requestReadFd;
+	int32 /*----*/ requestWriteFd;
+	int32 /*----*/ replyReadFd;
+	int32 /*----*/ replyWriteFd;
+	int32 /*----*/ eventReadFd;
+	int32 /*----*/ eventWriteFd;
+	uint8 /*----*/ pad0[4];
+} Client;
+
+def struct{
+
+
+
+	/*! used by server */
+
+	Client * /*-*/ clientStart;
+	uint32 /*---*/ clientSize;
+	uint32 /*---*/ clientAllocated;
+	uint32 /*---*/ clientBlockSize;
+	uint32 /*---*/ clientId;
+
+
+
+	/*! used by client */
+
+	/*!*/
+
+
+
+} Backend;
+
+INITDREITONTRANSPORTDESCRIPTOR();
+CREATEDREITONTRANSPORTDESCRIPTOR();
+CREATEDREITONTRANSPORTDESCRIPTORCLIENTBUFFER();
+WAITFORDREITONTRANSPORTDESCRIPTORREQUEST();
+SENDDREITONTRANSPORTDESCRIPTORMESSAGE();
+RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE();
+DESTROYDREITONTRANSPORTDESCRIPTORCLIENTBUFFER();
+FINDDREITONTRANSPORTDESCRIPTORCLIENT();
+FINIDREITONTRANSPORTDESCRIPTOR();
+
+local Backend /*--------------------*/ backend;
+
+const DreitonTransportDescriptor /*-*/ dreitonTransportDescriptor = {
+	  initDreitonTransportDescriptor
+	, createDreitonTransportDescriptorClientBuffer
+	, waitForDreitonTransportDescriptorRequest
+	, sendDreitonTransportDescriptorMessage
+	, receiveDreitonTransportDescriptorMessage
+	, destroyDreitonTransportDescriptorClientBuffer
+	, finiDreitonTransportDescriptor
+};
+
+INITDREITONTRANSPORTDESCRIPTOR(){
+	backend.clientStart = NULL;
+	backend.clientSize = 0;
+	backend.clientAllocated = 0;
+	backend.clientBlockSize = 16; /*!*/
+	backend.clientId = 0;
+	ret true;
+}
+CREATEDREITONTRANSPORTDESCRIPTOR(){
+
+
+
+	/*! create as either client or server */
+
+
+
+	ret true;
+}
+CREATEDREITONTRANSPORTDESCRIPTORCLIENTBUFFER(){
+	fprintf(stdout, "destroy shm client buffer\n");
+	ret true;
+}
+WAITFORDREITONTRANSPORTDESCRIPTORREQUEST(){
+	fprintf(stdout, "wait shm\n");
+
+
+
+
+
+
+
+
+
+	{
+		struct epoll_event eventStart[128];
+		int eventAmount = epoll_wait(replyEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
+		struct epoll_event *eventCurrent;
+		struct epoll_event *eventWall;
+		eventCurrent = eventStart;
+		eventWall = eventCurrent + eventAmount;
+		jmp parseRequestLoop;
+		parseRequestLoop:{
+			if(eventCurrent < eventWall){
+				const int fd = (*eventCurrent).data.fd;
+				if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+					if((*eventCurrent).events & (EPOLLRDHUP | EPOLLHUP)){
+						jmp closeConnection;
+					}
+					jmp closeConnection;
+				}
+				if((*eventCurrent).events & EPOLLIN){
+					jmp readRequestLoop;
+					readRequestLoop:{
+						uint64 message;
+						int returnValue = read(fd, &message, sizeof(message));
+						if(fd != (*dreitonCore).registrationEventFd){
+
+
+
+
+
+
+
+
+
+							if(returnValue > 0){
+								const uint32 id = message >> 32; /*! update */
+								/*! add generation? */
+								const uint8 requestAmount = message;
+								DreitonCoreClient *client;
+								if(!requestAmount){
+									jmp closeConnection;
+								}
+								client = findDreitonCoreClientFdId(dreitonCore, fd, id);
+								if(client){
+									parseDreitonCoreClientRequests(dreitonCore, client, requestAmount);
+								}else{
+									fprintf(stdout, "could not find the client\n");
+									/*! error in communication or bad actor? */
+								}
+							}elif(returnValue == -1){
+								if(errno == EINTR){
+									jmp readRequestLoop;
+								}
+								if(errno != EAGAIN and errno != EWOULDBLOCK){
+									jmp closeConnection;
+								}
+							}else{
+								jmp closeConnection;
+								closeConnection:{
+									DreitonCoreClient *const client = findDreitonCoreClientFd(dreitonCore, fd);
+									if(client){
+										fprintf(stdout, "disconnected %u\n", (*client).clientId);
+										removeDreitonCoreClient(dreitonCore, client);
+										if((*dreitonCore).clientAllocated == 1 and (*dreitonCore).database and (*(*dreitonCore).database).closeOnIdle){
+											fprintf(stdout, "reply thread exited due to no clients\n");
+											jmp emergencyExit;
+										}
+									}
+								}
+							}
+
+
+
+
+
+
+
+
+
+						}else{
+
+
+
+
+
+
+
+
+
+							if(returnValue > 0){
+
+								/*!*/
+
+							}elif(returnValue == -1){
+								if(errno == EINTR){
+									jmp readRequestLoop;
+								}
+
+								/*!*/
+
+							}else{
+
+								/*!*/
+
+							}
+
+
+
+							if(!(*dreitonCore).replyEventFd){
+								struct epoll_event event;
+								(*dreitonCore).replyEventFd = eventfd(0, EFD_NONBLOCK); /*! errors? */
+								event.events = EPOLLIN;
+								event.data.fd = (*dreitonCore).replyEventFd; /*! what data to pass? */
+								epoll_ctl((*dreitonCore).registrationEpollFd, EPOLL_CTL_ADD, (*dreitonCore).replyEventFd, &event); /*! errors? */
+							}
+
+
+
+							if(!insertDreitonCoreClient(dreitonCore, *((*dreitonCore).fdCopy + 0), *((*dreitonCore).fdCopy + 1), *((*dreitonCore).fdCopy + 2))){
+								jmp insertClientFailure;
+								insertClientFailure:{
+									const int64 shmId = 0xFFFFFFFF;
+									write((*dreitonCore).replyEventFd, &shmId, sizeof(shmId)); /*! on signal interrupt? */ /*! errors? */
+									inc eventCurrent;
+									jmp parseRequestLoop;
+								}
+							}
+							{
+								const int64 shmId = (*((*dreitonCore).clientStart + (*dreitonCore).clientAllocated - 1)).shmId; /*! update when data types are in use */
+								write((*dreitonCore).replyEventFd, &shmId, sizeof(shmId)); /*! on signal interrupt? */ /*! errors? */
+							}
+							inc eventCurrent;
+							jmp parseRequestLoop;
+
+
+
+
+
+
+
+
+
+						}
+					}
+				}
+				inc eventCurrent;
+				jmp parseRequestLoop;
+			}
+		}
+	}
+
+
+
+
+
+
+
+
+
+	ret true;
+}
+SENDDREITONTRANSPORTDESCRIPTORMESSAGE(){
+	(void)size;
+	(void)buffer;
+	fprintf(stdout, "send shm message\n");
+	ret true;
+}
+RECEIVEDREITONTRANSPORTDESCRIPTORMESSAGE(){
+	(void)sizeReturn;
+	(void)bufferReturn;
+	fprintf(stdout, "receive shm message\n");
+	ret true;
+}
+DESTROYDREITONTRANSPORTDESCRIPTORCLIENTBUFFER(){
+	fprintf(stdout, "destroy shm client buffer\n");
+	ret true;
+}
+FINDDREITONTRANSPORTDESCRIPTORCLIENT(){
+	fprintf(stdout, "find shm client\n");
+	ret true;
+}
+FINIDREITONTRANSPORTDESCRIPTOR(){
+	fprintf(stdout, "fini shm\n");
+	backend.clientId = 0;
+	backend.clientBlockSize = 0;
+	free(backend.clientStart);
+	backend.clientStart = NULL;
+	backend.clientSize = 0;
+	backend.clientAllocated = 0;
+	ret true;
+}
+

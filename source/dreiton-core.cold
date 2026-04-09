@@ -203,6 +203,13 @@ INITDREITONCORE(){
 
 
 
+	/*!*/
+
+	(*dreitonCore).transport.transportHandle = NULL;
+	(*dreitonCore).transport.transportDescriptor = NULL;
+
+
+
 	ret true;
 }
 SETDREITONCORESERVERCHANNELPATH(){
@@ -314,6 +321,33 @@ BOOTDREITONCOREREGISTRATIONLOOPTHREAD(){
 	}
 	ret true;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 DREITONCOREREPLYLOOP(){
 
 
@@ -342,15 +376,46 @@ DREITONCOREREPLYLOOP(){
 		jmp emergencyExit;
 	}
 	(*dreitonCore).replyEpollFd = replyEpollFd;
+
+
+
+	/*! put this somewhere else later, and store to local variables before storing in the core */
+
+	{
+		const char *const path = "/tmp/dreiton-shm-transport/output/libdreiton-shm-transport.so"
+		(*dreitonCore).transport.transportHandle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+		if(!(*dreitonCore).transport.transportHandle){
+			fprintf(stdout, "shm transport not loaded\n");
+		}else{
+			(*dreitonCore).transport.transportDescriptor = dlsym((*dreitonCore).transport.transportHandle, "dreitonTransportDescriptor");
+			if(!(*dreitonCore).transport.transportDescriptor){
+				fprintf(stdout, "shm transport symbol failure\n");
+				dlclose((*dreitonCore).transport.transportHandle); /*! errors? */
+			}
+		}
+	}
+
+
+
 	jmp replyLoop;
 	replyLoop:{
+		(*(*dreitonCore).transport.transportDescriptor).wait();
+		if(!(*dreitonCore).replyLoopRunning){
+			jmp emergencyExit;
+		}
+
+
+
+
+
+
+
+
+
 		struct epoll_event eventStart[128];
 		int eventAmount = epoll_wait(replyEpollFd, eventStart, countof(eventStart), INFINITE_EPOLL_WAIT_TIMEOUT); /*! errors? */
 		struct epoll_event *eventCurrent;
 		struct epoll_event *eventWall;
-		if(!(*dreitonCore).replyLoopRunning){
-			jmp emergencyExit;
-		}
 		eventCurrent = eventStart;
 		eventWall = eventCurrent + eventAmount;
 		jmp parseRequestLoop;
@@ -492,6 +557,15 @@ DREITONCOREREPLYLOOP(){
 				inc eventCurrent;
 				jmp parseRequestLoop;
 			}
+
+
+
+
+
+
+
+
+
 			jmp replyLoop;
 		}
 	}
@@ -510,6 +584,33 @@ DREITONCOREREPLYLOOP(){
 		ret dreitonCore;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 DREITONCOREEVENTLOOP(){
 	DreitonCore *const dreitonCore = arg;
 	int eventEpollFd;
@@ -624,6 +725,33 @@ DREITONCOREEVENTLOOP(){
 		ret dreitonCore;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 DREITONCOREREGISTRATIONLOOP(){
 
 
@@ -817,6 +945,33 @@ DREITONCOREREGISTRATIONLOOP(){
 		ret dreitonCore;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 INSERTDREITONCORECLIENT(){
 	DreitonCoreClient *client;
 	uint64 clientId;
@@ -925,6 +1080,33 @@ INSERTDREITONCORECLIENT(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 PARSEDREITONCORECLIENTREQUESTS(){
 
 
@@ -1222,6 +1404,30 @@ PARSEDREITONCORECLIENTREQUESTS(){
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /*!*/
 
 #define ROUNDUPTOMULTIPLE() /*-*/ bool  roundUpToMultiple(const uint64 number, const uint64 multiple)
@@ -1393,6 +1599,33 @@ LOADDREITONCOREEXTENSION(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 SUBSCRIBETODREITONCOREEVENT(){
 	const uint32 blockSize = 16; /*!*/
 	DreitonCoreExtension *dreitonCoreExtension;
@@ -1533,6 +1766,33 @@ SUBSCRIBETODREITONCOREEVENT(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 EMITDREITONCOREEVENT(){
 	uint32 realEventType;
 	DreitonCoreEvent *event;
@@ -1607,6 +1867,33 @@ EMITDREITONCOREEVENT(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 UNSUBSCRIBEFROMDREITONCOREEVENT(){
 	DreitonCoreExtension *dreitonCoreExtension;
 	DreitonExtensionDescriptor *dreitonExtensionDescriptor;
@@ -1684,6 +1971,33 @@ UNSUBSCRIBEFROMDREITONCOREEVENT(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 UNLOADDREITONCOREEXTENSION(){
 
 	/*! make sure to use a data type for this one */
@@ -1745,6 +2059,33 @@ REMOVEDREITONCORECLIENT(){
 	}
 	ret true;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 REMOVEALLDREITONCORECLIENTS(){
 	DreitonCoreClient *current;
 	DreitonCoreClient *wall;
@@ -1781,6 +2122,33 @@ REMOVEALLDREITONCORECLIENTS(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 QUITDREITONCOREREGISTRATIONLOOPTHREAD(){
 	int socketConnection;
 	struct sockaddr_un address;
@@ -1944,6 +2312,33 @@ ISVALIDDREITONCOREEXTENSION(){
 	}
 	ret true;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 FINDDREITONCORECLIENTFD(){
 	DreitonCoreClient *current;
 	DreitonCoreClient *wall;
@@ -1967,6 +2362,33 @@ FINDDREITONCORECLIENTFD(){
 		ret NULL;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 FINDDREITONCORECLIENTFDID(){
 	DreitonCoreClient *client;
 	if(!dreitonCore){
@@ -1981,6 +2403,33 @@ FINDDREITONCORECLIENTFDID(){
 	}
 	ret client;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 FINIDREITONCORE(){
 	if(!dreitonCore){
 		ret false;
@@ -1991,6 +2440,13 @@ FINIDREITONCORE(){
 
 
 
+
+
+
+	/*!*/
+
+	(*dreitonCore).transport.transportDescriptor = NULL;
+	(*dreitonCore).transport.transportHandle = NULL;
 
 
 

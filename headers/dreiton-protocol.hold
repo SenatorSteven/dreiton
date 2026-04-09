@@ -113,7 +113,8 @@ SOFTWARE. */
 def struct{
 	uint8 /*---------------*/ messageType;
 	uint8 /*---------------*/ extension;
-	uint8 /*---------------*/ pad0[6];
+	uint8 /*---------------*/ pad0[2];
+	uint32 /*--------------*/ token;
 	uint32 /*--------------*/ payloadStartOffset;
 	uint32 /*--------------*/ payloadSize;
 } GenericDreitonMessage;
@@ -141,7 +142,8 @@ def struct{
 def struct{
 	uint8 /*---------------*/ eventType;
 	uint8 /*---------------*/ extension;
-	uint8 /*---------------*/ pad0[6];
+	uint8 /*---------------*/ pad0[2];
+	uint32 /*--------------*/ token;
 	uint32 /*--------------*/ payloadStartOffset;
 	uint32 /*--------------*/ payloadSize;
 } GenericDreitonEvent;
