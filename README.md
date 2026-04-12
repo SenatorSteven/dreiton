@@ -26,3 +26,5 @@ SOFTWARE. -->
 # [ˈdraɪ.tən]
 Protocol stack implementation
 
+# Dependency Diagram:
+![Dependency Diagram](docs/dependency-diagram.drawio.svg)
