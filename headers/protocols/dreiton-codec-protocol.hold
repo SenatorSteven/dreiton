@@ -1,10 +1,6 @@
 
 /*!
-	the codec protocol in words: x, y, z, support 64 bit aligned frame sizes (please, for speed)
-*/
-
-/*!
-	structure of every message: m payload items each with a different size n
+	structure of every message: m payload items each with a different size n_i and an optional payload
 
 		.----------------------------------------------------.
 		| 32: messageSize                                    |
@@ -12,17 +8,17 @@
 		| 16: type                                           |
 		| 16: extension                                      |
 		| 32: token                                          |
-		| 8 : header-specified byte                          |
-		| 8 : header-specified byte                          |
-		| 16: header-specified word                          |
-		| 32: header-specified dword                         |
+		| 8 : header-specified  byte                         |
+		| 8 : header-specified  byte                         |
+		| 16: header-specified  word                         |
+		| 32: header-specified  dword                        |
 		|   ----------------------------------------------   |
 		| 16: payloadItemAmount                              |
 		| 16: payloadItemSize   m                            |
 		| 16: payloadItemOffset m                            |
 		| 16: byte              (4 - (1 + 2 * m) % 4) % 4    |
-		| 8 : payloadItem       n                        } m |
-		| 8 : byte              (8 - n % 8) % 8          ]   |
+		| 8 : payloadItem       n_i                      } m |
+		| 8 : byte              (8 - n_i % 8) % 8        ]   |
 		`----------------------------------------------------´
 */
 

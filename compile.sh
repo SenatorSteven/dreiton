@@ -34,8 +34,10 @@ function main(){
 	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2; return 1; } || :;
 	[ $true        ] && { ./dreiton-shm-transport-compile.sh "$@";                         } || :;
 #	[ $true        ] && { ./dreiton-tcp-transport-compile.sh "$@";                         } || :;
-	[ $true        ] && { ./dreiton-xyz-codec-compile.sh "$@";                             } || :;
-#	[ $true        ] && { ./dreiton-endian-codec-compile.sh "$@";                          } || :;
+	[ $true        ] && { ./dreiton-host-codec-compile.sh "$@";                            } || :;
+	[ $true        ] && { ./dreiton-host-checked-codec-compile.sh "$@";                    } || :;
+	[ $true        ] && { ./dreiton-endian-codec-compile.sh "$@";                          } || :;
+	[ $true        ] && { ./dreiton-endian-checked-codec-compile.sh "$@";                  } || :;
 	[ $true        ] && { ./dreiton-core-compile.sh "$@";                                  } || :;
 	[ $true        ] && { ./dreiton-compile.sh "$@";                                       } || :;
 	[ $true        ] && { ./dreiton-base-extension-compile.sh "$@";                        } || :;

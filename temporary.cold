@@ -1,14 +1,4 @@
 
-#define PTHREAD_CREATE_SUCCESS /*------*/ (0)
-
-
-
-
-
-
-
-
-
 /*! server connect */
 
 char *ipPort = "127.0.0.1:1234";
@@ -108,12 +98,4 @@ if(connect(socketFd, (void *)&address, sizeof(address)) == -1){
 }
 fprintf(stdout, "connected to tcp server\n");
 close(socketFd); /*! errors? */
-
-
-
-
-
-
-
-
 

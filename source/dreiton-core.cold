@@ -227,6 +227,13 @@ LOADDREITONCORETRANSPORT(){
 		ret true;
 	}
 }
+LOADDREITONCORECONDITIONALCODEC(){
+	const uint32 variable = 1;
+	if(*(uint8 *)&variable != (DREITON_ENDIANNESS == LITTLE_DREITON_ENDIANNESS)){
+		path = endianPath;
+	}
+	ret loadDreitonCoreCodec(dreitonCore, path);
+}
 LOADDREITONCORECODEC(){
 	void *codecDescriptorHandle;
 	DreitonCodecDescriptor *codecDescriptor;

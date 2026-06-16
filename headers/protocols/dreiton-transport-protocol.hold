@@ -1,11 +1,12 @@
 
 /*!
-	no official documentation exists as of yet so this is used instead.
-		1. transport id's exposed between transport and server are simple counters. disconnects lead to the corresponding id being stored and later reused.
-			the transport's connection n has id of n, thus the server can use it as an offset for O(1) performance.
-			for servers that allow for reconnects the client could be relocated to the appropriate offset per the adoption of a new transport id to keep the O(1) benefits.
+	greeting data: a uuid
+	handshake data: a valid uuid
+	failed handshake data: all bytes zero
+*/
 
-	that's all for now.
+/*!
+	return frame size per message received to compare with codec's reported frame size.
 */
 
 
@@ -100,6 +101,15 @@ def struct{
 	const char * /*-*/ transportName;
 	const char * /*-*/ authorName;
 	bool /*---------*/ (*initDreitonTransportDescriptor)(void **const handleReturn);
+
+
+
+
+
+
+
+
+
 	bool /*---------*/ (*setDreitonTransportDescriptorClientBlockSize)(void *const handle, const uint32 clientBlockSize);
 	bool /*---------*/ (*setDreitonTransportDescriptorConcurrentConnectionAmount)(void *const handle, const uint32 concurrentConnectionAmount);
 	bool /*---------*/ (*setDreitonTransportDescriptorRequestSlotSize)(void *const handle, const uint32 requestSlotSize);
@@ -129,6 +139,15 @@ def struct{
 	bool /*---------*/ (*destroyDreitonTransportDescriptorRegistrationReceiver)(void *const handle);
 	bool /*---------*/ (*destroyDreitonTransportDescriptorRequestReceiver)(void *const handle);
 	bool /*---------*/ (*destroyDreitonTransportDescriptorEventReceiver)(void *const handle);
+
+
+
+
+
+
+
+
+
 	bool /*---------*/ (*finiDreitonTransportDescriptor)(void *const handle);
 } DreitonServerTransportDescriptorV1;
 
@@ -142,17 +161,35 @@ def struct{
 	const char * /*-*/ transportName;
 	const char * /*-*/ authorName;
 	bool /*---------*/ (*initDreitonTransportDescriptorConnection)(void **const handleReturn);
-	bool /*---------*/ (*connectToDreitonTransportDescriptorConnection)(void *const handle, const void *const argument, const uint32 dataSize, const void *const data, const uint32 dataSizeReturn, void *const dataReturn);
+	bool /*---------*/ (*connectToDreitonTransportDescriptorConnection)(void *const handle, const void *const argument, const uint32 greetingSize, const void *const greetingData, const uint32 handshakeSize, void *const handshakeDataReturn);
+
+
+
+
+
+
+
+
+
 	bool /*---------*/ (*getDreitonTransportDescriptorRequestFrame)(void *const handle, const uint32 frameSize, void **const requestFrameReturn);
 	bool /*---------*/ (*sendDreitonTransportDescriptorRequest)(void *const handle, const uint32 requestFrameSize, const void *const requestFrame);
 	bool /*---------*/ (*flushDreitonTransportDescriptorRequestBuffer)(void *const handle);
-	bool /*---------*/ (*waitForDreitonTransportDescriptorReply)(void *const handle, void **const frameReturn, uint8 *const statusReturn);
+	bool /*---------*/ (*waitForDreitonTransportDescriptorReply)(void *const handle, uint32 *const frameSizeReturn, void **const frameReturn, uint8 *const statusReturn);
 	bool /*---------*/ (*consumeDreitonTransportDescriptorReply)(void *const handle, void *const reply);
 	bool /*---------*/ (*waitForDreitonTransportDescriptorEvent)(void *const handle, void **const frameReturn, uint8 *const statusReturn);
 	bool /*---------*/ (*consumeDreitonTransportDescriptorEvent)(void *const handle, void *const event);
 	bool /*---------*/ (*wakeUpDreitonTransportDescriptorReply)(void *const handle, const uint8 status);
 	bool /*---------*/ (*wakeUpDreitonTransportDescriptorEvent)(void *const handle, const uint8 status);
 	bool /*---------*/ (*disconnectFromDreitonTransportDescriptorConnection)(void *const handle, const bool notifyServer);
+
+
+
+
+
+
+
+
+
 	bool /*---------*/ (*finiDreitonTransportDescriptorConnection)(void *const handle);
 } DreitonClientTransportDescriptorV1;
 

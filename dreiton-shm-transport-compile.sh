@@ -30,25 +30,26 @@ true=1;
 false=0;
 
 function main(){
-	[ $true        ] && { local name="${NAME%-compile.sh}";                                                           } || :;
-	[ $true        ] && { local folder="/tmp/$name";                                                                  } || :;
-	[ $true        ] && { local executableName="lib$name.so.0";                                                       } || :;
-	[ $true        ] && { local libraries="";                                                                         } || :;
-	[ $true        ] && { local parameters=();                                                                        } || :;
-	[ $true        ] && { cd "${BASH_SOURCE%/*}";                                                                     } || :;
-	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2;                            return 1; } || :;
-	[ $true        ] && { parameters+=(shared "$executableName");                                                     } || :;
-	[ $true        ] && { parameters+=(header-folder "headers");                                                      } || :;
-	[ $true        ] && { parameters+=(source-folder "source");                                                       } || :;
-	[ $true        ] && { parameters+=(debug-folder "$folder/debug");                                                 } || :;
-	[ $true        ] && { parameters+=(output-folder "$folder/output");                                               } || :;
-	[ $true        ] && { parameters+=(record-folder "$folder/record");                                               } || :;
-	[ $true        ] && { parameters+=(includes "-I$(pwd)");                                                          } || :;
-	[ $true        ] && { parameters+=(mains "$name");                                                                } || :;
-	[ $true        ] && { parameters+=(executables "$executableName");                                                } || :;
-	[ $true        ] && { parameters+=(libraries "$libraries");                                                       } || :;
-	[ $true        ] && { ./compile/compile.sh "${parameters[@]}" "$@";                                               } || :;
-	[ $true        ] && { ln -s "$folder/output/$executableName" "$folder/output/lib$name.so" &> /dev/null; return 0; } || :;
+	[ $true        ] && { local name="${NAME%-compile.sh}";                                                                 } || :;
+	[ $true        ] && { local mainName="$name";                                                                           } || :;
+	[ $true        ] && { local executableName="lib$name.so";                                                               } || :;
+	[ $true        ] && { local folder="/tmp/$name";                                                                        } || :;
+	[ $true        ] && { local libraries="";                                                                               } || :;
+	[ $true        ] && { local parameters=();                                                                              } || :;
+	[ $true        ] && { cd "${BASH_SOURCE%/*}";                                                                           } || :;
+	[ ! -f "$NAME" ] && { printf "$NAME: could not find $NAME directory\n" 1>&2;                                  return 1; } || :;
+	[ $true        ] && { parameters+=(header-folder "headers");                                                            } || :;
+	[ $true        ] && { parameters+=(source-folder "source");                                                             } || :;
+	[ $true        ] && { parameters+=(debug-folder "$folder/debug");                                                       } || :;
+	[ $true        ] && { parameters+=(output-folder "$folder/output");                                                     } || :;
+	[ $true        ] && { parameters+=(record-folder "$folder/record");                                                     } || :;
+	[ $true        ] && { parameters+=(defines "");                                                                         } || :;
+	[ $true        ] && { parameters+=(includes "-I$(pwd)");                                                                } || :;
+	[ $true        ] && { parameters+=(libraries "$libraries");                                                             } || :;
+	[ $true        ] && { parameters+=(mains "$mainName");                                                                  } || :;
+	[ $true        ] && { parameters+=(shared "$executableName.0");                                                         } || :;
+	[ $true        ] && { ./compile/compile.sh "${parameters[@]}" "$@";                                                     } || :;
+	[ $true        ] && { ln -s "$folder/output/$executableName.0" "$folder/output/$executableName" &> /dev/null; return 0; } || :;
 }
 
 main "$@";

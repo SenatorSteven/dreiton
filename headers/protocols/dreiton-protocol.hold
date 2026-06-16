@@ -11,6 +11,10 @@
 	support errors by sending event 0 and casting to error.
 */
 
+/*!
+	describe details of the protocol. example: replies per client are in order. n - 1 before n - 2 is not valid.
+*/
+
 
 
 

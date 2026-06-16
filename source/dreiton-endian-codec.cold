@@ -1,0 +1,335 @@
+
+/*! dreiton-endian-codec.cold
+
+MIT License
+
+Copyright (C) 2025 Stefanos "Steven" Tsakiris
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
+
+#include <stdint.h>
+#include <string.h>
+
+#include "headers/cold/cold.hold"
+#include "headers/protocols/dreiton-protocol.hold"
+#include "headers/protocols/dreiton-codec-protocol.hold"
+#include "headers/dreiton-endian-codec.hold"
+
+#define CALCULATEDREITONCODECFRAMESIZE() /*----------*/ local        bool  calculateDreitonCodecFrameSize(const uint32 messageSize, const uint32 payloadItemAmount, const uint32 *const payloadItemSizeStart, uint32 *const frameSizeReturn)
+#define ENCODEDREITONCODECMESSAGE() /*---------------*/ local        bool  encodeDreitonCodecMessage(uint32 messageSize, const void *const message, const uint32 payloadItemAmount, const uint32 *const payloadItemSizeStart, const void *const *const payloadItemDataStart, const uint32 frameSize, void *const frame)
+#define DECODEDREITONCODECMESSAGE() /*---------------*/ local        bool  decodeDreitonCodecMessage(const void *const frame, void *const decodedFrame, void **const messageHeaderReturn)
+#define GETDREITONCODECENCODEDTOKEN() /*-------------*/ local        bool  getDreitonCodecEncodedToken(const void *const frame, uint32 *const tokenReturn)
+#define GETDREITONCODECENCODEDFRAMESIZE() /*---------*/ local        bool  getDreitonCodecEncodedFrameSize(const void *const frame, uint32 *const frameSizeReturn)
+#define GETDREITONCODECDECODEDPAYLOADITEMAMOUNT() /*-*/ local        bool  getDreitonCodecDecodedPayloadItemAmount(const void *const frame, uint32 *const payloadItemAmountReturn)
+#define GETDREITONCODECDECODEDITEM() /*--------------*/ local        bool  getDreitonCodecDecodedItem(const void *const frame, const uint32 which, uint32 *const itemSizeReturn, void **const itemStartReturn)
+#define WRITEDREITONCODEC8() /*----------------------*/ local inline void  writeDreitonCodec8(const void *const source, void *const destination)
+#define WRITEDREITONCODEC16() /*---------------------*/ local inline void  writeDreitonCodec16(const void *const source, void *const destination)
+#define WRITEDREITONCODEC32() /*---------------------*/ local inline void  writeDreitonCodec32(const void *const source, void *const destination)
+#define WRITEDREITONCODEC64() /*---------------------*/ local inline void  writeDreitonCodec64(const void *const source, void *const destination)
+
+CALCULATEDREITONCODECFRAMESIZE();
+ENCODEDREITONCODECMESSAGE();
+DECODEDREITONCODECMESSAGE();
+GETDREITONCODECENCODEDTOKEN();
+GETDREITONCODECENCODEDFRAMESIZE();
+GETDREITONCODECDECODEDPAYLOADITEMAMOUNT();
+GETDREITONCODECDECODEDITEM();
+WRITEDREITONCODEC8();
+WRITEDREITONCODEC16();
+WRITEDREITONCODEC32();
+WRITEDREITONCODEC64();
+
+const DreitonCodecDescriptor /*-*/ dreitonCodecDescriptor = {
+	  sizeof(DreitonCodecDescriptor)
+	, DREITON_ENDIAN_CODEC_PROTOCOL_VERSION
+	, DREITON_ENDIAN_CODEC_CODEC_VERSION
+	, lengthof(DREITON_ENDIAN_CODEC_CODEC_NAME)
+	, lengthof(DREITON_ENDIAN_CODEC_AUTHOR_NAME)
+	, {0, 0, 0, 0}
+	, DREITON_ENDIAN_CODEC_CODEC_NAME
+	, DREITON_ENDIAN_CODEC_AUTHOR_NAME
+	, &calculateDreitonCodecFrameSize
+	, &encodeDreitonCodecMessage
+	, &decodeDreitonCodecMessage
+	, &getDreitonCodecEncodedToken
+	, &getDreitonCodecEncodedFrameSize
+	, &getDreitonCodecDecodedPayloadItemAmount
+	, &getDreitonCodecDecodedItem
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CALCULATEDREITONCODECFRAMESIZE(){
+	const uint32 *current = payloadItemSizeStart;
+	const uint32 *const wall = current + payloadItemAmount;
+	uint32 frameSize = 2 * sizeof(uint32) + ((messageSize + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1)) + ((sizeof(uint16) + 2 * payloadItemAmount * sizeof(uint16) + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1));
+	jmp calculatePayloadSizeLoop;
+	calculatePayloadSizeLoop:{
+		if(current < wall){
+			frameSize += (*current + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+			inc current;
+			jmp calculatePayloadSizeLoop;
+		}
+		*frameSizeReturn = frameSize;
+		ret true;
+	}
+}
+ENCODEDREITONCODECMESSAGE(){
+	uint8 *frameCurrent;
+	uint32 payloadSize;
+	messageSize = (messageSize + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+	payloadSize = frameSize - 8 * sizeof(uint8) - messageSize;
+	{
+		const uint32 payloadSize = 0;
+		const uint8 *messageCurrent = message;
+		frameCurrent = frame;
+		writeDreitonCodec32(&messageSize, frameCurrent); /*---*/ /*-----------------------------------*/ frameCurrent += sizeof(uint32);
+		writeDreitonCodec32(&payloadSize, frameCurrent); /*---*/ /*-----------------------------------*/ frameCurrent += sizeof(uint32);
+		writeDreitonCodec16(messageCurrent, frameCurrent); /*-*/ messageCurrent += sizeof(uint16); /*-*/ frameCurrent += sizeof(uint16);
+		writeDreitonCodec16(messageCurrent, frameCurrent); /*-*/ messageCurrent += sizeof(uint16); /*-*/ frameCurrent += sizeof(uint16);
+		writeDreitonCodec32(messageCurrent, frameCurrent); /*-*/ messageCurrent += sizeof(uint32); /*-*/ frameCurrent += sizeof(uint32);
+		writeDreitonCodec8(messageCurrent, frameCurrent); /*--*/ messageCurrent += sizeof(uint8); /*--*/ frameCurrent += sizeof(uint8);
+		writeDreitonCodec8(messageCurrent, frameCurrent); /*--*/ messageCurrent += sizeof(uint8); /*--*/ frameCurrent += sizeof(uint8);
+		writeDreitonCodec16(messageCurrent, frameCurrent); /*-*/ messageCurrent += sizeof(uint16); /*-*/ frameCurrent += sizeof(uint16);
+		writeDreitonCodec32(messageCurrent, frameCurrent); /*-*/ messageCurrent += sizeof(uint32); /*-*/ frameCurrent += sizeof(uint32);
+	}
+	if(payloadItemAmount and payloadItemSizeStart and payloadItemDataStart and payloadSize){
+		const uint32 padding = (4 - ((1 + 2 * payloadItemAmount) & 3)) & 3;
+		const uint32 *payloadItemSizeCurrent = payloadItemSizeStart;
+		const uint32 *const payloadItemSizeWall = payloadItemSizeCurrent + payloadItemAmount;
+		const void *const *payloadItemDataCurrent = payloadItemDataStart;
+		uint16 *frameSizeCurrent;
+		uint16 *frameOffsetCurrent;
+		uint8 *framePointerCurrent;
+		writeDreitonCodec32(&payloadSize, (uint8 *)frame + 4 * sizeof(uint8));
+		writeDreitonCodec16(&payloadItemAmount, frameCurrent);
+		frameCurrent += sizeof(uint16);
+		frameSizeCurrent = (void *)frameCurrent;
+		frameOffsetCurrent = frameSizeCurrent + payloadItemAmount;
+		framePointerCurrent = (void *)(frameOffsetCurrent + payloadItemAmount + padding);
+		jmp encodePayloadItemLoop;
+		encodePayloadItemLoop:{
+			if(payloadItemSizeCurrent < payloadItemSizeWall){
+				const uint16 itemOffset = framePointerCurrent - (uint8 *)frame;
+				writeDreitonCodec16(payloadItemSizeCurrent, frameSizeCurrent);
+				writeDreitonCodec16(&itemOffset, frameOffsetCurrent);
+				switch(*payloadItemSizeCurrent){
+					to sizeof(uint8):{
+						writeDreitonCodec8(*payloadItemDataCurrent, framePointerCurrent);
+						brk;
+					}
+					to sizeof(uint16):{
+						writeDreitonCodec16(*payloadItemDataCurrent, framePointerCurrent);
+						brk;
+					}
+					to sizeof(uint32):{
+						writeDreitonCodec32(*payloadItemDataCurrent, framePointerCurrent);
+						brk;
+					}
+					to sizeof(uint64):{
+						writeDreitonCodec64(*payloadItemDataCurrent, framePointerCurrent);
+						brk;
+					}
+					off:{
+						memmove(framePointerCurrent, *payloadItemDataCurrent, *payloadItemSizeCurrent * sizeof(uint8));
+						brk;
+					}
+				}
+				inc frameSizeCurrent;
+				inc frameOffsetCurrent;
+				framePointerCurrent += (*payloadItemSizeCurrent + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+				inc payloadItemDataCurrent;
+				inc payloadItemSizeCurrent;
+				jmp encodePayloadItemLoop;
+			}
+		}
+	}
+	ret true;
+}
+DECODEDREITONCODECMESSAGE(){
+	const uint8 *frameCurrent = frame;
+	uint8 *decodedFrameCurrent = decodedFrame;
+	writeDreitonCodec32(frameCurrent, decodedFrameCurrent); /*-*/ frameCurrent += sizeof(uint32); /*-*/ decodedFrameCurrent += sizeof(uint32);
+	writeDreitonCodec32(frameCurrent, decodedFrameCurrent); /*-*/ frameCurrent += sizeof(uint32); /*-*/ decodedFrameCurrent += sizeof(uint32);
+	writeDreitonCodec16(frameCurrent, decodedFrameCurrent); /*-*/ frameCurrent += sizeof(uint16); /*-*/ decodedFrameCurrent += sizeof(uint16);
+	writeDreitonCodec16(frameCurrent, decodedFrameCurrent); /*-*/ frameCurrent += sizeof(uint16); /*-*/ decodedFrameCurrent += sizeof(uint16);
+	writeDreitonCodec32(frameCurrent, decodedFrameCurrent); /*-*/ frameCurrent += sizeof(uint32); /*-*/ decodedFrameCurrent += sizeof(uint32);
+	writeDreitonCodec8(frameCurrent, decodedFrameCurrent); /*--*/ frameCurrent += sizeof(uint8); /*--*/ decodedFrameCurrent += sizeof(uint8);
+	writeDreitonCodec8(frameCurrent, decodedFrameCurrent); /*--*/ frameCurrent += sizeof(uint8); /*--*/ decodedFrameCurrent += sizeof(uint8);
+	writeDreitonCodec16(frameCurrent, decodedFrameCurrent); /*-*/ frameCurrent += sizeof(uint16); /*-*/ decodedFrameCurrent += sizeof(uint16);
+	writeDreitonCodec32(frameCurrent, decodedFrameCurrent); /*-*/ frameCurrent += sizeof(uint32); /*-*/ decodedFrameCurrent += sizeof(uint32);
+	if(*((uint8 *)decodedFrame + 4 * sizeof(uint8))){
+		uint32 payloadItemAmount;
+		uint32 padding;
+		uint16 *frameSizeCurrent;
+		uint16 *frameOffsetCurrent;
+		uint8 *framePointerCurrent;
+		uint16 *decodedFrameSizeCurrent;
+		uint16 *decodedFrameOffsetCurrent;
+		uint8 *decodedFramePointerCurrent;
+		uint16 *frameSizeWall;
+		writeDreitonCodec16(frameCurrent, decodedFrameCurrent);
+		payloadItemAmount = *(uint16 *)decodedFrameCurrent;
+		frameCurrent += sizeof(uint16);
+		decodedFrameCurrent += sizeof(uint16);
+		padding = (4 - ((1 + 2 * payloadItemAmount) & 3)) & 3;
+		frameSizeCurrent = (void *)frameCurrent;
+		frameOffsetCurrent = frameSizeCurrent + payloadItemAmount;
+		framePointerCurrent = (void *)(frameOffsetCurrent + payloadItemAmount + padding);
+		decodedFrameSizeCurrent = (void *)decodedFrameCurrent;
+		decodedFrameOffsetCurrent = decodedFrameSizeCurrent + payloadItemAmount;
+		decodedFramePointerCurrent = (void *)(decodedFrameOffsetCurrent + payloadItemAmount + padding);
+		frameSizeWall = frameSizeCurrent + payloadItemAmount;
+		jmp decodePayloadItemLoop;
+		decodePayloadItemLoop:{
+			if(frameSizeCurrent < frameSizeWall){
+				writeDreitonCodec16(frameSizeCurrent, decodedFrameSizeCurrent);
+				writeDreitonCodec16(frameOffsetCurrent, decodedFrameOffsetCurrent);
+				switch(*decodedFrameSizeCurrent){
+					to sizeof(uint8):{
+						writeDreitonCodec8(framePointerCurrent, decodedFramePointerCurrent);
+						brk;
+					}
+					to sizeof(uint16):{
+						writeDreitonCodec16(framePointerCurrent, decodedFramePointerCurrent);
+						brk;
+					}
+					to sizeof(uint32):{
+						writeDreitonCodec32(framePointerCurrent, decodedFramePointerCurrent);
+						brk;
+					}
+					to sizeof(uint64):{
+						writeDreitonCodec64(framePointerCurrent, decodedFramePointerCurrent);
+						brk;
+					}
+					off:{
+						memmove(decodedFramePointerCurrent, framePointerCurrent, *decodedFrameSizeCurrent * sizeof(uint8));
+						brk;
+					}
+				}
+				framePointerCurrent += (*decodedFrameSizeCurrent + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+				decodedFramePointerCurrent += (*decodedFrameSizeCurrent + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
+				inc frameSizeCurrent;
+				inc frameOffsetCurrent;
+				inc decodedFrameSizeCurrent;
+				inc decodedFrameOffsetCurrent;
+				inc frameSizeCurrent;
+				jmp decodePayloadItemLoop;
+			}
+		}
+	}
+	*messageHeaderReturn = (uint8 *)decodedFrame + 8 * sizeof(uint8);
+	ret true;
+}
+GETDREITONCODECENCODEDTOKEN(){
+	writeDreitonCodec32((uint8 *)frame + 12 * sizeof(uint8), tokenReturn);
+	ret true;
+}
+GETDREITONCODECENCODEDFRAMESIZE(){
+	uint32 messageSize;
+	uint32 payloadSize;
+	writeDreitonCodec32(frame, &messageSize);
+	writeDreitonCodec32((uint8 *)frame + 4 * sizeof(uint8), &payloadSize);
+	*frameSizeReturn = 8 * sizeof(uint8) + messageSize + payloadSize;
+	ret true;
+}
+GETDREITONCODECDECODEDPAYLOADITEMAMOUNT(){
+	if(!*(uint32 *)((uint8 *)frame + 4 * sizeof(uint8))){
+		*payloadItemAmountReturn = 0;
+		ret true;
+	}
+	*payloadItemAmountReturn = *(uint16 *)((uint8 *)frame + 24 * sizeof(uint8));
+	ret true;
+}
+GETDREITONCODECDECODEDITEM(){
+	*itemSizeReturn = *(uint16 *)((uint8 *)frame + 26 * sizeof(uint8) + which * 2 * sizeof(uint8));
+	*itemStartReturn = (uint8 *)frame + *(uint16 *)((uint8 *)frame + 26 * sizeof(uint8) + (*(uint16 *)((uint8 *)frame + 24 * sizeof(uint8)) + which) * 2 * sizeof(uint8));
+	ret true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+WRITEDREITONCODEC8(){
+	*(uint8 *)destination = *(uint8 *)source;
+	ret;
+}
+WRITEDREITONCODEC16(){
+	const uint16 s = *(uint16 *)source;
+	*(uint16 *)destination = (s << 8) | (s >> 8);
+	ret;
+}
+WRITEDREITONCODEC32(){
+	const uint32 s = *(uint32 *)source;
+	*(uint32 *)destination = ((s & 0x000000FF) << 24) | ((s & 0x0000FF00) << 8) | ((s & 0x00FF0000) >> 8) | ((s & 0xFF000000) >> 24);
+	ret;
+}
+WRITEDREITONCODEC64(){
+	const uint64 s = *(uint64 *)source;
+	*(uint64 *)destination = ((s & (uint64)0x00000000000000FF) << 56) | ((s & (uint64)0x000000000000FF00) << 40) | ((s & (uint64)0x0000000000FF0000) << 24) | ((s & (uint64)0x00000000FF000000) << 8) | ((s & (uint64)0x000000FF00000000) >> 8) | ((s & (uint64)0x0000FF0000000000) >> 24) | ((s & (uint64)0x00FF000000000000) >> 40) | ((s & (uint64)0xFF00000000000000) >> 56);
+	ret;
+}
+

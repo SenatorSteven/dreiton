@@ -1,9 +1,5 @@
 
 /*!
-	is alignment something we are concerned with, either on the server or the client side, as far as the address returned by shmat() is concerned?
-*/
-
-/*!
 	client id should have a generation.
 */
 
@@ -154,11 +150,11 @@ SOFTWARE. */
 #define FINIDREITONSERVERTRANSPORTDESCRIPTOR() /*--------------------------*/ bool  finiDreitonServerTransportDescriptor(void *const backend)
 
 #define INITDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION() /*----------------*/ bool  initDreitonClientTransportDescriptorConnection(void **const backendReturn)
-#define CONNECTTODREITONCLIENTTRANSPORTDESCRIPTORCONNECTION() /*-----------*/ bool  connectToDreitonClientTransportDescriptorConnection(void *const backend, const void *const name, const uint32 dataSize, const void *const data, const uint32 dataSizeReturn, void *const dataReturn)
+#define CONNECTTODREITONCLIENTTRANSPORTDESCRIPTORCONNECTION() /*-----------*/ bool  connectToDreitonClientTransportDescriptorConnection(void *const backend, const void *const name, const uint32 greetingSize, const void *const greetingData, const uint32 handshakeSize, void *const handshakeDataReturn)
 #define GETDREITONCLIENTTRANSPORTDESCRIPTORREQUESTFRAME() /*---------------*/ bool  getDreitonClientTransportDescriptorRequestFrame(void *const backend, const uint32 frameSize, void **const requestFrameReturn)
 #define SENDDREITONCLIENTTRANSPORTDESCRIPTORREQUEST() /*-------------------*/ bool  sendDreitonClientTransportDescriptorRequest(void *const backend, const uint32 requestFrameSize, const void *const requestFrame)
 #define FLUSHDREITONCLIENTTRANSPORTDESCRIPTORREQUESTBUFFER() /*------------*/ bool  flushDreitonClientTransportDescriptorRequestBuffer(void *const backend)
-#define WAITFORDREITONCLIENTTRANSPORTDESCRIPTORREPLY() /*------------------*/ bool  waitForDreitonClientTransportDescriptorReply(void *const backend, void **const frameReturn, uint8 *const statusReturn)
+#define WAITFORDREITONCLIENTTRANSPORTDESCRIPTORREPLY() /*------------------*/ bool  waitForDreitonClientTransportDescriptorReply(void *const backend, uint32 *const frameSizeReturn, void **const frameReturn, uint8 *const statusReturn)
 #define CONSUMEDREITONCLIENTTRANSPORTDESCRIPTORREPLY() /*------------------*/ bool  consumeDreitonClientTransportDescriptorReply(void *const backend, void *const reply)
 #define WAITFORDREITONCLIENTTRANSPORTDESCRIPTOREVENT() /*------------------*/ bool  waitForDreitonClientTransportDescriptorEvent(void *const backend, void **const frameReturn, uint8 *const statusReturn)
 #define CONSUMEDREITONCLIENTTRANSPORTDESCRIPTOREVENT() /*------------------*/ bool  consumeDreitonClientTransportDescriptorEvent(void *const backend, void *const event)
@@ -463,6 +459,10 @@ RECEIVEFD(){
 	messageHeader.msg_control = controlMessageBuffer;
 	messageHeader.msg_controllen = controlMessageBufferSize;
 	if(recvmsg(socket, &messageHeader, 0) == RECVMSG_FAILURE){
+		free(controlMessageBuffer);
+		ret false;
+	}
+	if(!messageHeader.msg_controllen){
 		free(controlMessageBuffer);
 		ret false;
 	}
@@ -2022,35 +2022,6 @@ INITDREITONCLIENTTRANSPORTDESCRIPTORCONNECTION(){
 	*backendReturn = backend;
 	ret true;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*!*/
-
 CONNECTTODREITONCLIENTTRANSPORTDESCRIPTORCONNECTION(){
 	int clientFd;
 	struct sockaddr_un address;
@@ -2073,7 +2044,7 @@ CONNECTTODREITONCLIENTTRANSPORTDESCRIPTORCONNECTION(){
 	replyReadFd = NONE_FD;
 	eventReadFd = NONE_FD;
 	success = false;
-	if(!name or !dataSize or !data or !dataSizeReturn or !dataReturn){
+	if(!name or !greetingSize or !greetingData or !handshakeDataReturn){
 		jmp emergencyExit;
 	}
 	clientFd = socket(AF_UNIX, SOCK_STREAM, NONE_SOCKET_PROTOCOL);
@@ -2085,10 +2056,10 @@ CONNECTTODREITONCLIENTTRANSPORTDESCRIPTORCONNECTION(){
 	if(connect(clientFd, (void *)&address, sizeof(address)) == CONNECT_FAILURE){
 		jmp emergencyExit;
 	}
-	if(send(clientFd, data, dataSize, NONE_SEND_FLAG) == SEND_FAILURE){ /*! errors? client might not send, how to mitigate? */
+	if(send(clientFd, greetingData, greetingSize, NONE_SEND_FLAG) == SEND_FAILURE){ /*! errors? client might not send, how to mitigate? */
 		jmp emergencyExit;
 	}
-	if(recv(clientFd, dataReturn, dataSizeReturn, NONE_RECV_FLAG) == RECV_FAILURE){ /*! this fails? what do? */
+	if(recv(clientFd, handshakeDataReturn, handshakeSize, NONE_RECV_FLAG) == RECV_FAILURE){ /*! this fails? what do? */
 		jmp emergencyExit;
 	}
 	replyEpollFd = epoll_create1(NONE_EPOLL_FLAG); /*! check for surprise errors */
@@ -2193,6 +2164,33 @@ CONNECTTODREITONCLIENTTRANSPORTDESCRIPTORCONNECTION(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 GETDREITONCLIENTTRANSPORTDESCRIPTORREQUESTFRAME(){
 
 
@@ -2374,6 +2372,14 @@ WAITFORDREITONCLIENTTRANSPORTDESCRIPTORREPLY(){
 					jmp emergencyExit;
 				}
 				replyCurrentReader = message;
+
+
+
+				/*! return the frame size */
+				*frameSizeReturn = 0;
+
+
+
 				*frameReturn = (uint8 *)(*(ClientBackend *)backend).replyStart + (*((*(ClientBackend *)backend).replySlotStart + replyCurrentReader)).messageStartOffset;
 				*statusReturn = SUCCESS_DREITON_TRANSPORT_STATUS;
 				success = true;

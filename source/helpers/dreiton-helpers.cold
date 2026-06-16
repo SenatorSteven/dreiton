@@ -211,6 +211,17 @@ PRINTDREITONERROR(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+/*! update since mapping dreiton status and dreiton transport status */
+
 PRINTDREITONCONNECTIONERROR(){
 	uint8 status;
 	char *name;
@@ -233,4 +244,12 @@ PRINTDREITONCONNECTIONERROR(){
 	fprintf(stdout, "dreiton fatal connection error: %s error\n", name);
 	ret true;
 }
+
+
+
+
+
+
+
+
 

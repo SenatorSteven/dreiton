@@ -26,14 +26,7 @@ SOFTWARE. */
 #define _POSIX_C_SOURCE /*-*/ (199506L)
 
 #include <stdint.h>
-
-
-
-/*! remove later */
-
 #include <stdio.h>
-
-
 
 #include "headers/cold/cold.hold"
 #include "headers/signal-handler.hold"
@@ -52,15 +45,12 @@ SOFTWARE. */
 
 #define TERMINATIONSIGNALHANDLER() /*-*/ local void  terminationSignalHandler(const int signal)
 #define PIPESIGNALHANDLER() /*--------*/ local void  pipeSignalHandler(const int signal)
-#define ISBIGENDIAN() /*--------------*/ local bool  isBigEndian(void)
 
 TERMINATIONSIGNALHANDLER();
 PIPESIGNALHANDLER();
-ISBIGENDIAN();
 
 local const char * /*---------*/ name;
 local const char * /*---------*/ transport;
-local const char * /*---------*/ codec;
 local const char * /*---------*/ connectionName;
 local pthread_t /*------------*/ thread;
 local Dreiton /*--------------*/ dreiton;
@@ -109,27 +99,17 @@ int main(const int argumentSize, const char *const *const argumentStart){
 		transport = "libdreiton-tcp-transport.so";
 		connectionName = "127.0.0.1:23170";
 	}
-	{
-		const bool hostIsBigEndian = isBigEndian();
-		const bool protocolIsBigEndian = DREITON_ENDIANNESS == BIG_DREITON_ENDIANNESS;
-		const bool differentEndianness = !hostIsBigEndian != !protocolIsBigEndian;
-		if(differentEndianness){
-			codec = "libdreiton-endian-codec.so";
-		}else{
-			codec = "libdreiton-xyz-codec.so";
-		}
-	}
 	setDreitonReplyCacheSlotSize(&dreiton, 3);
 	if(!loadDreitonTransport(&dreiton, transport)){
 		fprintf(stdout, "could not load transport @ %s\n", transport);
 		jmp emergencyExit;
 	}
 	fprintf(stdout, "using transport @ %s\n", transport);
-	if(!loadDreitonCodec(&dreiton, codec)){
-		fprintf(stdout, "could not load codec @ %s\n", codec);
+	if(!loadDreitonConditionalCodec(&dreiton, "libdreiton-host-codec.so", "libdreiton-endian-codec.so")){
+		fprintf(stdout, "could not load codec @ %s\n", "libdreiton-host-codec.so");
 		jmp emergencyExit;
 	}
-	fprintf(stdout, "using codec @ %s\n", codec);
+	fprintf(stdout, "using codec @ %s\n", "libdreiton-host-codec.so");
 	if(!connectToDreiton(&dreiton, connectionName)){
 		fprintf(stdout, "could not connect to %s server @ %s\n", name, connectionName);
 		jmp emergencyExit;
@@ -323,9 +303,5 @@ PIPESIGNALHANDLER(){
 	(void)signal;
 	fprintf(stderr, "\tpipe error\n");
 	ret;
-}
-ISBIGENDIAN(){
-	const uint32 variable = 1;
-	ret *(uint8 *)&variable == 0;
 }
 

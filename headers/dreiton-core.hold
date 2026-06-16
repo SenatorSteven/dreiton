@@ -36,6 +36,7 @@ SOFTWARE. */
 #define SETDREITONCOREEXTENSIONBLOCKSIZE() /*------------------*/ bool  setDreitonCoreExtensionBlockSize(DreitonCore *const dreitonCore, const uint extensionBlockSize)
 #define SETDREITONCOREEXTENSIONEVENTBLOCKSIZE() /*-------------*/ bool  setDreitonCoreExtensionEventBlockSize(DreitonCore *const dreitonCore, const uint extensionEventBlockSize)
 #define LOADDREITONCORETRANSPORT() /*--------------------------*/ bool  loadDreitonCoreTransport(DreitonCore *const dreitonCore, const char *const path)
+#define LOADDREITONCORECONDITIONALCODEC() /*-------------------*/ bool  loadDreitonCoreConditionalCodec(DreitonCore *const dreitonCore, const char *path, const char *const endianPath)
 #define LOADDREITONCORECODEC() /*------------------------------*/ bool  loadDreitonCoreCodec(DreitonCore *const dreitonCore, const char *const path)
 #define SETDREITONCORETRANSPORTCLIENTBLOCKSIZE() /*------------*/ bool  setDreitonCoreTransportClientBlockSize(DreitonCore *const dreitonCore, const uint32 clientBlockSize)
 #define SETDREITONCORETRANSPORTCONCURRENTCONNECTIONAMOUNT() /*-*/ bool  setDreitonCoreTransportConcurrentConnectionAmount(DreitonCore *const dreitonCore, const uint32 concurrentConnectionAmount)
@@ -167,6 +168,7 @@ SETDREITONCORECLIENTBLOCKSIZE();
 SETDREITONCOREEXTENSIONBLOCKSIZE();
 SETDREITONCOREEXTENSIONEVENTBLOCKSIZE();
 LOADDREITONCORETRANSPORT();
+LOADDREITONCORECONDITIONALCODEC();
 LOADDREITONCORECODEC();
 SETDREITONCORETRANSPORTCLIENTBLOCKSIZE();
 SETDREITONCORETRANSPORTCONCURRENTCONNECTIONAMOUNT();

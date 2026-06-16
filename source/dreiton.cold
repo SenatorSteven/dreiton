@@ -173,6 +173,13 @@ LOADDREITONTRANSPORT(){
 		ret true;
 	}
 }
+LOADDREITONCONDITIONALCODEC(){
+	const uint32 variable = 1;
+	if(*(uint8 *)&variable != (DREITON_ENDIANNESS == LITTLE_DREITON_ENDIANNESS)){
+		path = endianPath;
+	}
+	ret loadDreitonCodec(dreiton, path);
+}
 LOADDREITONCODEC(){
 	void *codecDescriptorHandle;
 	DreitonCodecDescriptor *codecDescriptor;
@@ -220,29 +227,12 @@ CONNECTTODREITON(){
 	}
 	clientUuid.uuid0 = 0;
 	clientUuid.uuid1 = 0;
-
-
-
-
-
-
-
-
-
-	/*! pass the data properly so that potential endianness issues subside. not that are or would ever be any. */
-
 	if(!(*(*transportDescriptor).connectToDreitonTransportDescriptorConnection)((*dreiton).transportHandle, argument, sizeof(DreitonUuid), &clientUuid, sizeof(DreitonUuid), &(*dreiton).clientUuid)){
 		jmp emergencyExit;
 	}
-
-
-
-
-
-
-
-
-
+	if(!(*dreiton).clientUuid.uuid0 or !(*dreiton).clientUuid.uuid1){
+		jmp emergencyExit;
+	}
 	(*dreiton).currentToken = 0;
 	(*dreiton).isRunning = true;
 	(*dreiton).status = NONE_DREITON_TRANSPORT_STATUS;
@@ -340,9 +330,44 @@ FLUSHDREITONBUFFER(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*!
+	validate token is good (not too big, or is in running window. meaning, maintain list of tokens that we care for in a buffer some kind of way.)
+	transport should return frame size returned to check with codec. if there are differences in the sizes, drop reply.
+	client library should introduce maximum allowed size for reply to come in for sanity.
+	accept only the next token as a valid reply. want up to n, n + 1 or n - 1 before n - 2 is not valid.
+*/
+
 WAITFORDREITONREPLY(){
 	DreitonClientTransportDescriptor *transportDescriptor;
 	DreitonCodecDescriptor *codecDescriptor;
+	uint32 transportFrameSize;
 	void *transportFrame;
 	uint8 status;
 	DreitonReply *reply;
@@ -374,7 +399,7 @@ WAITFORDREITONREPLY(){
 	waitForDreitonReplyLoop:{
 		uint32 headerToken;
 		uint32 frameSize;
-		if(!(*(*transportDescriptor).waitForDreitonTransportDescriptorReply)((*dreiton).transportHandle, &transportFrame, &status)){
+		if(!(*(*transportDescriptor).waitForDreitonTransportDescriptorReply)((*dreiton).transportHandle, &transportFrameSize, &transportFrame, &status)){
 			(*dreiton).status = status;
 			jmp emergencyExit;
 		}
@@ -382,6 +407,10 @@ WAITFORDREITONREPLY(){
 			jmp emergencyExit;
 		}
 		if(!(*(*codecDescriptor).getDreitonCodecEncodedFrameSize)(transportFrame, &frameSize)){
+			jmp emergencyExit;
+		}
+		if(transportFrameSize != frameSize){
+			(*dreiton).status = FAILURE_DREITON_TRANSPORT_STATUS
 			jmp emergencyExit;
 		}
 		if(headerToken != token){
@@ -421,6 +450,33 @@ WAITFORDREITONREPLY(){
 		ret true;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 WAITFORDREITONEVENT(){
 	DreitonClientTransportDescriptor *transportDescriptor;
 	DreitonCodecDescriptor *codecDescriptor;

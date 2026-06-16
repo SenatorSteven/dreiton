@@ -31,27 +31,37 @@ SOFTWARE. */
 #include "headers/cold/cold.hold"
 #endif
 
-#define INITDREITON() /*-------------------*/ bool   initDreiton(Dreiton *const dreiton)
-#define SETDREITONREPLYCACHESLOTSIZE() /*--*/ bool   setDreitonReplyCacheSlotSize(Dreiton *const dreiton, const uint32 replyCacheSlotSize)
-#define LOADDREITONTRANSPORT() /*----------*/ bool   loadDreitonTransport(Dreiton *const dreiton, const char *const path)
-#define LOADDREITONCODEC() /*--------------*/ bool   loadDreitonCodec(Dreiton *const dreiton, const char *const path)
-#define CONNECTTODREITON() /*--------------*/ bool   connectToDreiton(Dreiton *const dreiton, const void *const argument)
-#define SENDDREITONREQUEST() /*------------*/ bool   sendDreitonRequest(Dreiton *const dreiton, const uint16 type, const uint16 extension, const uint32 payloadItemAmount, const uint32 *const payloadItemSizeStart, const void *const *const payloadItemDataStart, uint32 *const tokenReturn)
-#define FLUSHDREITONBUFFER() /*------------*/ bool   flushDreitonBuffer(Dreiton *const dreiton)
-#define WAITFORDREITONREPLY() /*-----------*/ bool   waitForDreitonReply(Dreiton *const dreiton, const uint32 token, DreitonReply **const replyReturn)
-#define WAITFORDREITONEVENT() /*-----------*/ bool   waitForDreitonEvent(Dreiton *const dreiton, DreitonEvent **const eventReturn)
-#define WAITFORDREITONUNCONSUMEDREPLY() /*-*/ bool   waitForDreitonUnconsumedReply(Dreiton *const dreiton, const uint32 token, DreitonReply *const replyReturn)
-#define WAITFORDREITONUNCONSUMEDEVENT() /*-*/ bool   waitForDreitonUnconsumedEvent(Dreiton *const dreiton, DreitonEvent *const eventReturn)
-#define GETDREITONMESSAGEDECODEDITEM() /*--*/ bool   getDreitonMessageDecodedItem(Dreiton *const dreiton, const void *const frame, const uint32 which, uint32 *const itemSizeReturn, void **const itemStartReturn)
-#define CONSUMEDREITONREPLY() /*-----------*/ bool   consumeDreitonReply(Dreiton *const dreiton, DreitonReply *const reply)
-#define CONSUMEDREITONEVENT() /*-----------*/ bool   consumeDreitonEvent(Dreiton *const dreiton, DreitonEvent *const event)
-#define WAKEUPDREITONREPLY() /*------------*/ bool   wakeUpDreitonReply(Dreiton *const dreiton, const uint8 status)
-#define WAKEUPDREITONEVENT() /*------------*/ bool   wakeUpDreitonEvent(Dreiton *const dreiton, const uint8 status)
-#define DISCONNECTFROMDREITON() /*---------*/ bool   disconnectFromDreiton(Dreiton *const dreiton)
-#define UNLOADDREITONCODEC() /*------------*/ bool   unloadDreitonCodec(Dreiton *const dreiton)
-#define UNLOADDREITONTRANSPORT() /*--------*/ bool   unloadDreitonTransport(Dreiton *const dreiton)
-#define DREITONHASERROR() /*---------------*/ uint8  dreitonHasError(Dreiton *const dreiton)
-#define FINIDREITON() /*-------------------*/ bool   finiDreiton(Dreiton *const dreiton)
+
+
+/*! create proper status values and map them to those of transport */
+
+#define NONE_DREITON_STATUS /*----------------*/ (0)
+#define FRAME_SIZE_MISMATCH_DREITON_STATUS /*-*/ (1)
+
+
+
+#define INITDREITON() /*----------------------*/ bool   initDreiton(Dreiton *const dreiton)
+#define SETDREITONREPLYCACHESLOTSIZE() /*-----*/ bool   setDreitonReplyCacheSlotSize(Dreiton *const dreiton, const uint32 replyCacheSlotSize)
+#define LOADDREITONTRANSPORT() /*-------------*/ bool   loadDreitonTransport(Dreiton *const dreiton, const char *const path)
+#define LOADDREITONCONDITIONALCODEC() /*------*/ bool   loadDreitonConditionalCodec(Dreiton *const dreiton, const char *path, const char *const endianPath)
+#define LOADDREITONCODEC() /*-----------------*/ bool   loadDreitonCodec(Dreiton *const dreiton, const char *const path)
+#define CONNECTTODREITON() /*-----------------*/ bool   connectToDreiton(Dreiton *const dreiton, const void *const argument)
+#define SENDDREITONREQUEST() /*---------------*/ bool   sendDreitonRequest(Dreiton *const dreiton, const uint16 type, const uint16 extension, const uint32 payloadItemAmount, const uint32 *const payloadItemSizeStart, const void *const *const payloadItemDataStart, uint32 *const tokenReturn)
+#define FLUSHDREITONBUFFER() /*---------------*/ bool   flushDreitonBuffer(Dreiton *const dreiton)
+#define WAITFORDREITONREPLY() /*--------------*/ bool   waitForDreitonReply(Dreiton *const dreiton, const uint32 token, DreitonReply **const replyReturn)
+#define WAITFORDREITONEVENT() /*--------------*/ bool   waitForDreitonEvent(Dreiton *const dreiton, DreitonEvent **const eventReturn)
+#define WAITFORDREITONUNCONSUMEDREPLY() /*----*/ bool   waitForDreitonUnconsumedReply(Dreiton *const dreiton, const uint32 token, DreitonReply *const replyReturn)
+#define WAITFORDREITONUNCONSUMEDEVENT() /*----*/ bool   waitForDreitonUnconsumedEvent(Dreiton *const dreiton, DreitonEvent *const eventReturn)
+#define GETDREITONMESSAGEDECODEDITEM() /*-----*/ bool   getDreitonMessageDecodedItem(Dreiton *const dreiton, const void *const frame, const uint32 which, uint32 *const itemSizeReturn, void **const itemStartReturn)
+#define CONSUMEDREITONREPLY() /*--------------*/ bool   consumeDreitonReply(Dreiton *const dreiton, DreitonReply *const reply)
+#define CONSUMEDREITONEVENT() /*--------------*/ bool   consumeDreitonEvent(Dreiton *const dreiton, DreitonEvent *const event)
+#define WAKEUPDREITONREPLY() /*---------------*/ bool   wakeUpDreitonReply(Dreiton *const dreiton, const uint8 status)
+#define WAKEUPDREITONEVENT() /*---------------*/ bool   wakeUpDreitonEvent(Dreiton *const dreiton, const uint8 status)
+#define DISCONNECTFROMDREITON() /*------------*/ bool   disconnectFromDreiton(Dreiton *const dreiton)
+#define UNLOADDREITONCODEC() /*---------------*/ bool   unloadDreitonCodec(Dreiton *const dreiton)
+#define UNLOADDREITONTRANSPORT() /*-----------*/ bool   unloadDreitonTransport(Dreiton *const dreiton)
+#define DREITONHASERROR() /*------------------*/ uint8  dreitonHasError(Dreiton *const dreiton)
+#define FINIDREITON() /*----------------------*/ bool   finiDreiton(Dreiton *const dreiton)
 
 def struct{
 	void * /*-----------------------------*/ dataStart;
@@ -93,6 +103,7 @@ def struct{
 INITDREITON();
 SETDREITONREPLYCACHESLOTSIZE();
 LOADDREITONTRANSPORT();
+LOADDREITONCONDITIONALCODEC();
 LOADDREITONCODEC();
 CONNECTTODREITON();
 SENDDREITONREQUEST();

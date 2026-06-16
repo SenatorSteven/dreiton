@@ -92,7 +92,6 @@ SOFTWARE. */
 
 #define TERMINATIONSIGNALHANDLER() /*--------------*/ local void   terminationSignalHandler(const int signal)
 #define PIPESIGNALHANDLER() /*---------------------*/ local void   pipeSignalHandler(const int signal)
-#define ISBIGENDIAN() /*---------------------------*/ local bool   isBigEndian(void)
 
 #define INITSERVERSYSTEM() /*----------------------*/ local bool   initServerSystem(ServerSystem *const serverSystem)
 #define BOOTSERVERREQUESTLOOPTHREAD() /*-----------*/ local bool   bootServerRequestLoopThread(ServerSystem *const serverSystem, void *(*function)(void *const argument), void *const argument)
@@ -125,7 +124,6 @@ def struct{
 
 TERMINATIONSIGNALHANDLER();
 PIPESIGNALHANDLER();
-ISBIGENDIAN();
 
 INITSERVERSYSTEM();
 BOOTSERVERREQUESTLOOPTHREAD();
@@ -145,7 +143,6 @@ FINISERVERSYSTEM();
 
 local const char * /*-*/ name;
 local const char * /*-*/ transport;
-local const char * /*-*/ codec;
 local const char * /*-*/ connectionName;
 local pthread_t /*----*/ thread;
 local ServerSystem /*-*/ serverSystem;
@@ -245,16 +242,6 @@ int main(const int argumentSize, const char *const *const argumentStart){
 		transport = "libdreiton-tcp-transport.so";
 		connectionName = "127.0.0.1:23170";
 	}
-	{
-		const bool hostIsBigEndian = isBigEndian();
-		const bool protocolIsBigEndian = DREITON_ENDIANNESS == BIG_DREITON_ENDIANNESS;
-		const bool differentEndianness = !hostIsBigEndian != !protocolIsBigEndian;
-		if(differentEndianness){
-			codec = "libdreiton-endian-codec.so";
-		}else{
-			codec = "libdreiton-xyz-codec.so";
-		}
-	}
 	initServerSystem(&serverSystem);
 	initDreitonCore(&dreitonCore);
 	setDreitonCoreClientBlockSize(&dreitonCore, 16);
@@ -265,11 +252,11 @@ int main(const int argumentSize, const char *const *const argumentStart){
 		jmp emergencyExit;
 	}
 	fprintf(stdout, "using transport @ %s\n", transport);
-	if(!loadDreitonCoreCodec(&dreitonCore, codec)){
-		fprintf(stdout, "could not load codec @ %s\n", codec);
+	if(!loadDreitonCoreConditionalCodec(&dreitonCore, "libdreiton-host-codec.so", "libdreiton-endian-codec.so")){
+		fprintf(stdout, "could not load codec @ %s\n", "libdreiton-host-codec.so");
 		jmp emergencyExit;
 	}
-	fprintf(stdout, "using codec @ %s\n", codec);
+	fprintf(stdout, "using codec @ %s\n", "libdreiton-host-codec.so");
 	setDreitonCoreTransportClientBlockSize(&dreitonCore, 16);
 	setDreitonCoreTransportConcurrentConnectionAmount(&dreitonCore, 128);
 	setDreitonCoreTransportRequestSlotSize(&dreitonCore, 256);
@@ -319,10 +306,6 @@ PIPESIGNALHANDLER(){
 	(void)signal;
 	fprintf(stderr, "\tpipe error\n");
 	ret;
-}
-ISBIGENDIAN(){
-	const uint32 variable = 1;
-	ret *(uint8 *)&variable == 0;
 }
 INITSERVERSYSTEM(){
 	if(!serverSystem){

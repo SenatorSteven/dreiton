@@ -1,62 +1,4 @@
 
-/*!
-	create different codecs:
-		development codec: libdreiton-debug-codec.so
-			-uses host endian
-			-performs checking
-			-for use during development
-
-		general use codec: libdreiton-xyz-codec.so
-			-uses host endian
-			-performs no checking
-			-for use on systems with the same endian as the one used by Dreiton
-
-		general use codec: libdreiton-endian-codec.so
-			-swaps endian
-			-performs no checking
-			-for use on systems with the endian not used by Dreiton
-
-
-
-		current codec: libdreiton-xyz-codec.so
-			-swaps endian if host endian differs from Dreiton (must be compiled properly)
-			-performs checking
-*/
-
-/*!
-	remove specific references to the protocol sizes like the message byte encoding.
-*/
-
-/*!
-	minimize padding.
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*! dreiton-xyz-codec.cold
 
 MIT License
@@ -137,6 +79,32 @@ const DreitonCodecDescriptor /*-*/ dreitonCodecDescriptor = {
 	, &getDreitonCodecDecodedItem
 };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 CALCULATEDREITONCODECFRAMESIZE(){
 	const uint32 *current;
 	const uint32 *wall;
@@ -165,7 +133,7 @@ ENCODEDREITONCODECMESSAGE(){
 		ret false;
 	}
 	messageSize = (messageSize + (sizeof(uint64) - 1)) & ~(sizeof(uint64) - 1);
-	payloadSize = frameSize - 2 * sizeof(uint32) - messageSize;
+	payloadSize = frameSize - 8 * sizeof(uint8) - messageSize;
 	{
 		const uint32 payloadSize = 0;
 		const uint8 *messageCurrent = message;
@@ -188,7 +156,7 @@ ENCODEDREITONCODECMESSAGE(){
 		uint16 *frameSizeCurrent;
 		uint16 *frameOffsetCurrent;
 		uint8 *framePointerCurrent;
-		writeDreitonCodec32(&payloadSize, (uint8 *)frame + sizeof(uint32));
+		writeDreitonCodec32(&payloadSize, (uint8 *)frame + 4 * sizeof(uint8));
 		writeDreitonCodec16(&payloadItemAmount, frameCurrent);
 		frameCurrent += sizeof(uint16);
 		frameSizeCurrent = (void *)frameCurrent;
@@ -218,9 +186,7 @@ ENCODEDREITONCODECMESSAGE(){
 						brk;
 					}
 					off:{
-						if(*payloadItemDataCurrent != framePointerCurrent){
-							memcpy(framePointerCurrent, *payloadItemDataCurrent, *payloadItemSizeCurrent * sizeof(uint8)); /*! replace later */
-						}
+						memmove(framePointerCurrent, *payloadItemDataCurrent, *payloadItemSizeCurrent * sizeof(uint8));
 						brk;
 					}
 				}
@@ -252,7 +218,7 @@ DECODEDREITONCODECMESSAGE(){
 	writeDreitonCodec8(frameCurrent, decodedFrameCurrent); /*--*/ frameCurrent += sizeof(uint8); /*--*/ decodedFrameCurrent += sizeof(uint8);
 	writeDreitonCodec16(frameCurrent, decodedFrameCurrent); /*-*/ frameCurrent += sizeof(uint16); /*-*/ decodedFrameCurrent += sizeof(uint16);
 	writeDreitonCodec32(frameCurrent, decodedFrameCurrent); /*-*/ frameCurrent += sizeof(uint32); /*-*/ decodedFrameCurrent += sizeof(uint32);
-	if(*((uint8 *)decodedFrame + sizeof(uint32))){
+	if(*((uint8 *)decodedFrame + 4 * sizeof(uint8))){
 		uint32 payloadItemAmount;
 		uint32 padding;
 		uint16 *frameSizeCurrent;
@@ -297,9 +263,7 @@ DECODEDREITONCODECMESSAGE(){
 						brk;
 					}
 					off:{
-						if(framePointerCurrent != decodedFramePointerCurrent){
-							memcpy(decodedFramePointerCurrent, framePointerCurrent, *decodedFrameSizeCurrent * sizeof(uint8)); /*! replace later */
-						}
+						memmove(decodedFramePointerCurrent, framePointerCurrent, *decodedFrameSizeCurrent * sizeof(uint8));
 						brk;
 					}
 				}
@@ -314,7 +278,7 @@ DECODEDREITONCODECMESSAGE(){
 			}
 		}
 	}
-	*messageHeaderReturn = (uint8 *)decodedFrame + 2 * sizeof(uint32);
+	*messageHeaderReturn = (uint8 *)decodedFrame + 8 * sizeof(uint8);
 	ret true;
 }
 GETDREITONCODECENCODEDTOKEN(){
@@ -362,6 +326,33 @@ GETDREITONCODECDECODEDITEM(){
 	*itemStartReturn = (uint8 *)frame + *(uint16 *)((uint8 *)frame + 26 * sizeof(uint8) + (payloadItemAmount + which) * 2 * sizeof(uint8));
 	ret true;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 WRITEDREITONCODEC8(){
 	*(uint8 *)destination = *(uint8 *)source;
 	ret;
